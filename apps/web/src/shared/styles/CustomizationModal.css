@@ -1,0 +1,66 @@
+.custom-modal-overlay {
+    position: fixed; /*Se fija en relacion a la ventana del navegador*/
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    background-color: rgba(0, 0, 0, 0.5); /* Fondo semitransparente */
+}
+
+.custom-modal-content {
+    background-color: white;
+    padding: 20px;
+    max-width: 500px;
+    width: 100%;
+    border-radius: 8px;
+}
+
+.custom-modal-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    
+}
+
+.custom-modal-buttons button {
+    padding: 0.5rem 1rem;
+    color: black; /* Color del texto del botón */
+    border: none; /* Quita el borde del botón */
+    border-radius: 4px; /* Bordes redondeados del botón */
+    cursor: pointer; /* Cambia el cursor cuando se pasa sobre el botón */
+    width: 50%;
+    display: block;
+    font-family: 'Roboto', sans-serif; /* Usa la fuente que desees */
+    font-size: 16px; /* Tamaño de fuente uniforme */
+    font-weight: normal; /* O 'bold' si quieres que sean negritas */
+    line-height: 1.5; /* Altura de línea uniforme */
+    margin: 10px;
+    padding: 10px;
+    text-align: center;
+    text-decoration: none;
+}
+
+.ingredients-list {
+    list-style-type: none;
+}
+
+
+
+.item__descripcion {
+    font-size: small;
+}
+
+
+.disabled-button {
+    background-color: grey;
+    cursor: not-allowed;
+}
+
+.active-button {
+    background-color: #ffe600; /* Color de fondo del botón */
+    cursor: pointer;
+}

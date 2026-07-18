@@ -1,0 +1,101 @@
+/* src/styles/Cart.css */
+
+* {
+  box-sizing: border-box;
+}
+
+.cart-container {
+    padding: 0 20px; /* Espacio a los lados del contenedor */
+  }
+  
+  .cart-item {
+    display: flex;
+    justify-content: space-between;
+    margin: 20px 0 20px 0;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
+    background-color: #f9f9f9; /* Opcional: color de fondo para separar los elementos */
+    border-radius: 4px; /* Opcional: bordes redondeados para un mejor diseño */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Opcional: sombra para dar profundidad */
+  }
+  
+  .cart-item-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+  
+  .cart-item-image {
+    width: 100px; /* Tamaño de la imagen */
+    height: auto;
+    margin-right: 20px; /* Espacio entre la imagen y los detalles */
+  }
+  
+  .cart-item-details {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-right: 20px;
+  }
+  
+  .cart-item-total {
+    font-size: large;
+    font-weight: bold;
+  }
+  
+  .cart-item-details h3, 
+  .cart-item-details p {
+    margin: 0;
+  }
+  
+  .cart-button {
+    margin-top: 10px;
+    padding: 5px 10px;
+    background-color: #d9534f;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .cart-button:hover {
+    background-color: #c9302c;
+  }
+  
+  .finalizar-pedido {
+    display: flex;
+    flex-direction: column;
+  }
+
+.finalizar-pedido__datos {
+  font-weight: bold;
+  margin: 10px 0 10px 0;
+}
+
+.finalizar-pedido__datos-label {
+  margin-right: 20px;
+}
+
+.finalizar-pedido__datos-value {
+  margin-right: 20px;
+  padding: 5px;
+}
+
+.carrito__button {
+  padding: 0.5rem 1rem;
+  background-color: #ffe600; /* Color de fondo del botón */
+  color: black; /* Color del texto del botón */
+  border: none; /* Quita el borde del botón */
+  border-radius: 4px; /* Bordes redondeados del botón */
+  cursor: pointer; /* Cambia el cursor cuando se pasa sobre el botón */
+  width: 100%;
+  display: block;
+  font-family: 'Roboto', sans-serif; /* Usa la fuente que desees */
+  font-size: 16px; /* Tamaño de fuente uniforme */
+  font-weight: normal; /* O 'bold' si quieres que sean negritas */
+  line-height: 1.5; /* Altura de línea uniforme */
+  margin: 20px 0 20px 0;
+  padding: 10px;
+  text-align: center;
+  text-decoration: none;
+}

@@ -1,0 +1,25 @@
+
+.search-bar {
+
+    display: flex;
+    align-items: center;
+    justify-content: left;
+
+}
+
+.search-bar button, .search-bar input {
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+}
+
+.plate-table {
+    border: 1px solid black;
+    width: 100%;
+}
+
+.plate-table td, .plate-table th {
+    border: 1px solid black;
+}

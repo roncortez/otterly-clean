@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+apps/web/node_modules/
+apps/api/node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+apps/web/.env
+apps/api/.env
+
+# Build output
+build/
+dist/
+apps/web/build/
+
+# Runtime uploads and generated assets
+uploads/
+apps/api/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.agents/
+.codex/

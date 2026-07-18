@@ -1,0 +1,59 @@
+/* Estilo general para el formulario */
+.admin-upload {
+    max-width: 600px; /* Ajusta el ancho máximo del contenedor del formulario */
+    margin: 0 auto; /* Centra el formulario en la página */
+    padding: 20px; /* Espacio interior del formulario */
+  }
+  
+  /* Estilo para el formulario */
+  .form-plato {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem; /* Espacio entre los elementos del formulario */
+  }
+  
+  /* Estilo para los grupos de formulario (label + input) */
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Estilo para los labels */
+  .form-group label {
+    font-weight: bold;
+  }
+  
+  /* Estilo para los inputs */
+  .form-group input {
+    padding: 0.5rem;
+    width: 100%; /* Ancho completo del contenedor */
+    box-sizing: border-box; /* Incluye padding y border en el ancho total */
+  }
+  
+  
+  /* Estilo para la imagen subida */
+  .form-img {
+    max-width: 100%; /* Limita el ancho máximo de la imagen */
+    height: auto; /* Mantiene la proporción de la imagen */
+    margin-top: 1rem; /* Espacio arriba de la imagen */
+  }
+  
+
+  .tabs button {
+    padding: 0.5rem 1rem;
+    background-color: #ffe600; /* Color de fondo del botón */
+    color: black; /* Color del texto del botón */
+    border: 1px solid; /* Quita el borde del botón */
+    border-radius: 4px; /* Bordes redondeados del botón */
+    cursor: pointer; /* Cambia el cursor cuando se pasa sobre el botón */
+    font-family: 'Roboto', sans-serif; /* Usa la fuente que desees */
+    font-size: 16px; /* Tamaño de fuente uniforme */
+    font-weight: normal; /* O 'bold' si quieres que sean negritas */
+    line-height: 1.5; /* Altura de línea uniforme */
+    margin: 0;
+    padding: 10px;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  

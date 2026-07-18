@@ -1,0 +1,8 @@
+{
+  "short_name": "Otterly Clean",
+  "name": "Otterly Clean Service Ordering Platform",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}

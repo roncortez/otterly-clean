@@ -1,0 +1,110 @@
+.menu-list {
+  max-width: 1200px; /* Ancho máximo del contenedor .menu-list */
+  margin: 0 auto; /* Centra el contenedor horizontalmente */
+  padding: 1rem; /* Espacio interno para que no esté pegado a los bordes */
+}
+
+.menu-list h1 {
+  text-align: center;
+  width: 100%;
+}
+
+.menu-categoria-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem; /* Espacio entre categorías */
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.menu-categoria {
+  padding: 0.5rem; /* Espacio interno reducido */
+  border-radius: 5px;
+}
+
+.menu-categoria-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+  text-align: center;
+  margin-bottom: 1rem; /* Espacio debajo del título */
+}
+
+.menu-categoria-title::after {
+  content: "";
+  flex-grow: 1; /* La línea se expande para llenar el espacio disponible */
+  height: 1px; /* Grosor de la línea */
+  background-color: #ddd; /* Color de la línea */
+  margin-left: 10px; /* Espacio entre el texto y la línea */
+  margin-right: 10px; /* Espacio entre el texto y la línea */
+}
+
+.menu-items-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* Máximo 3 platos por fila */
+  gap: 2rem; /* Espacio entre los platos */
+}
+
+.menu-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around; /* Asegura que los elementos se distribuyan uniformemente */
+  box-sizing: border-box;
+  padding: 1rem; /* Espacio interno reducido */
+  border-radius: 5px; /* Esquinas redondeadas */
+  overflow: hidden; /* Oculta el contenido que se desborda */
+  background-color: white;
+}
+.menu-item-special {
+  background-color: #f4f4f4;
+  padding: 10px;
+  border: 1px solid #ccc;
+  text-align: center;
+}
+
+
+
+.menu-item-image {
+  width: 100%; /* Ajusta la imagen al ancho del contenedor */
+  max-width: 400px; /* Tamaño máximo reducido de la imagen */
+  max-height: 400px;
+}
+
+.menu-item-descripcion {
+  width: 100%; /* Asegura que la descripción ocupe todo el ancho disponible */
+  overflow: hidden; /* Oculta el texto que se desborda */
+  text-overflow: ellipsis; /* Añade puntos suspensivos al final del texto que no cabe */
+  font-style: italic;
+  font-size: 12px;
+  height: 50px;
+}
+
+.menu-item-price {
+  font-weight: bold;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.menu-item-button {
+  margin: auto;
+    padding: 0.5rem 1rem;
+    background-color: #ffe600; /* Color de fondo del botón */
+    color: black; /* Color del texto del botón */
+    border: none; /* Quita el borde del botón */
+    border-radius: 4px; /* Bordes redondeados del botón */
+    cursor: pointer; /* Cambia el cursor cuando se pasa sobre el botón */
+    width: 50%;
+
+}
+
+
+
+/* Estilos responsivos */
+@media (max-width: 768px) {
+
+  .menu-items-container {
+    grid-template-columns: 1fr; /* Un plato por fila en móviles */
+  }
+}
