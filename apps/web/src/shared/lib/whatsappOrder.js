@@ -1,4 +1,4 @@
-const DEFAULT_WHATSAPP_NUMBER = "593996153861";
+const DEFAULT_WHATSAPP_NUMBER = "12034558417";
 
 const getWhatsappNumber = () => (
   process.env.REACT_APP_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER
@@ -24,17 +24,17 @@ const formatMoney = (value) => Number(value || 0).toFixed(2);
 
 const getCustomerName = (customer = {}) => {
   const name = `${customer.first_name || ""} ${customer.last_name || ""}`.trim();
-  return name || "Cliente";
+  return name || "Customer";
 };
 
 const getOrderId = (order = {}) => order.id || order.id_pedido || "";
 
 const getDeliveryText = (order = {}) => {
-  if (order.delivery) return order.lugar_envio ? `para entregar en ${order.lugar_envio}` : "para entrega a domicilio";
-  return "para retirar";
+  if (order.delivery) return order.lugar_envio ? `for delivery to ${order.lugar_envio}` : "for delivery";
+  return "for pickup";
 };
 
-const getItemName = (item = {}) => item.nombre || item.plato || "Producto";
+const getItemName = (item = {}) => item.nombre || item.plato || "Item";
 
 const getLineTotal = (item = {}) => {
   if (item.precio !== undefined && item.precio !== null) return Number(item.precio);
@@ -47,11 +47,11 @@ export const buildOrderWhatsAppMessage = ({ order, customer, details = [], subto
   const customerName = getCustomerName(customer || order);
   const customerPhone = customer?.telefono || order?.telefono || "";
 
-  let message = `Hola, quiero confirmar mi pedido${orderId ? ` #${orderId}` : ""} ${deliveryText}.\n\n`;
-  message += `*Datos:*\n`;
-  message += `Nombres: ${customerName}\n`;
-  if (customerPhone) message += `Teléfono: ${customerPhone}\n`;
-  message += `\n*Detalle:*\n`;
+  let message = `Hi, I'd like to confirm my order${orderId ? ` #${orderId}` : ""} ${deliveryText}.\n\n`;
+  message += `*Info:*\n`;
+  message += `Name: ${customerName}\n`;
+  if (customerPhone) message += `Phone: ${customerPhone}\n`;
+  message += `\n*Details:*\n`;
 
   if (details.length > 0) {
     message += details
@@ -61,20 +61,20 @@ export const buildOrderWhatsAppMessage = ({ order, customer, details = [], subto
           ? ingredients.map((ingredient) => ingredient.nombre || ingredient).join(", ")
           : "N/A";
 
-        return `${getItemName(item)} (Cantidad: ${item.cantidad}, Precio: $${formatMoney(getLineTotal(item))})\n - Ingredientes: ${ingredientText}`;
+        return `${getItemName(item)} (Qty: ${item.cantidad}, Price: $${formatMoney(getLineTotal(item))})\n - Ingredients: ${ingredientText}`;
       })
       .join("\n");
   } else {
-    message += "No se encontraron detalles de pedido.";
+    message += "No order details found.";
   }
 
   if (subtotal !== undefined) message += `\n\n*Subtotal:* $${formatMoney(subtotal)}`;
-  if (shippingCost !== undefined) message += `\n*Envío:* $${formatMoney(shippingCost)}`;
+  if (shippingCost !== undefined) message += `\n*Shipping:* $${formatMoney(shippingCost)}`;
   if (discount && discount > 0) {
-    message += `\n*Descuento${couponCode ? ` (${couponCode})` : ""}:* -$${formatMoney(discount)}`;
+    message += `\n*Discount${couponCode ? ` (${couponCode})` : ""}:* -$${formatMoney(discount)}`;
   }
   message += `\n*Total:* $${formatMoney(order?.total)}\n\n`;
-  message += "¡Gracias!";
+  message += "Thank you!";
 
   return message;
 };

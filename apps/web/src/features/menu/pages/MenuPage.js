@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import axios from "axios";
 import "../../../shared/styles/MenuList.css";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPlus } from "@fortawesome/free-solid-svg-icons";
 import { CartContext } from "../../../app/context/CartContext";
 import CustomizationModal from "../components/CustomizationModal";
 import Overlay from "../../../shared/ui/Overlay";
@@ -14,7 +12,6 @@ function MenuList() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [customizingItem, setCustomizingItem] = useState(null);
-  const [open, setOpen] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const [banner, setBanner] = useState(null);
   const { addToCart } = useContext(CartContext);

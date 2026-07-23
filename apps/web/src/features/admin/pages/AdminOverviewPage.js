@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Loading from "shared/ui/Loading";
 
-const API_BASE = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");`r`nconst TABLE_ORDER_EMAIL = process.env.REACT_APP_TABLE_ORDER_EMAIL || "table-orders@otterly-clean.local";
+const API_BASE = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
+const TABLE_ORDER_EMAIL = process.env.REACT_APP_TABLE_ORDER_EMAIL || "table-orders@otterly-clean.local";
 const currencyFormatter = new Intl.NumberFormat("es-EC", {
   style: "currency",
   currency: "USD",

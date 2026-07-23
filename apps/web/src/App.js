@@ -6,7 +6,10 @@ import {
   Navigate,
 } from "react-router-dom";
 import Navbar from "shared/ui/Navbar";
-import MenuList from "features/menu/pages/MenuPage"; // Ajusta la ruta segun la ubicacion de MenuList
+import Footer from "shared/ui/Footer";
+import HomePage from "features/home/pages/HomePage";
+import ServiceRequestPage from "features/services/pages/ServiceRequestPage";
+import MenuList from "features/menu/pages/MenuPage";
 import Cart from "features/cart/pages/Cart";
 import Login from "features/auth/pages/Login";
 import Profile from "features/account/pages/ProfilePage";
@@ -45,7 +48,9 @@ const App = () => {
         <div className="App">
           <Navbar />
           <Routes>
-            <Route path="/" element={<MenuList />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/services" element={<ServiceRequestPage />} />
+            <Route path="/menu" element={<MenuList />} />
             <Route
               path="/login"
               element={<Login onLoginSuccess={handleLoginSuccess} />}
@@ -64,6 +69,7 @@ const App = () => {
             </Route>
             <Route path="/cart" element={<Cart />} />
           </Routes>
+          <Footer />
         </div>
       </Router>
     </AuthProvider>
