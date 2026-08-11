@@ -1,0 +1,24 @@
+{
+  "name": "otterly-clean",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plataforma de servicios a domicilio: limpieza, lavandería y arreglo de prendas",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace @otterly-clean/api",
+    "dev:web": "npm run dev --workspace @otterly-clean/web",
+    "build": "npm run build --workspace @otterly-clean/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:migrate": "npm run db:migrate --workspace @otterly-clean/api",
+    "db:seed": "npm run db:seed --workspace @otterly-clean/api",
+    "db:reset": "npm run db:reset --workspace @otterly-clean/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

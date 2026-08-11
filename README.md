@@ -1,114 +1,133 @@
-# Otterly Clean - Service Ordering Platform
+# Otterly Clean
 
-Otterly Clean is a full-stack service ordering and operations management application. Customers can browse available services, manage a cart, place orders, and continue the checkout flow through WhatsApp. Administrators can review orders and manage the service catalog from an internal dashboard.
+Plataforma de servicios a domicilio para Quito, Ecuador. El cliente reserva
+limpieza o lavandería, la empresa asigna un trabajador verificado, y el cliente
+puede seguir el servicio desde cualquier lugar aunque no esté en casa.
 
-## Tech Stack
+La plataforma **no es un marketplace abierto**: los trabajadores son personal
+contratado y verificado por la empresa, y solo Operaciones puede asignarles
+trabajo.
 
-- Web app: React 18, React Router, Firebase Authentication, Axios, Tailwind CSS, Material UI.
-- API: Node.js, Express, PostgreSQL, pg-promise, Multer, Sharp, Cloudinary.
-- Integrations: Firebase, Cloudinary, Telegram Bot API, WhatsApp checkout links.
+## Servicios
 
-## Project Structure
+| Servicio                | Estado en esta versión                                    |
+| ----------------------- | --------------------------------------------------------- |
+| Limpieza residencial    | Completo                                                   |
+| Lavandería a domicilio  | Completo, con trazabilidad por bolsa                       |
+| Arreglo de prendas      | Definido en el dominio y la base de datos, aún no ofrecido |
+
+## Stack
+
+- **Backend**: Node.js 20+, Express 5, PostgreSQL 18 (pg-promise), Zod, JWT.
+- **Frontend**: React 19, Vite 8, JSX, Tailwind CSS v4, React Router 7.
+- **Pruebas**: Vitest + Supertest (backend), Playwright disponible para E2E.
+
+## Requisitos
+
+- Node.js 20 o superior
+- PostgreSQL 14 o superior
+
+## Puesta en marcha
+
+```bash
+# 1. Dependencias (monorepo con workspaces de npm)
+npm install
+
+# 2. Variables de entorno
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+
+# 3. Generar los secretos del backend y ponerlos en apps/api/.env
+node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(48).toString('hex'))"
+node -e "console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
+
+# 4. Crear la base de datos
+createdb otterly_clean          # o: psql -U postgres -c "CREATE DATABASE otterly_clean"
+
+# 5. Esquema y datos iniciales
+npm run db:migrate
+npm run db:seed
+
+# 6. Arrancar (en dos terminales)
+npm run dev:api                 # http://localhost:10000
+npm run dev:web                 # http://localhost:5173
+```
+
+El frontend habla con `/api` y Vite lo reenvía al backend, así que en
+desarrollo no hay CORS que configurar.
+
+### Cuentas de prueba
+
+Las crea `npm run db:seed`. **Solo para desarrollo.**
+
+| Rol      | Correo                         | Contraseña   | Notas                |
+| -------- | ------------------------------ | ------------ | -------------------- |
+| ADMIN    | `admin@otterlyclean.ec`        | `Admin123!`  | Operaciones          |
+| STAFF    | `carla.mendez@otterlyclean.ec` | `Staff123!`  | Solo limpieza        |
+| STAFF    | `jorge.paredes@otterlyclean.ec`| `Staff123!`  | Solo lavandería      |
+| STAFF    | `lucia.torres@otterlyclean.ec` | `Staff123!`  | Limpieza y lavandería|
+| CUSTOMER | `cliente@ejemplo.com`          | `Cliente123!`| Con dirección cargada|
+
+## Comandos
+
+```bash
+npm run dev:api        # API con recarga automática
+npm run dev:web        # frontend
+npm run build          # build de producción del frontend
+npm run lint           # lint de ambos paquetes
+npm test               # pruebas de ambos paquetes
+npm run db:migrate     # aplica migraciones pendientes
+npm run db:seed        # datos iniciales
+npm run db:reset       # recrea el esquema desde cero y siembra (solo desarrollo)
+```
+
+## Estructura
 
 ```text
 apps/api/
-  controllers/      HTTP handlers by domain
-  models/           SQL queries and data access
-  routes/           Express API routes
-  notifications/    External notification helpers
+  migrations/            SQL versionado, aplicado por scripts/migrate.js
+  scripts/               migrate.js, seed.js
+  src/
+    config/              región (moneda, impuesto, dirección, teléfono) y entorno
+    domain/              LÓGICA PURA: máquinas de estado, precios, políticas
+    db/                  conexión y repositorios
+    services/            orquestación: transacción + auditoría + notificación
+    http/                rutas, middleware, validación con Zod
+    notifications/       abstracción de canales (email/SMS/push)
+  tests/                 dominio (unitarias) y flujos (integración)
 apps/web/
-  src/app/          Router, providers, and global context
-  src/features/     Feature-based application modules
-  src/shared/       Shared UI, styles, and utilities
+  src/
+    shared/              cliente API, sesión, configuración regional, UI, formato
+    features/
+      auth/              entrar y crear cuenta
+      customer/          panel, asistente de reserva, detalle, direcciones
+      operations/        panel operativo, solicitudes, trabajadores, incidencias
+      staff/             trabajos del día y detalle (optimizado para móvil)
+docs/
+  ARCHITECTURE.md        decisiones de diseño y cómo extender
+  SECURITY.md            modelo de amenazas y controles
 ```
 
-## Requirements
+## Documentación
 
-- Node.js 18 or newer recommended.
-- PostgreSQL database.
-- Firebase project for authentication.
-- Cloudinary account for image uploads.
-- Telegram bot credentials if order notifications are enabled.
+- [Arquitectura y decisiones](docs/ARCHITECTURE.md)
+- [Seguridad y privacidad](docs/SECURITY.md)
 
-## Environment Setup
+## Estado de esta versión
 
-Create local environment files from the provided examples:
+Funciona de extremo a extremo el flujo que es el corazón del producto:
 
-```bash
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env
-```
+**Limpieza**: el cliente reserva → Operaciones ve la solicitud sin asignar →
+asigna un trabajador → el trabajador confirma, marca en camino, llegó, inició y
+finalizó → el cliente ve cada cambio con su marca de tiempo.
 
-API variables:
+**Lavandería**: el cliente agenda la recogida → Operaciones asigna →
+recogida, recepción, lavado, secado, doblado, listo, en camino, entregado →
+cada bolsa lleva un código derivado de la orden.
 
-```text
-DB_HOST=
-DB_PORT=
-DB_NAME=
-DB_USER=
-DB_PASSWORD=
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_IDS=
-CORS_ORIGINS=http://localhost:3000
-```
+### Preparado pero no implementado
 
-Web app variables:
-
-```text
-REACT_APP_BACKEND_URL=http://localhost:10000
-```
-
-## Installation and Local Development
-
-API:
-
-```bash
-cd apps/api
-npm ci
-npm start
-```
-
-Web app:
-
-```bash
-cd apps/web
-npm ci
-npm start
-```
-
-By default, the API runs on `http://localhost:10000` and the web app runs on `http://localhost:3000`.
-
-## Useful Commands
-
-API:
-
-```bash
-npm start
-npm audit --omit=dev
-```
-
-Web app:
-
-```bash
-npm start
-npm run build
-npm test -- --watchAll=false
-npm audit --omit=dev
-```
-
-## Current Quality Notes
-
-- The project is organized as separate web and API applications under `apps/`.
-- Environment examples are included so real credentials do not need to be committed.
-- Generated folders such as `node_modules`, `apps/web/build`, and upload artifacts should stay out of version control.
-- Before using this as a public portfolio project, rotate any credentials that were previously committed and run a fresh dependency audit.
-
-## Deployment Notes
-
-- Configure all production secrets through the hosting provider, not through committed files.
-- Update `CORS_ORIGINS` for the final web app domain.
-- Store uploaded images in Cloudinary and keep temporary upload files out of Git.
-- Rebuild the web app after changing `REACT_APP_BACKEND_URL`.
+Pagos (el dominio ya modela importe, moneda, impuesto y estado), envío real de
+email/SMS/push (existe la abstracción y el registro), geolocalización, códigos
+QR en las bolsas, recurrencia, promociones, calificaciones y el servicio de
+arreglo de prendas.

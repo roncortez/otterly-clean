@@ -33,3 +33,7 @@ Thumbs.db
 .idea/
 .agents/
 .codex/
+# Artefactos de Playwright
+.playwright-cli/
+playwright-report/
+test-results/

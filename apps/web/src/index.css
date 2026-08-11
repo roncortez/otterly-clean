@@ -1,0 +1,207 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   Sistema de diseño de Otterly Clean
+
+   La plataforma existe para responder una pregunta cuando el cliente no está
+   en casa: "¿qué está pasando ahora mismo?". Por eso la paleta se apoya en un
+   verde bosque profundo — sereno, confiable, nada estridente — y reserva el
+   terracota para lo único que debe llamar la atención: el estado actual.
+
+   Tailwind v4: las variables se declaran en :root y se mapean con
+   @theme inline. No existe tailwind.config.js.
+   ========================================================================== */
+
+:root {
+  /* Superficies: un blanco frío con matiz verde, no crema */
+  --surface: hsl(160 20% 99%);
+  --surface-raised: hsl(0 0% 100%);
+  --surface-sunken: hsl(160 16% 96%);
+  --surface-inverse: hsl(174 34% 14%);
+
+  --border: hsl(158 14% 89%);
+  --border-strong: hsl(158 12% 78%);
+
+  --text: hsl(174 30% 12%);
+  --text-muted: hsl(174 10% 42%);
+  --text-subtle: hsl(174 8% 58%);
+  --text-inverse: hsl(160 20% 97%);
+
+  /* Verde bosque: la voz principal de la marca */
+  --forest-50: hsl(168 20% 95%);
+  --forest-100: hsl(168 20% 87%);
+  --forest-200: hsl(170 17% 73%);
+  --forest-300: hsl(170 16% 59%);
+  --forest-400: hsl(170 21% 47%);
+  --forest-500: hsl(172 31% 35%);
+  --forest-600: hsl(172 33% 27%);
+  --forest-700: hsl(176 27% 19%);
+  --forest-800: hsl(174 29% 15%);
+  --forest-900: hsl(176 29% 12%);
+
+  /* Terracota: reservado para el estado activo y la acción principal */
+  --accent-50: hsl(18 60% 97%);
+  --accent-100: hsl(16 71% 94%);
+  --accent-200: hsl(15 79% 88%);
+  --accent-300: hsl(16 71% 77%);
+  --accent-400: hsl(16 74% 69%);
+  --accent-500: hsl(16 71% 65%);
+  --accent-600: hsl(15 63% 54%);
+  --accent-700: hsl(15 56% 44%);
+
+  /* Salvia: acentos secundarios y estados en curso */
+  --sage-100: hsl(103 22% 92%);
+  --sage-300: hsl(103 22% 70%);
+  --sage-500: hsl(103 22% 48%);
+  --sage-700: hsl(103 24% 30%);
+
+  /* Semánticos */
+  --success: hsl(152 45% 34%);
+  --success-soft: hsl(152 40% 94%);
+  --warning: hsl(35 82% 45%);
+  --warning-soft: hsl(38 92% 94%);
+  --danger: hsl(3 62% 48%);
+  --danger-soft: hsl(3 70% 96%);
+  --info: hsl(206 60% 42%);
+  --info-soft: hsl(206 70% 95%);
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-lg: 1.125rem;
+
+  --shadow-card: 0 1px 2px hsl(174 30% 12% / 0.04), 0 4px 16px hsl(174 30% 12% / 0.05);
+  --shadow-raised: 0 2px 4px hsl(174 30% 12% / 0.06), 0 12px 32px hsl(174 30% 12% / 0.09);
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-inverse: var(--surface-inverse);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-subtle: var(--text-subtle);
+  --color-text-inverse: var(--text-inverse);
+
+  --color-forest-50: var(--forest-50);
+  --color-forest-100: var(--forest-100);
+  --color-forest-200: var(--forest-200);
+  --color-forest-300: var(--forest-300);
+  --color-forest-400: var(--forest-400);
+  --color-forest-500: var(--forest-500);
+  --color-forest-600: var(--forest-600);
+  --color-forest-700: var(--forest-700);
+  --color-forest-800: var(--forest-800);
+  --color-forest-900: var(--forest-900);
+
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+
+  --color-sage-100: var(--sage-100);
+  --color-sage-300: var(--sage-300);
+  --color-sage-500: var(--sage-500);
+  --color-sage-700: var(--sage-700);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --radius-card: var(--radius);
+  --shadow-card: var(--shadow-card);
+  --shadow-raised: var(--shadow-raised);
+
+  --font-sans:
+    'Inter var', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui,
+    sans-serif;
+  /* Los datos operativos (referencias, códigos de bolsa, pesos) van en
+     tabulares: en una consola de operaciones las cifras deben alinearse. */
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Los títulos van ligeramente apretados: da un aire más editorial y menos
+     de plantilla administrativa. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.021em;
+  }
+
+  /* Foco visible siempre: parte del piso de calidad, no una opción. */
+  :focus-visible {
+    outline: 2px solid var(--forest-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background-color: var(--accent-200);
+    color: var(--forest-900);
+  }
+
+  /* Números tabulares donde se comparan cifras. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* El punto que late marca el estado ACTUAL del servicio. Es el único
+     elemento animado de la interfaz: si todo se moviera, nada destacaría. */
+  .pulse-dot {
+    animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-ring {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--accent-300);
+      opacity: 1;
+    }
+    50% {
+      box-shadow: 0 0 0 6px transparent;
+      opacity: 0.85;
+    }
+  }
+
+  .safe-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

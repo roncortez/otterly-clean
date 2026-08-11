@@ -1,0 +1,83 @@
+import { Link } from 'react-router-dom';
+import { Sparkles, Shirt, Scissors, MapPin, ChevronRight } from 'lucide-react';
+import { Card, StatusBadge, cx } from '@/shared/ui';
+import { formatLongDate, formatTimeWindow, isToday } from '@/shared/format';
+
+export const SERVICE_ICONS = {
+  CLEANING: Sparkles,
+  LAUNDRY: Shirt,
+  ALTERATION: Scissors,
+};
+
+export const SERVICE_LABELS = {
+  CLEANING: 'Limpieza',
+  LAUNDRY: 'Lavandería',
+  ALTERATION: 'Arreglo de prendas',
+};
+
+/**
+ * Tarjeta de servicio para listados y panel del cliente.
+ * Prioriza, en este orden: qué es, cuándo, en qué estado. Es el orden en que
+ * la persona se hace las preguntas.
+ */
+export function ServiceCard({ order, to, showPrice = true, money }) {
+  const Icon = SERVICE_ICONS[order.serviceType] ?? Sparkles;
+  const today = isToday(order.scheduledDate);
+
+  return (
+    <Card
+      as={Link}
+      to={to}
+      className="group block transition-shadow hover:shadow-[var(--shadow-raised)]"
+    >
+      <div className="flex items-start gap-4 p-4 sm:p-5">
+        <span
+          className={cx(
+            'flex size-11 shrink-0 items-center justify-center rounded-xl',
+            order.serviceType === 'CLEANING'
+              ? 'bg-forest-50 text-forest-600'
+              : 'bg-sage-100 text-sage-700',
+          )}
+        >
+          <Icon className="size-5" aria-hidden="true" />
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="font-semibold text-text">{order.planName ?? SERVICE_LABELS[order.serviceType]}</p>
+            <StatusBadge status={order.status} label={order.statusLabel} />
+          </div>
+
+          <p className="mt-1 text-sm text-text-muted">
+            {today && <span className="font-medium text-accent-700">Hoy · </span>}
+            {formatLongDate(order.scheduledDate)}
+            {order.scheduledWindowStart && (
+              <> · {formatTimeWindow(order.scheduledWindowStart, order.scheduledWindowEnd)}</>
+            )}
+          </p>
+
+          {(order.streetLine1 || order.neighborhood) && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-sm text-text-subtle">
+              <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {[order.streetLine1, order.neighborhood].filter(Boolean).join(' · ')}
+              </span>
+            </p>
+          )}
+
+          <p className="mt-2 font-mono text-xs text-text-subtle">{order.reference}</p>
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {showPrice && order.totalAmount !== undefined && money && (
+            <span className="font-semibold text-text tnum">{money(order.totalAmount)}</span>
+          )}
+          <ChevronRight
+            className="size-5 text-text-subtle transition-transform group-hover:translate-x-0.5"
+            aria-hidden="true"
+          />
+        </div>
+      </div>
+    </Card>
+  );
+}
