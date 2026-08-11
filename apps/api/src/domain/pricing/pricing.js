@@ -39,7 +39,7 @@ const MODELS = {
   [PRICING_MODELS.PER_HOUR]: (plan, input) => {
     const minutes = Number(input.durationMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) {
-      throw new DomainError('PRICING_INPUT_REQUIRED', 'Se requiere la duración del servicio', {
+      throw new DomainError('PRICING_INPUT_REQUIRED', 'Se requiere la duracion del servicio', {
         field: 'durationMinutes',
       });
     }

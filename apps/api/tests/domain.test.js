@@ -259,12 +259,16 @@ describe('Timeline del cliente', () => {
   });
 });
 
+function formatLocalDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 describe('Politicas de reserva y cancelacion', () => {
   it('exige la antelacion minima de la region', () => {
     const enUnaHora = new Date(Date.now() + 3600_000);
     expect(() =>
       assertValidSchedule({
-        scheduledDate: enUnaHora.toISOString().slice(0, 10),
+        scheduledDate: formatLocalDate(enUnaHora),
         windowStart: `${String(enUnaHora.getHours()).padStart(2, '0')}:00`,
         region: EC,
       }),
@@ -274,7 +278,7 @@ describe('Politicas de reserva y cancelacion', () => {
   it('distingue cancelacion a tiempo de cancelacion tardia', () => {
     const manana = new Date(Date.now() + 48 * 3600_000);
     const aTiempo = evaluateCancellation({
-      order: { scheduled_date: manana.toISOString().slice(0, 10), scheduled_window_start: '08:00' },
+      order: { scheduled_date: formatLocalDate(manana), scheduled_window_start: '08:00' },
       region: EC,
     });
     expect(aTiempo.late).toBe(false);
@@ -282,7 +286,7 @@ describe('Politicas de reserva y cancelacion', () => {
     const enDosHoras = new Date(Date.now() + 2 * 3600_000);
     const tardia = evaluateCancellation({
       order: {
-        scheduled_date: enDosHoras.toISOString().slice(0, 10),
+        scheduled_date: formatLocalDate(enDosHoras),
         scheduled_window_start: `${String(enDosHoras.getHours()).padStart(2, '0')}:00`,
       },
       region: EC,
