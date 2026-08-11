@@ -19,7 +19,7 @@ const STATES = {
   PICKUP_CONFIRMED: { label: 'Recogida confirmada' },
   PICKED_UP: { label: 'Ropa recogida' },
   RECEIVED: { label: 'Recibida en planta' },
-  PROCESSING: { label: 'En preparacion' },
+  PROCESSING: { label: 'En preparación' },
   WASHING: { label: 'Lavando' },
   DRYING: { label: 'Secando' },
   FOLDING: { label: 'Doblando' },
@@ -30,7 +30,7 @@ const STATES = {
 
   CANCELLED: { label: 'Cancelada', terminal: true, exceptional: true },
   ISSUE_REPORTED: { label: 'Incidencia reportada', exceptional: true },
-  REQUIRES_REVIEW: { label: 'Requiere revision', exceptional: true },
+  REQUIRES_REVIEW: { label: 'Requiere revisión', exceptional: true },
 };
 
 // Cadena principal. Cada paso registra su timestamp para dar trazabilidad
@@ -69,8 +69,8 @@ const TRANSITIONS = [
   ...MAIN_CHAIN.map(([from, to, roles, timestamps]) => ({ from, to, roles, timestamps })),
 
   // Reasignacion antes de que la ropa salga del domicilio.
-  { from: 'ASSIGNED', to: 'PICKUP_SCHEDULED', roles: [ADMIN], label: 'Devuelto a asignacion' },
-  { from: 'PICKUP_CONFIRMED', to: 'PICKUP_SCHEDULED', roles: [ADMIN], label: 'Devuelto a asignacion' },
+  { from: 'ASSIGNED', to: 'PICKUP_SCHEDULED', roles: [ADMIN], label: 'Devuelto a asignación' },
+  { from: 'PICKUP_CONFIRMED', to: 'PICKUP_SCHEDULED', roles: [ADMIN], label: 'Devuelto a asignación' },
 
   // La entrega puede fallar y volver a intentarse.
   { from: 'OUT_FOR_DELIVERY', to: 'READY_FOR_DELIVERY', roles: [STAFF, ADMIN], label: 'Entrega reprogramada' },

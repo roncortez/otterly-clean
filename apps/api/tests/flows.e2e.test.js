@@ -217,7 +217,7 @@ describe('Flujo completo de limpieza', () => {
           bedrooms: 2,
           bathrooms: 2,
           areaValue: 95,
-          priorityAreas: ['cocina', 'banos'],
+          priorityAreas: ['cocina', 'baños'],
           suppliesProvidedBy: 'COMPANY',
           fragrancePreference: 'sin fragancia',
           customerPresent: false,

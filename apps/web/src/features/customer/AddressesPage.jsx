@@ -102,7 +102,7 @@ export default function AddressesPage() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Tus direcciones"
-        description="Donde prestamos el servicio o recogemos tu ropa."
+        description="Dónde prestamos el servicio o recogemos tu ropa."
         action={
           !showForm && (
             <Button onClick={() => setShowForm(true)}>

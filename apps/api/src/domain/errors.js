@@ -2,7 +2,7 @@
 
 /**
  * Error de negocio. Se traduce a una respuesta HTTP 4xx en la capa http,
- * nunca a un 500. Los codigos son estables y consumibles por el frontend.
+ * nunca a un 500. Los códigos son estables y consumibles por el frontend.
  */
 class DomainError extends Error {
   constructor(code, message, details = {}) {
@@ -21,16 +21,16 @@ class NotFoundError extends DomainError {
   }
 }
 
-/** El actor esta autenticado pero no tiene permiso sobre este recurso. */
+/** El actor está autenticado pero no tiene permiso sobre este recurso. */
 class ForbiddenError extends DomainError {
-  constructor(message = 'No tienes permiso para realizar esta accion', details = {}) {
+  constructor(message = 'No tienes permiso para realizar esta acción', details = {}) {
     super('FORBIDDEN', message, details);
     this.name = 'ForbiddenError';
   }
 }
 
 class UnauthorizedError extends DomainError {
-  constructor(message = 'Credenciales invalidas o sesion expirada') {
+  constructor(message = 'Credenciales inválidas o sesión expirada') {
     super('UNAUTHORIZED', message);
     this.name = 'UnauthorizedError';
   }

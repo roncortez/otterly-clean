@@ -5,7 +5,7 @@ const userRepository = require('../../db/repositories/userRepository');
 const { UnauthorizedError, ForbiddenError } = require('../../domain/errors');
 
 /**
- * Autenticacion y autorizacion.
+ * Autenticación y autorización.
  *
  * Nunca se confia en el frontend para impedir acciones. Toda ruta protegida
  * pasa por `authenticate`, y el rol se revalida contra la base de datos en
@@ -28,7 +28,7 @@ async function authenticate(req, _res, next) {
     const user = await userRepository.findById(Number(payload.sub));
 
     if (!user) throw new UnauthorizedError('La cuenta ya no existe');
-    if (user.status !== 'ACTIVE') throw new ForbiddenError('Esta cuenta esta desactivada');
+    if (user.status !== 'ACTIVE') throw new ForbiddenError('Esta cuenta está desactivada');
 
     // El rol viene de la base, no del token: si cambio, manda la base.
     req.user = user;

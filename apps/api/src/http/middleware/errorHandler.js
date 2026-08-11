@@ -7,7 +7,7 @@ const { DomainError } = require('../../domain/errors');
 /**
  * Traduce errores a respuestas HTTP consistentes.
  *
- * Los errores de negocio llevan un codigo estable que el frontend puede usar.
+ * Los errores de negocio llevan un código estable que el frontend puede usar.
  * Cualquier otra cosa es un 500 con mensaje generico: los detalles internos no
  * salen al cliente.
  */
@@ -32,12 +32,12 @@ const STATUS_BY_CODE = {
 };
 
 function errorHandler(error, req, res, _next) {
-  // Errores de validacion de esquema.
+  // Errores de validación de esquema.
   if (error instanceof ZodError) {
     return res.status(400).json({
       error: {
         code: 'VALIDATION_ERROR',
-        message: 'Los datos enviados no son validos',
+        message: 'Los datos enviados no son válidos',
         issues: error.issues.map((issue) => ({
           field: issue.path.join('.'),
           message: issue.message,
@@ -53,7 +53,7 @@ function errorHandler(error, req, res, _next) {
     });
   }
 
-  // Violacion de unicidad de PostgreSQL.
+  // Violación de unicidad de PostgreSQL.
   if (error.code === '23505') {
     return res.status(409).json({
       error: { code: 'CONFLICT', message: 'Ese registro ya existe' },
@@ -65,7 +65,7 @@ function errorHandler(error, req, res, _next) {
   return res.status(500).json({
     error: {
       code: 'INTERNAL_ERROR',
-      message: 'Ocurrio un error inesperado',
+      message: 'Ocurrió un error inesperado',
       ...(env.isProduction ? {} : { detail: error.message }),
     },
   });

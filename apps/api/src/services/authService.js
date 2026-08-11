@@ -11,12 +11,12 @@ const { ROLES } = require('../domain/shared/roles');
 const { UnauthorizedError, ConflictError, ForbiddenError } = require('../domain/errors');
 
 /**
- * Autenticacion y sesiones.
+ * Autenticación y sesiones.
  *
  * Access token JWT de vida corta + refresh token opaco de vida larga guardado
  * hasheado en base de datos, para poder revocar sesiones. El access token
- * lleva el rol, pero la autorizacion real siempre se revalida contra la base
- * en cada peticion sensible: un token viejo no debe dar acceso a un usuario ya
+ * lleva el rol, pero la autorización real siempre se revalida contra la base
+ * en cada petición sensible: un token viejo no debe dar acceso a un usuario ya
  * desactivado.
  */
 
@@ -32,7 +32,7 @@ function verifyAccessToken(token) {
   try {
     return jwt.verify(token, env.auth.jwtSecret);
   } catch {
-    throw new UnauthorizedError('Token invalido o expirado');
+    throw new UnauthorizedError('Token inválido o expirado');
   }
 }
 
@@ -75,7 +75,7 @@ async function buildSession(user, { userAgent } = {}, tx = db) {
 }
 
 /**
- * Registro publico. Solo crea CUSTOMER: el rol nunca viene del cliente.
+ * Registro público. Solo crea CUSTOMER: el rol nunca viene del cliente.
  * Las cuentas de STAFF y ADMIN las crea Operaciones (staffService).
  */
 async function register({ email, password, firstName, lastName, phone, regionCode, locale }, context = {}) {
@@ -109,10 +109,10 @@ async function login({ email, password }, context = {}) {
   const user = await userRepository.findByEmailWithSecret(email);
 
   // Mismo mensaje y mismo coste aproximado tanto si el usuario no existe como
-  // si la clave es incorrecta, para no filtrar que correos estan registrados.
+  // si la clave es incorrecta, para no filtrar qué correos están registrados.
   if (!user) {
     await bcrypt.compare(password, '$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidiu');
-    throw new UnauthorizedError('Correo o contrasena incorrectos');
+    throw new UnauthorizedError('Correo o contraseña incorrectos');
   }
 
   const valid = await bcrypt.compare(password, user.password_hash);
@@ -124,11 +124,11 @@ async function login({ email, password }, context = {}) {
       entityId: user.id,
       request: context.request,
     });
-    throw new UnauthorizedError('Correo o contrasena incorrectos');
+    throw new UnauthorizedError('Correo o contraseña incorrectos');
   }
 
   if (user.status !== 'ACTIVE') {
-    throw new ForbiddenError('Esta cuenta esta desactivada. Contacta con la empresa.');
+    throw new ForbiddenError('Esta cuenta está desactivada. Contacta con la empresa.');
   }
 
   return db.tx(async (tx) => {
@@ -155,11 +155,11 @@ async function refresh(refreshTokenValue, context = {}) {
     [hashToken(refreshTokenValue)],
   );
 
-  if (!stored) throw new UnauthorizedError('Sesion expirada, inicia sesion de nuevo');
+  if (!stored) throw new UnauthorizedError('Sesión expirada, inicia sesión de nuevo');
 
   const user = await userRepository.findById(stored.user_id);
   if (!user || user.status !== 'ACTIVE') {
-    throw new UnauthorizedError('Sesion invalida');
+    throw new UnauthorizedError('Sesión inválida');
   }
 
   return db.tx(async (tx) => {
@@ -181,7 +181,7 @@ async function changePassword(userId, { currentPassword, newPassword }) {
   if (!user) throw new UnauthorizedError();
 
   const valid = await bcrypt.compare(currentPassword, user.password_hash);
-  if (!valid) throw new UnauthorizedError('La contrasena actual no es correcta');
+  if (!valid) throw new UnauthorizedError('La contraseña actual no es correcta');
 
   const passwordHash = await bcrypt.hash(newPassword, env.auth.bcryptRounds);
 

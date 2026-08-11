@@ -4,10 +4,10 @@
  * Datos iniciales.
  *
  * Los precios reflejan el mercado real de Quito investigado antes de
- * implementar: la limpieza domestica se cobra por hora (~$11/h) o en bloques
- * ("$16 por 2 horas"), no plano por tamano como en EE.UU. Por eso el plan de
- * Ecuador usa PER_HOUR con minimo de horas, y se deja un plan de ejemplo con
- * FLAT_BY_SIZE en la region US para demostrar que el motor soporta ambos.
+ * implementar: la limpieza doméstica se cobra por hora (~$11/h) o en bloques
+ * ("$16 por 2 horas"), no plano por tamaño como en EE.UU. Por eso el plan de
+ * Ecuador usa PER_HOUR con mínimo de horas, y se deja un plan de ejemplo con
+ * FLAT_BY_SIZE en la región US para demostrar que el motor soporta ambos.
  *
  * Importes en centavos.
  */
@@ -43,9 +43,9 @@ async function seedPlans(tx) {
     {
       service_type: 'CLEANING',
       code: 'EC-CLEAN-STANDARD',
-      name: 'Limpieza estandar',
+      name: 'Limpieza estándar',
       description:
-        'Limpieza de mantenimiento: pisos, banos, cocina, dormitorios y areas comunes.',
+        'Limpieza de mantenimiento: pisos, baños, cocina, dormitorios y áreas comunes.',
       region_code: 'EC',
       pricing_model: 'PER_HOUR',
       base_amount: 1100, // $11.00 por hora
@@ -58,9 +58,9 @@ async function seedPlans(tx) {
       code: 'EC-CLEAN-DEEP',
       name: 'Limpieza profunda',
       description:
-        'Incluye interior de electrodomesticos, zocalos, ventanas por dentro y acumulacion dificil.',
+        'Incluye interior de electrodomésticos, zócalos, ventanas por dentro y acumulación difícil.',
       region_code: 'EC',
-      // La investigacion muestra que la limpieza profunda cuesta 50-100% mas.
+      // La investigación muestra que la limpieza profunda cuesta 50-100% más.
       pricing_model: 'PER_HOUR',
       base_amount: 1650, // $16.50 por hora (+50%)
       config: { minimumHours: 3 },
@@ -71,7 +71,7 @@ async function seedPlans(tx) {
       service_type: 'CLEANING',
       code: 'EC-CLEAN-MOVE',
       name: 'Limpieza de mudanza',
-      description: 'Limpieza intensiva para entrega o recepcion de vivienda vacia.',
+      description: 'Limpieza intensiva para entrega o recepción de vivienda vacía.',
       region_code: 'EC',
       pricing_model: 'PER_HOUR',
       base_amount: 1800,
@@ -80,7 +80,7 @@ async function seedPlans(tx) {
       display_order: 3,
     },
 
-    // --- Ecuador: lavanderia --------------------------------------------
+    // --- Ecuador: lavandería --------------------------------------------
     {
       service_type: 'LAUNDRY',
       code: 'EC-LAUNDRY-WASHFOLD',
@@ -97,7 +97,7 @@ async function seedPlans(tx) {
       service_type: 'LAUNDRY',
       code: 'EC-LAUNDRY-BAG',
       name: 'Bolsa completa',
-      description: 'Precio fijo por bolsa estandar, sin importar el peso exacto.',
+      description: 'Precio fijo por bolsa estándar, sin importar el peso exacto.',
       region_code: 'EC',
       pricing_model: 'PER_BAG',
       base_amount: 1400, // $14.00 por bolsa
@@ -116,12 +116,12 @@ async function seedPlans(tx) {
       display_order: 3,
     },
 
-    // --- Arreglo de prendas: definido pero no ofrecido todavia -----------
+    // --- Arreglo de prendas: definido pero no ofrecido todavía -----------
     {
       service_type: 'ALTERATION',
       code: 'EC-ALTERATION-QUOTE',
       name: 'Arreglo de prendas',
-      description: 'Reparacion, ajuste y cambio de cierres. Requiere revision previa.',
+      description: 'Reparación, ajuste y cambio de cierres. Requiere revisión previa.',
       region_code: 'EC',
       pricing_model: 'QUOTE',
       base_amount: 0,
@@ -181,9 +181,9 @@ async function seedExtras(tx) {
     ['CLEANING', 'EC', 'CLEAN-FRIDGE', 'Limpieza interior de refrigeradora', 700, 30],
     ['CLEANING', 'EC', 'CLEAN-WINDOWS', 'Ventanas por dentro', 900, 45],
     ['CLEANING', 'EC', 'CLEAN-LAUNDRY', 'Lavado de ropa en casa', 600, 45],
-    ['CLEANING', 'EC', 'CLEAN-BALCONY', 'Balcon o terraza', 500, 30],
+    ['CLEANING', 'EC', 'CLEAN-BALCONY', 'Balcón o terraza', 500, 30],
     ['LAUNDRY', 'EC', 'LAUNDRY-EXPRESS', 'Entrega express 24 horas', 500, 0],
-    ['LAUNDRY', 'EC', 'LAUNDRY-HYPO', 'Detergente hipoalergenico', 200, 0],
+    ['LAUNDRY', 'EC', 'LAUNDRY-HYPO', 'Detergente hipoalergénico', 200, 0],
     ['LAUNDRY', 'EC', 'LAUNDRY-SEPARATE', 'Lavado por separado', 300, 0],
   ];
 
@@ -219,10 +219,10 @@ async function seedUsers(tx, zones) {
       last: 'Mendez',
       phone: '+593991000010',
       code: 'EMP-001',
-      bio: 'Cinco anos de experiencia en limpieza residencial. Especialista en limpieza profunda.',
+      bio: 'Cinco años de experiencia en limpieza residencial. Especialista en limpieza profunda.',
       services: ['CLEANING'],
       zones: ['UIO-NORTE', 'UIO-CENTRO'],
-      skills: ['limpieza profunda', 'productos ecologicos'],
+      skills: ['limpieza profunda', 'productos ecológicos'],
     },
     {
       email: 'jorge.paredes@otterlyclean.ec',
@@ -230,21 +230,21 @@ async function seedUsers(tx, zones) {
       last: 'Paredes',
       phone: '+593991000011',
       code: 'EMP-002',
-      bio: 'Responsable de recogidas y entregas de lavanderia en la zona norte.',
+      bio: 'Responsable de recogidas y entregas de lavandería en la zona norte.',
       services: ['LAUNDRY'],
       zones: ['UIO-NORTE', 'UIO-VALLES'],
-      skills: ['logistica', 'manejo de prendas delicadas'],
+      skills: ['logística', 'manejo de prendas delicadas'],
     },
     {
       email: 'lucia.torres@otterlyclean.ec',
-      first: 'Lucia',
+      first: 'Lucía',
       last: 'Torres',
       phone: '+593991000012',
       code: 'EMP-003',
-      bio: 'Atiende limpieza y lavanderia. Disponible en toda la ciudad.',
+      bio: 'Atiende limpieza y lavandería. Disponible en toda la ciudad.',
       services: ['CLEANING', 'LAUNDRY'],
       zones: ['UIO-NORTE', 'UIO-CENTRO', 'UIO-SUR', 'UIO-VALLES'],
-      skills: ['limpieza estandar', 'planchado'],
+      skills: ['limpieza estándar', 'planchado'],
     },
   ];
 
@@ -271,7 +271,7 @@ async function seedUsers(tx, zones) {
       ]);
     }
 
-    // Disponibilidad de lunes a sabado, 8:00-18:00.
+    // Disponibilidad de lunes a sábado, 8:00-18:00.
     for (let weekday = 1; weekday <= 6; weekday += 1) {
       await tx.none(
         'INSERT INTO staff_availability (staff_id, weekday, start_time, end_time) VALUES ($1, $2, $3, $4)',
@@ -284,7 +284,7 @@ async function seedUsers(tx, zones) {
   const customer = await tx.one(
     `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, region_code, locale)
      VALUES ($1, $2, $3, $4, $5, 'CUSTOMER', 'EC', 'es') RETURNING *`,
-    ['cliente@ejemplo.com', await hash('Cliente123!'), 'Andres', 'Vaca', '+593991000020'],
+    ['cliente@ejemplo.com', await hash('Cliente123!'), 'Andrés', 'Vaca', '+593991000020'],
   );
 
   await tx.none('INSERT INTO customer_profiles (user_id, tax_id_type, tax_id) VALUES ($1, $2, $3)', [
@@ -302,7 +302,7 @@ async function seedUsers(tx, zones) {
       customer.id,
       'Av. Amazonas N34-120',
       // Calle secundaria sin conector: la interfaz ya une con "y".
-      'Av. Republica',
+      'Av. República',
       'La Carolina',
       'Edificio Torre Azul, departamento 5B. Timbre 5B.',
       zoneByCode['UIO-NORTE'],
@@ -319,10 +319,10 @@ async function run() {
   });
 
   console.log('Datos iniciales cargados.\n');
-  console.log('  Cuentas de prueba (contrasenas solo para desarrollo):');
+  console.log('  Cuentas de prueba (contraseñas solo para desarrollo):');
   console.log('    ADMIN     admin@otterlyclean.ec        Admin123!');
   console.log('    STAFF     carla.mendez@otterlyclean.ec Staff123!    (limpieza)');
-  console.log('    STAFF     jorge.paredes@otterlyclean.ec Staff123!   (lavanderia)');
+  console.log('    STAFF     jorge.paredes@otterlyclean.ec Staff123!   (lavandería)');
   console.log('    STAFF     lucia.torres@otterlyclean.ec Staff123!    (ambos)');
   console.log('    CUSTOMER  cliente@ejemplo.com          Cliente123!');
 }

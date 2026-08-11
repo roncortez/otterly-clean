@@ -34,7 +34,7 @@ const EVENTS = Object.freeze({
     channels: ['IN_APP', 'PUSH'],
     template: (ctx) => ({
       title: 'Profesional asignado',
-      body: `${ctx.staffName ?? 'Un profesional'} atendera tu servicio ${ctx.reference}.`,
+      body: `${ctx.staffName ?? 'Un profesional'} atenderá tu servicio ${ctx.reference}.`,
     }),
   },
   ORDER_CONFIRMED: {
@@ -42,7 +42,7 @@ const EVENTS = Object.freeze({
     channels: ['IN_APP', 'PUSH'],
     template: (ctx) => ({
       title: 'Servicio confirmado',
-      body: `${ctx.staffName ?? 'El profesional'} confirmo tu servicio ${ctx.reference}.`,
+      body: `${ctx.staffName ?? 'El profesional'} confirmó tu servicio ${ctx.reference}.`,
     }),
   },
   STAFF_ON_THE_WAY: {
@@ -57,8 +57,8 @@ const EVENTS = Object.freeze({
     audience: [AUDIENCE.CUSTOMER],
     channels: ['IN_APP', 'PUSH'],
     template: (ctx) => ({
-      title: 'El profesional llego',
-      body: `${ctx.staffName ?? 'El profesional'} llego a tu domicilio.`,
+      title: 'El profesional llegó',
+      body: `${ctx.staffName ?? 'El profesional'} llegó a tu domicilio.`,
     }),
   },
   SERVICE_STARTED: {
@@ -66,7 +66,7 @@ const EVENTS = Object.freeze({
     channels: ['IN_APP', 'PUSH'],
     template: (ctx) => ({
       title: 'Servicio iniciado',
-      body: `Tu servicio ${ctx.reference} esta en progreso.`,
+      body: `Tu servicio ${ctx.reference} está en progreso.`,
     }),
   },
   SERVICE_COMPLETED: {
@@ -90,7 +90,7 @@ const EVENTS = Object.freeze({
     channels: ['IN_APP', 'EMAIL'],
     template: (ctx) => ({
       title: 'Incidencia reportada',
-      body: `Se reporto una incidencia en el servicio ${ctx.reference}.`,
+      body: `Se reportó una incidencia en el servicio ${ctx.reference}.`,
     }),
   },
 
@@ -108,7 +108,7 @@ const EVENTS = Object.freeze({
     channels: ['IN_APP'],
     template: (ctx) => ({
       title: 'Ropa recibida',
-      body: `Tu pedido ${ctx.reference} llego a nuestra planta y sera procesado.`,
+      body: `Tu pedido ${ctx.reference} llegó a nuestra planta y será procesado.`,
     }),
   },
   LAUNDRY_PROCESSING: {
@@ -124,7 +124,7 @@ const EVENTS = Object.freeze({
     channels: ['IN_APP', 'PUSH'],
     template: (ctx) => ({
       title: 'Ropa lista',
-      body: `Tu pedido ${ctx.reference} esta listo y sera enviado a tu domicilio.`,
+      body: `Tu pedido ${ctx.reference} está listo y será enviado a tu domicilio.`,
     }),
   },
   LAUNDRY_OUT_FOR_DELIVERY: {

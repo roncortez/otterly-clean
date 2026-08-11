@@ -3,7 +3,7 @@
 const { z } = require('zod');
 
 /**
- * Esquemas de validacion de la API.
+ * Esquemas de validación de la API.
  *
  * Se validan en el backend porque el frontend no es una barrera de seguridad.
  * Los enums se mantienen alineados con los CHECK de la base de datos.
@@ -11,19 +11,19 @@ const { z } = require('zod');
 
 const id = z.coerce.number().int().positive();
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato esperado: AAAA-MM-DD');
-// E.164: hasta 15 digitos con prefijo de pais. Sirve para +593 y +1 por igual.
+// E.164: hasta 15 dígitos con prefijo de país. Sirve para +593 y +1 por igual.
 const phone = z
   .string()
   .regex(/^\+[1-9]\d{6,14}$/, 'Usa formato internacional, por ejemplo +593991234567')
   .optional()
   .nullable();
 
-const password = z.string().min(8, 'La contrasena debe tener al menos 8 caracteres').max(128);
+const password = z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(128);
 
-// --- Autenticacion ---------------------------------------------------------
+// --- Autenticación ---------------------------------------------------------
 
 const registerSchema = z.object({
-  email: z.email('Correo invalido').max(255),
+  email: z.email('Correo inválido').max(255),
   password,
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
@@ -33,8 +33,8 @@ const registerSchema = z.object({
 });
 
 const loginSchema = z.object({
-  email: z.email('Correo invalido'),
-  password: z.string().min(1, 'La contrasena es obligatoria'),
+  email: z.email('Correo inválido'),
+  password: z.string().min(1, 'La contraseña es obligatoria'),
 });
 
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });

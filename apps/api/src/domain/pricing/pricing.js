@@ -39,7 +39,7 @@ const MODELS = {
   [PRICING_MODELS.PER_HOUR]: (plan, input) => {
     const minutes = Number(input.durationMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) {
-      throw new DomainError('PRICING_INPUT_REQUIRED', 'Se requiere la duracion del servicio', {
+      throw new DomainError('PRICING_INPUT_REQUIRED', 'Se requiere la duración del servicio', {
         field: 'durationMinutes',
       });
     }
@@ -63,7 +63,7 @@ const MODELS = {
     const key = input.sizeTier;
     const amount = tiers[key];
     if (amount === undefined) {
-      throw new DomainError('PRICING_INPUT_REQUIRED', 'Tamano de vivienda no soportado', {
+      throw new DomainError('PRICING_INPUT_REQUIRED', 'Tamaño de vivienda no soportado', {
         field: 'sizeTier',
         allowed: Object.keys(tiers),
       });

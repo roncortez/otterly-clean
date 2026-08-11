@@ -16,22 +16,22 @@ const STATES = {
   REQUESTED: { label: 'Servicio solicitado' },
   PENDING_ASSIGNMENT: { label: 'Buscando profesional' },
   ASSIGNED: { label: 'Profesional asignado' },
-  CONFIRMED: { label: 'Profesional confirmo' },
+  CONFIRMED: { label: 'Profesional confirmó' },
   ON_THE_WAY: { label: 'En camino' },
-  ARRIVED: { label: 'Llego al domicilio' },
+  ARRIVED: { label: 'Llegó al domicilio' },
   IN_PROGRESS: { label: 'Limpieza en progreso' },
   COMPLETED: { label: 'Limpieza finalizada', terminal: true },
 
   CANCELLED: { label: 'Cancelado', terminal: true, exceptional: true },
   NO_ACCESS: { label: 'Sin acceso al domicilio', exceptional: true },
   INCIDENT_REPORTED: { label: 'Incidencia reportada', exceptional: true },
-  REQUIRES_REVIEW: { label: 'Requiere revision', exceptional: true },
+  REQUIRES_REVIEW: { label: 'Requiere revisión', exceptional: true },
 };
 
 const TRANSITIONS = [
   // --- Flujo principal ---------------------------------------------------
   // La solicitud entra a la cola de Operaciones automaticamente.
-  { from: 'REQUESTED', to: 'PENDING_ASSIGNMENT', roles: [ADMIN], label: 'Enviado a asignacion' },
+  { from: 'REQUESTED', to: 'PENDING_ASSIGNMENT', roles: [ADMIN], label: 'Enviado a asignación' },
   // La asignacion la hace la empresa, nunca el trabajador.
   { from: 'PENDING_ASSIGNMENT', to: 'ASSIGNED', roles: [ADMIN], label: 'Profesional asignado' },
   // El trabajador acepta el trabajo que le entregaron.
@@ -43,8 +43,8 @@ const TRANSITIONS = [
 
   // --- Reasignacion ------------------------------------------------------
   // Operaciones puede devolver a la cola si el trabajador no confirma o falla.
-  { from: 'ASSIGNED', to: 'PENDING_ASSIGNMENT', roles: [ADMIN], label: 'Devuelto a asignacion' },
-  { from: 'CONFIRMED', to: 'PENDING_ASSIGNMENT', roles: [ADMIN], label: 'Devuelto a asignacion' },
+  { from: 'ASSIGNED', to: 'PENDING_ASSIGNMENT', roles: [ADMIN], label: 'Devuelto a asignación' },
+  { from: 'CONFIRMED', to: 'PENDING_ASSIGNMENT', roles: [ADMIN], label: 'Devuelto a asignación' },
 
   // --- Sin acceso --------------------------------------------------------
   // El trabajador llego pero no pudo entrar. No es un fracaso definitivo:
