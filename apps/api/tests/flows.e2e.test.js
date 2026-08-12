@@ -189,7 +189,7 @@ describe('Flujo completo de limpieza', () => {
       .send({
         planId: created.cleaningPlanId,
         addressId: created.addressId,
-        scheduledDate: new Date().toISOString().slice(0, 10),
+        scheduledDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 180 },
         cleaning: { bedrooms: 2, bathrooms: 1 },

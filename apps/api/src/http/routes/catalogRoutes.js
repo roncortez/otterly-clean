@@ -97,4 +97,14 @@ router.get(
   }),
 );
 
+/** GET /api/catalog/banner — public promotional banner */
+const settingsService = require('../../services/settingsService');
+
+router.get(
+  '/banner',
+  asyncHandler(async (req, res) => {
+    res.json(await settingsService.getBanner());
+  }),
+);
+
 module.exports = router;

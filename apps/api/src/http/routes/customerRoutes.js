@@ -218,4 +218,47 @@ router.post(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Propiedades e Inmuebles
+// ---------------------------------------------------------------------------
+
+const propertyService = require('../../services/propertyService');
+const couponService = require('../../services/couponService');
+
+router.get(
+  '/properties',
+  asyncHandler(async (req, res) => {
+    res.json({ properties: await propertyService.listProperties(req.user.id) });
+  }),
+);
+
+router.post(
+  '/properties',
+  asyncHandler(async (req, res) => {
+    const property = await propertyService.createProperty(req.user.id, req.body);
+    res.status(201).json({ property });
+  }),
+);
+
+router.delete(
+  '/properties/:id',
+  asyncHandler(async (req, res) => {
+    await propertyService.deleteProperty(Number(req.params.id), req.user.id);
+    res.status(204).send();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Cupones (Validacion por el cliente)
+// ---------------------------------------------------------------------------
+
+router.post(
+  '/coupons/validate',
+  asyncHandler(async (req, res) => {
+    const { code, amount } = req.body;
+    const result = await couponService.validateCoupon(code, req.user.id, Number(amount || 0));
+    res.json(result);
+  }),
+);
+
 module.exports = router;

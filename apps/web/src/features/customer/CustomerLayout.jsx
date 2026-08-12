@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { Droplets, Home, CalendarCheck, MapPin, LogOut, Plus } from 'lucide-react';
+import { Droplets, Home, CalendarCheck, MapPin, LogOut, Plus, Building } from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
 import { cx } from '@/shared/ui';
 
@@ -7,6 +7,7 @@ const NAV = [
   { to: '/inicio', label: 'Inicio', icon: Home },
   { to: '/servicios', label: 'Servicios', icon: CalendarCheck },
   { to: '/direcciones', label: 'Direcciones', icon: MapPin },
+  { to: '/inmuebles', label: 'Inmuebles', icon: Building },
 ];
 
 /**

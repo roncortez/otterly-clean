@@ -40,11 +40,16 @@ function RequireRole({ role, children }) {
   return children;
 }
 
+import HomePage from '@/features/home/HomePage';
+import PropertyManager from '@/features/customer/properties/PropertyManager';
+import CouponsPage from '@/features/operations/CouponsPage';
+import SettingsPage from '@/features/operations/SettingsPage';
+
 function RootRedirect() {
   const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) return <Spinner label="Cargando" />;
-  if (!isAuthenticated) return <Navigate to="/entrar" replace />;
+  if (!isAuthenticated) return <HomePage />;
   return <Navigate to={homePathForRole(user.role)} replace />;
 }
 
@@ -52,6 +57,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
+      <Route path="/home" element={<HomePage />} />
       <Route path="/entrar" element={<LoginPage />} />
       <Route path="/crear-cuenta" element={<RegisterPage />} />
 
@@ -68,6 +74,7 @@ export default function App() {
         <Route path="/servicios" element={<CustomerOrders />} />
         <Route path="/servicios/:id" element={<CustomerOrderDetail />} />
         <Route path="/direcciones" element={<AddressesPage />} />
+        <Route path="/inmuebles" element={<PropertyManager />} />
       </Route>
 
       {/* Operaciones */}
@@ -84,6 +91,8 @@ export default function App() {
         <Route path="/operaciones/trabajadores" element={<StaffManagement />} />
         <Route path="/operaciones/clientes" element={<CustomersPage />} />
         <Route path="/operaciones/incidencias" element={<IncidentsPage />} />
+        <Route path="/operaciones/cupones" element={<CouponsPage />} />
+        <Route path="/operaciones/ajustes" element={<SettingsPage />} />
       </Route>
 
       {/* Trabajador */}

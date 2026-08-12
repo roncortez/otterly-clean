@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, Users, UserCog, AlertTriangle, LogOut, Droplets } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Users, UserCog, AlertTriangle, LogOut, Droplets, Ticket, Sliders } from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
 import { cx } from '@/shared/ui';
 
@@ -9,6 +9,8 @@ const NAV = [
   { to: '/operaciones/trabajadores', label: 'Trabajadores', icon: UserCog },
   { to: '/operaciones/clientes', label: 'Clientes', icon: Users },
   { to: '/operaciones/incidencias', label: 'Incidencias', icon: AlertTriangle },
+  { to: '/operaciones/cupones', label: 'Cupones', icon: Ticket },
+  { to: '/operaciones/ajustes', label: 'Ajustes', icon: Sliders },
 ];
 
 /** Consola de operaciones: barra lateral fija, densidad alta. */

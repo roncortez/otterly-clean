@@ -317,4 +317,65 @@ router.post(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Cupones (Administracion)
+// ---------------------------------------------------------------------------
+
+const couponService = require('../../services/couponService');
+const settingsService = require('../../services/settingsService');
+const statsService = require('../../services/statsService');
+
+router.get(
+  '/coupons',
+  asyncHandler(async (req, res) => {
+    res.json({ coupons: await couponService.listCoupons(req.query) });
+  }),
+);
+
+router.post(
+  '/coupons',
+  asyncHandler(async (req, res) => {
+    const coupon = await couponService.createCoupon(req.body, req.user.id);
+    res.status(201).json({ coupon });
+  }),
+);
+
+router.patch(
+  '/coupons/:id/status',
+  asyncHandler(async (req, res) => {
+    const coupon = await couponService.toggleCoupon(Number(req.params.id), req.body.active);
+    res.json({ coupon });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Configuracion y Banners (Administracion)
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/settings/banner',
+  asyncHandler(async (req, res) => {
+    res.json({ banner: await settingsService.getBanner() });
+  }),
+);
+
+router.post(
+  '/settings/banner',
+  asyncHandler(async (req, res) => {
+    const banner = await settingsService.updateBanner(req.body);
+    res.json({ banner });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Estadisticas Operativas
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/stats',
+  asyncHandler(async (req, res) => {
+    res.json({ overview: await statsService.getOperationsOverview() });
+  }),
+);
+
 module.exports = router;
