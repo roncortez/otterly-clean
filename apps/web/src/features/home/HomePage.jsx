@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, Shirt, Scissors, CalendarCheck, CheckCircle2, ShieldCheck, Clock } from 'lucide-react';
-import WhatsAppButton from '../../shared/ui/WhatsAppButton';
-import Overlay from '../../shared/ui/Overlay';
-import api from '../../shared/api/client';
+import WhatsAppButton from '@/shared/ui/WhatsAppButton';
+import Overlay from '@/shared/ui/Overlay';
+import api from '@/shared/api/client';
 
 const CATEGORIES = [
   {

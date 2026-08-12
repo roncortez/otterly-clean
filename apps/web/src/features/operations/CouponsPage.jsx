@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Ticket, Plus, CheckCircle, XCircle, Tag, AlertCircle } from 'lucide-react';
-import api from '../../shared/api/client';
+import api from '@/shared/api/client';
 
 export default function CouponsPage() {
   const [coupons, setCoupons] = useState([]);

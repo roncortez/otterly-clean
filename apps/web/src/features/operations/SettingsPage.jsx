@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sliders, Save, Image, MessageSquare, AlertCircle } from 'lucide-react';
-import api from '../../shared/api/client';
+import api from '@/shared/api/client';
 
 export default function SettingsPage() {
   const [banner, setBanner] = useState({

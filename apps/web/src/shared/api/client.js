@@ -115,3 +115,5 @@ export function errorMessage(error, fallback = 'Algo salió mal. Vuelve a intent
 export function errorCode(error) {
   return error?.response?.data?.error?.code ?? null;
 }
+
+export default api;
