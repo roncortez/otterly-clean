@@ -137,7 +137,7 @@ export default function JobDetailPage() {
 
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold text-text">{SERVICE_LABELS[order.serviceType]}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-text">{SERVICE_LABELS[order.serviceType]}</h1>
           <StatusBadge status={order.status} label={statusLabel} />
         </div>
         <p className="mt-1 text-text-muted capitalize">
@@ -201,7 +201,7 @@ export default function JobDetailPage() {
               </p>
 
               {accessSecret ? (
-                <p className="mt-2 rounded-lg bg-white px-3 py-2 font-mono text-lg font-semibold text-text">
+                <p className="mt-2 rounded-lg bg-surface-raised px-3 py-2 font-mono text-lg font-semibold text-text">
                   {accessSecret}
                 </p>
               ) : (
@@ -367,7 +367,7 @@ export default function JobDetailPage() {
               <button
                 type="button"
                 onClick={() => setShowBagForm(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong py-3 text-sm font-medium text-text-muted"
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-border-strong py-3 text-sm font-semibold text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
               >
                 <Plus className="size-4" aria-hidden="true" />
                 Registrar una bolsa
@@ -437,7 +437,7 @@ export default function JobDetailPage() {
         <button
           type="button"
           onClick={() => setShowIncident(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-danger/20 bg-danger-soft py-3 text-sm font-medium text-danger"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-danger/25 bg-danger-soft py-3 text-sm font-semibold text-danger transition-colors hover:bg-danger hover:text-white"
         >
           <AlertTriangle className="size-4" aria-hidden="true" />
           Reportar una incidencia

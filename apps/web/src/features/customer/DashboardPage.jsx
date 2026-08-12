@@ -4,7 +4,7 @@ import { CalendarPlus, Sparkles, Shirt, ArrowRight, CalendarX2 } from 'lucide-re
 import { useApiQuery } from '@/shared/api/useApiQuery';
 import { useAuth } from '@/shared/auth/AuthContext';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { Alert, Card, EmptyState, Spinner, StatusBadge } from '@/shared/ui';
+import { Alert, ButtonLink, Card, EmptyState, Spinner, StatusBadge } from '@/shared/ui';
 import { StatusTimeline } from '@/shared/ui/StatusTimeline';
 import { ServiceCard } from '@/shared/ui/ServiceCard';
 import { formatLongDate, formatTimeWindow, isToday } from '@/shared/format';
@@ -43,7 +43,7 @@ export default function DashboardPage() {
     <div className="space-y-8">
       <header>
         <p className="text-sm text-text-muted">Hola, {user?.firstName}</p>
-        <h1 className="mt-0.5 text-2xl font-semibold text-text sm:text-3xl">
+        <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight text-text sm:text-3xl">
           {active.length > 0 ? 'Tus servicios en curso' : 'Todo en orden'}
         </h1>
       </header>
@@ -56,10 +56,10 @@ export default function DashboardPage() {
           <div className="border-b border-border bg-forest-800 px-5 py-4 text-text-inverse sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs tracking-[0.14em] text-forest-300 uppercase">
+                <p className="text-xs font-semibold tracking-[0.14em] text-forest-200 uppercase">
                   {isToday(liveDetail.order.scheduledDate) ? 'Hoy' : 'Próximo servicio'}
                 </p>
-                <p className="mt-1 text-lg font-semibold">{liveDetail.order.planName}</p>
+                <p className="mt-1 text-lg font-bold tracking-tight">{liveDetail.order.planName}</p>
                 <p className="text-sm text-forest-200">
                   {formatLongDate(liveDetail.order.scheduledDate)} ·{' '}
                   {formatTimeWindow(
@@ -78,7 +78,7 @@ export default function DashboardPage() {
             <div className="space-y-4 md:border-l md:border-border md:pl-6">
               {liveDetail.assignedStaff?.[0] ? (
                 <div>
-                  <p className="mb-2 text-xs font-semibold tracking-[0.12em] text-text-subtle uppercase">
+                  <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
                     Quién lo atiende
                   </p>
                   <div className="flex items-center gap-3">
@@ -107,12 +107,15 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <Link
+              <ButtonLink
+                as={Link}
                 to={`/servicios/${liveDetail.order.id}`}
-                className="flex h-10 w-full items-center justify-center rounded-xl border border-border-strong bg-surface-raised text-sm font-medium text-text transition-colors hover:bg-surface-sunken"
+                variant="outline"
+                size="sm"
+                className="w-full"
               >
                 Ver todos los detalles
-              </Link>
+              </ButtonLink>
             </div>
           </div>
         </Card>
@@ -120,7 +123,7 @@ export default function DashboardPage() {
 
       {/* Acciones rápidas */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold tracking-[0.12em] text-text-subtle uppercase">
+        <h2 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
           Reservar un servicio
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -142,7 +145,7 @@ export default function DashboardPage() {
       {/* Próximos */}
       {active.length > (liveDetail ? 1 : 0) && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold tracking-[0.12em] text-text-subtle uppercase">
+          <h2 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
             Próximas reservas
           </h2>
           <div className="space-y-3">
@@ -163,7 +166,7 @@ export default function DashboardPage() {
       {/* Historial */}
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold tracking-[0.12em] text-text-subtle uppercase">
+          <h2 className="text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
             Historial
           </h2>
           <Link
@@ -182,12 +185,9 @@ export default function DashboardPage() {
             description="Cuando termines un servicio aparecerá aquí, con su historial completo."
             action={
               active.length === 0 ? (
-                <Link
-                  to="/reservar"
-                  className="inline-flex h-11 items-center rounded-xl bg-forest-600 px-4 text-sm font-medium text-white hover:bg-forest-700"
-                >
+                <ButtonLink as={Link} to="/reservar" variant="accent">
                   Reservar mi primer servicio
-                </Link>
+                </ButtonLink>
               ) : null
             }
           />

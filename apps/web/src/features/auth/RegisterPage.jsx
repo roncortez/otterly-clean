@@ -53,7 +53,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         <BrandMark size="lg" className="mb-8" />
 
-        <h1 className="text-2xl font-semibold text-text">Crea tu cuenta</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-text">Crea tu cuenta</h1>
         <p className="mt-1.5 text-text-muted">
           Reserva y sigue cada servicio desde donde estés.
         </p>

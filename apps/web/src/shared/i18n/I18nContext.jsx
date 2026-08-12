@@ -66,31 +66,40 @@ export function useTranslation() {
   return context;
 }
 
-export function LanguageSelector({ className = '' }) {
+/**
+ * Conmutador de idioma en píldora, con las dos versiones del mismo control:
+ * `default` sobre superficie clara y `inverse` sobre el verde profundo de la
+ * portada. Los colores salen de los tokens de la marca, no de la paleta por
+ * defecto de Tailwind.
+ */
+const SELECTOR_TONES = {
+  default: {
+    track: 'border-border bg-surface-sunken',
+    active: 'bg-surface-raised text-forest-800 shadow-sm',
+    idle: 'text-text-muted hover:text-text',
+  },
+  inverse: {
+    track: 'border-white/15 bg-white/10',
+    active: 'bg-white text-forest-900 shadow-sm',
+    idle: 'text-forest-100 hover:text-white',
+  },
+};
+
+export function LanguageSelector({ className = '', tone = 'default' }) {
   const { lang, setLanguage } = useTranslation();
+  const styles = SELECTOR_TONES[tone] ?? SELECTOR_TONES.default;
+
+  const optionClass = (code) =>
+    `rounded-full px-2.5 py-1 transition-all ${lang === code ? `font-bold ${styles.active}` : styles.idle}`;
 
   return (
-    <div className={`inline-flex items-center rounded-full bg-white/10 p-0.5 border border-white/15 text-xs font-semibold ${className}`}>
-      <button
-        type="button"
-        onClick={() => setLanguage('es')}
-        className={`px-2.5 py-1 rounded-full transition-all ${
-          lang === 'es'
-            ? 'bg-white text-neutral-900 shadow-sm font-bold'
-            : 'text-slate-300 hover:text-white'
-        }`}
-      >
+    <div
+      className={`inline-flex items-center rounded-full border p-0.5 text-xs font-semibold ${styles.track} ${className}`}
+    >
+      <button type="button" onClick={() => setLanguage('es')} className={optionClass('es')}>
         ES
       </button>
-      <button
-        type="button"
-        onClick={() => setLanguage('en')}
-        className={`px-2.5 py-1 rounded-full transition-all ${
-          lang === 'en'
-            ? 'bg-white text-neutral-900 shadow-sm font-bold'
-            : 'text-slate-300 hover:text-white'
-        }`}
-      >
+      <button type="button" onClick={() => setLanguage('en')} className={optionClass('en')}>
         EN
       </button>
     </div>

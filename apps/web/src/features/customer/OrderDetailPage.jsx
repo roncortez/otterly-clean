@@ -71,10 +71,10 @@ export default function OrderDetailPage() {
       {/* Cabecera */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-text-subtle uppercase">
+          <p className="text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
             {SERVICE_LABELS[order.serviceType]}
           </p>
-          <h1 className="mt-1 text-2xl font-semibold text-text">{order.planName}</h1>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-text">{order.planName}</h1>
           <p className="mt-1 font-mono text-sm text-text-subtle">{order.reference}</p>
         </div>
         <StatusBadge status={order.status} label={statusLabel} />

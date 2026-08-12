@@ -32,7 +32,7 @@ function CleaningInstructions({ booking, update, updateDetail }) {
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-semibold text-text">Acceso y detalles</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">Acceso y detalles</h2>
         <p className="mt-1 text-text-muted">
           Esto es lo que le llega al profesional el día del servicio.
         </p>
@@ -205,7 +205,7 @@ function LaundryInstructions({ booking, update, updateDetail }) {
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-semibold text-text">Recogida e instrucciones</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">Recogida e instrucciones</h2>
         <p className="mt-1 text-text-muted">
           Cuanto más claro esté, menos posibilidad de que algo se trate mal.
         </p>

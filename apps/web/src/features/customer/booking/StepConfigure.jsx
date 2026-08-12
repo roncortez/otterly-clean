@@ -51,7 +51,7 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-semibold text-text">Cuéntanos del espacio</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">Cuéntanos del espacio</h2>
         <p className="mt-1 text-text-muted">
           Con esto calculamos cuánto tiempo hace falta y quién es la persona indicada.
         </p>
@@ -249,7 +249,7 @@ function LaundryStep({ booking, update, updateDetail, service, money, weightUnit
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-semibold text-text">¿Cuánta ropa y cómo la tratamos?</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">¿Cuánta ropa y cómo la tratamos?</h2>
         <p className="mt-1 text-text-muted">
           El peso final lo confirmamos al recibirla; esto es solo para estimar.
         </p>

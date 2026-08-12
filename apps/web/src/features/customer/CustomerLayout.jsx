@@ -2,7 +2,7 @@ import { NavLink, Outlet, Link } from 'react-router-dom';
 import { Home, CalendarCheck, MapPin, LogOut, Plus, Building } from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
 import BrandMark from '@/shared/ui/BrandMark';
-import { cx } from '@/shared/ui';
+import { ButtonLink, cx } from '@/shared/ui';
 
 const NAV = [
   { to: '/inicio', label: 'Inicio', icon: Home },
@@ -34,8 +34,10 @@ export default function CustomerLayout() {
                 to={to}
                 className={({ isActive }) =>
                   cx(
-                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isActive ? 'bg-forest-50 text-forest-700' : 'text-text-muted hover:text-text',
+                    'rounded-full px-3.5 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-forest-50 text-forest-700'
+                      : 'text-text-muted hover:bg-surface-sunken hover:text-text',
                   )
                 }
               >
@@ -45,18 +47,16 @@ export default function CustomerLayout() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Link
-              to="/reservar"
-              className="hidden h-9 items-center gap-1.5 rounded-xl bg-forest-600 px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-forest-700 sm:inline-flex"
-            >
+            {/* Misma llamada a la acción que en la portada: píldora terracota. */}
+            <ButtonLink as={Link} to="/reservar" variant="accent" size="sm" className="hidden sm:inline-flex">
               <Plus className="size-4" aria-hidden="true" />
               Reservar
-            </Link>
+            </ButtonLink>
             <span className="hidden text-sm text-text-muted md:inline">{user?.firstName}</span>
             <button
               type="button"
               onClick={logout}
-              className="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
+              className="rounded-full p-2 text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
               aria-label="Cerrar sesión"
             >
               <LogOut className="size-4.5" aria-hidden="true" />

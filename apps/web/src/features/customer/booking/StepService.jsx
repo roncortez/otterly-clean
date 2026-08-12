@@ -8,7 +8,7 @@ export default function StepService({ booking, update, catalog, service, money }
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-semibold text-text">¿Qué necesitas?</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">¿Qué necesitas?</h2>
         <p className="mt-1 text-text-muted">Elige el servicio y el tipo que mejor te sirva.</p>
       </div>
 
@@ -49,7 +49,7 @@ export default function StepService({ booking, update, catalog, service, money }
 
       {service && (
         <div>
-          <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-text-subtle uppercase">
+          <h3 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
             Tipo de {service.label.toLowerCase()}
           </h3>
           <div className="space-y-2.5">

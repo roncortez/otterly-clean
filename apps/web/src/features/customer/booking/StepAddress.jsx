@@ -7,7 +7,7 @@ export default function StepAddress({ booking, update, addresses }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-text">
+        <h2 className="text-xl font-bold tracking-tight text-text">
           {booking.serviceType === 'LAUNDRY' ? '¿Dónde recogemos?' : '¿Dónde es el servicio?'}
         </h2>
         <p className="mt-1 text-text-muted">Elige una de tus direcciones guardadas.</p>

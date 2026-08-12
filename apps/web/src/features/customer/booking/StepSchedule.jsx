@@ -45,7 +45,7 @@ export default function StepSchedule({ booking, update, timeWindows }) {
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-semibold text-text">¿Cuándo te viene bien?</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">¿Cuándo te viene bien?</h2>
         <p className="mt-1 text-text-muted">
           Reservamos con al menos {minLeadTimeHours} horas de antelación.
         </p>

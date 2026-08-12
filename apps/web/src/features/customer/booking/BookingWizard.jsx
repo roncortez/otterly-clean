@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Check, Sparkles, Shirt } from 'lucide-react';
 import { api, errorMessage } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { Alert, Button, Card, Spinner, cx } from '@/shared/ui';
+import { Alert, Button, ButtonLink, Card, Spinner, cx } from '@/shared/ui';
 import { toDateInput, addDays } from '@/shared/format';
 
 import StepService from './StepService';
@@ -258,16 +258,13 @@ export default function BookingWizard() {
   if (addresses.length === 0) {
     return (
       <Card className="p-8 text-center">
-        <h1 className="text-xl font-semibold text-text">Primero, ¿a dónde vamos?</h1>
+        <h1 className="text-xl font-bold tracking-tight text-text">Primero, ¿a dónde vamos?</h1>
         <p className="mx-auto mt-2 max-w-md text-text-muted">
           Necesitamos una dirección para poder asignar un profesional de tu zona.
         </p>
-        <Link
-          to="/direcciones"
-          className="mt-6 inline-flex h-11 items-center rounded-xl bg-forest-600 px-5 text-sm font-medium text-white hover:bg-forest-700"
-        >
+        <ButtonLink as={Link} to="/direcciones" variant="accent" className="mt-6">
           Agregar mi dirección
-        </Link>
+        </ButtonLink>
       </Card>
     );
   }

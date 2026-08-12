@@ -121,7 +121,7 @@ export default function AddressesPage() {
 
       {showForm && (
         <Card className="mb-6 p-5 sm:p-6">
-          <h2 className="mb-5 text-lg font-semibold text-text">Nueva dirección</h2>
+          <h2 className="mb-5 text-lg font-bold tracking-tight text-text">Nueva dirección</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Nombre" hint="Para reconocerla rápido." required>
@@ -243,7 +243,7 @@ export default function AddressesPage() {
                     <button
                       type="button"
                       onClick={() => handleSetDefault(address.id)}
-                      className="rounded-lg p-2 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-forest-600"
+                      className="rounded-full p-2 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-forest-600"
                       aria-label="Marcar como predeterminada"
                       title="Marcar como predeterminada"
                     >
@@ -253,7 +253,7 @@ export default function AddressesPage() {
                   <button
                     type="button"
                     onClick={() => handleDelete(address.id)}
-                    className="rounded-lg p-2 text-text-subtle transition-colors hover:bg-danger-soft hover:text-danger"
+                    className="rounded-full p-2 text-text-subtle transition-colors hover:bg-danger-soft hover:text-danger"
                     aria-label="Quitar dirección"
                     title="Quitar"
                   >

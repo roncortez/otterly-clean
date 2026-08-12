@@ -25,7 +25,7 @@ export default function JobsPage() {
     <div className="space-y-7">
       <header>
         <p className="text-sm text-text-muted capitalize">{formatLongDate(new Date())}</p>
-        <h1 className="mt-0.5 text-2xl font-semibold text-text">
+        <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight text-text">
           {today.length === 0
             ? 'Sin trabajos hoy'
             : `${today.length} trabajo${today.length > 1 ? 's' : ''} hoy`}
@@ -48,7 +48,7 @@ export default function JobsPage() {
 
       {upcoming.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold tracking-[0.12em] text-text-subtle uppercase">
+          <h2 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
             Próximos
           </h2>
           <div className="space-y-3">

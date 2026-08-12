@@ -1,7 +1,30 @@
 import React, { useState } from 'react';
-import { Ticket, Plus, CheckCircle, XCircle, Tag, AlertCircle } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, Tag } from 'lucide-react';
 import api from '@/shared/api/client';
 import { useApiQuery } from '@/shared/api/useApiQuery';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Modal,
+  PageHeader,
+  Select,
+  Spinner,
+} from '@/shared/ui';
+
+const EMPTY_FORM = {
+  codigo: '',
+  descripcion: '',
+  tipo: 'porcentaje',
+  valor: 10,
+  usoMaximo: 100,
+  usoPorCliente: 1,
+  montoMinimo: 0,
+};
 
 export default function CouponsPage() {
   // La lectura pasa por useApiQuery: deriva `loading` comparando lo pedido con
@@ -11,231 +34,211 @@ export default function CouponsPage() {
   const loading = couponsQuery.loading;
 
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({
-    codigo: '',
-    descripcion: '',
-    tipo: 'porcentaje',
-    valor: 10,
-    usoMaximo: 100,
-    usoPorCliente: 1,
-    montoMinimo: 0,
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const loadCoupons = couponsQuery.reload;
 
   async function handleSubmit(e) {
     e.preventDefault();
+    setSaving(true);
     try {
       setError('');
       await api.post('/operations/coupons', form);
       setShowModal(false);
-      setForm({
-        codigo: '',
-        descripcion: '',
-        tipo: 'porcentaje',
-        valor: 10,
-        usoMaximo: 100,
-        usoPorCliente: 1,
-        montoMinimo: 0,
-      });
+      setForm(EMPTY_FORM);
       loadCoupons();
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Error al crear el cupón');
+    } finally {
+      setSaving(false);
     }
   }
 
   async function toggleStatus(id, currentActive) {
     try {
+      setError('');
       await api.patch(`/operations/coupons/${id}/status`, { active: !currentActive });
       loadCoupons();
     } catch {
-      alert('Error cambiando estado del cupón');
+      setError('No pudimos cambiar el estado del cupón.');
     }
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Ticket className="h-6 w-6 text-emerald-600" />
-            Gestión de Cupones y Promociones
-          </h2>
-          <p className="text-xs text-slate-500">
-            Crea y administra códigos promocionales para los clientes de la plataforma
-          </p>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-all"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo Cupón
-        </button>
-      </div>
+    <div>
+      <PageHeader
+        eyebrow="Operaciones"
+        title="Cupones y promociones"
+        description="Crea y administra los códigos promocionales de la plataforma."
+        action={
+          <Button variant="accent" onClick={() => setShowModal(true)}>
+            <Plus className="size-4" aria-hidden="true" />
+            Nuevo cupón
+          </Button>
+        }
+      />
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg bg-rose-50 p-3 text-xs text-rose-700">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{error}</span>
+        <div className="mb-5">
+          <Alert tone="danger">{error}</Alert>
         </div>
       )}
 
       {loading ? (
-        <div className="p-8 text-center text-xs text-slate-400">Cargando cupones...</div>
+        <Spinner label="Cargando cupones" />
       ) : coupons.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center">
-          <Tag className="mx-auto h-8 w-8 text-slate-400" />
-          <p className="mt-2 text-sm font-medium text-slate-700">No hay cupones creados</p>
-          <p className="mt-1 text-xs text-slate-400">Crea tu primer código promocional para atraer clientes.</p>
-        </div>
+        <EmptyState
+          icon={Tag}
+          title="No hay cupones creados"
+          description="Crea tu primer código promocional para atraer clientes."
+          action={
+            <Button variant="accent" onClick={() => setShowModal(true)}>
+              <Plus className="size-4" aria-hidden="true" />
+              Nuevo cupón
+            </Button>
+          }
+        />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-700 border-b border-slate-200 font-semibold">
-              <tr>
-                <th className="p-3">Código</th>
-                <th className="p-3">Descripción</th>
-                <th className="p-3">Tipo / Valor</th>
-                <th className="p-3">Usos (Realizados/Máx)</th>
-                <th className="p-3">Estado</th>
-                <th className="p-3 text-right">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {coupons.map((cup) => (
-                <tr key={cup.id} className="hover:bg-slate-50/80">
-                  <td className="p-3 font-mono font-bold text-emerald-700">{cup.codigo}</td>
-                  <td className="p-3 text-slate-600">{cup.descripcion || 'Sin descripción'}</td>
-                  <td className="p-3 font-medium">
-                    {cup.tipo === 'porcentaje' ? `${cup.valor}%` : `$${cup.valor}`}
-                  </td>
-                  <td className="p-3">
-                    {cup.usos_realizados} / {cup.uso_maximo}
-                  </td>
-                  <td className="p-3">
-                    {cup.activo ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                        <CheckCircle className="h-3 w-3" /> Activo
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                        <XCircle className="h-3 w-3" /> Inactivo
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3 text-right">
-                    <button
-                      onClick={() => toggleStatus(cup.id, cup.activo)}
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 underline"
-                    >
-                      {cup.activo ? 'Desactivar' : 'Activar'}
-                    </button>
-                  </td>
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-surface-sunken">
+                <tr className="text-left text-xs tracking-wide text-text-subtle uppercase">
+                  <th className="px-4 py-2.5 font-medium">Código</th>
+                  <th className="px-4 py-2.5 font-medium">Descripción</th>
+                  <th className="px-4 py-2.5 font-medium">Tipo / valor</th>
+                  <th className="px-4 py-2.5 font-medium">Usos</th>
+                  <th className="px-4 py-2.5 font-medium">Estado</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Acción</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Modal Modal Nuevo Cupón */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-base font-bold text-slate-900">Crear Nuevo Cupón Promocional</h3>
-            <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-700">Código (Ej: PROMO2026)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="CODIGO"
-                  value={form.codigo}
-                  onChange={(e) => setForm({ ...form, codigo: e.target.value.toUpperCase() })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs uppercase focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700">Descripción</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Descuento 10% en primera limpieza"
-                  value={form.descripcion}
-                  onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700">Tipo Descuento</label>
-                  <select
-                    value={form.tipo}
-                    onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-                  >
-                    <option value="porcentaje">Porcentaje (%)</option>
-                    <option value="monto_fijo">Monto Fijo ($)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700">Valor</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={form.valor}
-                    onChange={(e) => setForm({ ...form, valor: Number(e.target.value) })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700">Uso Máximo Global</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={form.usoMaximo}
-                    onChange={(e) => setForm({ ...form, usoMaximo: Number(e.target.value) })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700">Monto Mínimo ($)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.montoMinimo}
-                    onChange={(e) => setForm({ ...form, montoMinimo: Number(e.target.value) })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-lg px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                >
-                  Guardar Cupón
-                </button>
-              </div>
-            </form>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {coupons.map((cup) => (
+                  <tr key={cup.id} className="transition-colors hover:bg-surface-sunken/60">
+                    <td className="px-4 py-3 font-mono font-semibold text-forest-700">
+                      {cup.codigo}
+                    </td>
+                    <td className="px-4 py-3 text-text-muted">
+                      {cup.descripcion || 'Sin descripción'}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-text tnum">
+                      {cup.tipo === 'porcentaje' ? `${cup.valor}%` : `$${cup.valor}`}
+                    </td>
+                    <td className="px-4 py-3 text-text-muted tnum">
+                      {cup.usos_realizados} / {cup.uso_maximo}
+                    </td>
+                    <td className="px-4 py-3">
+                      {cup.activo ? (
+                        <Badge tone="success">
+                          <CheckCircle className="size-3" aria-hidden="true" />
+                          Activo
+                        </Badge>
+                      ) : (
+                        <Badge tone="neutral">
+                          <XCircle className="size-3" aria-hidden="true" />
+                          Inactivo
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleStatus(cup.id, cup.activo)}
+                      >
+                        {cup.activo ? 'Desactivar' : 'Activar'}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </Card>
       )}
+
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title="Crear cupón promocional"
+        description="El código se guarda en mayúsculas y queda activo desde su creación."
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={() => setShowModal(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="coupon-form" variant="accent" loading={saving}>
+              Guardar cupón
+            </Button>
+          </>
+        }
+      >
+        <form id="coupon-form" onSubmit={handleSubmit} className="space-y-4">
+          <Field label="Código" hint="Por ejemplo: PROMO2026" required>
+            <Input
+              type="text"
+              required
+              placeholder="CODIGO"
+              value={form.codigo}
+              onChange={(e) => setForm({ ...form, codigo: e.target.value.toUpperCase() })}
+              className="uppercase"
+            />
+          </Field>
+
+          <Field label="Descripción">
+            <Input
+              type="text"
+              placeholder="Descuento 10% en la primera limpieza"
+              value={form.descripcion}
+              onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+            />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Tipo de descuento">
+              <Select
+                value={form.tipo}
+                onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+              >
+                <option value="porcentaje">Porcentaje (%)</option>
+                <option value="monto_fijo">Monto fijo ($)</option>
+              </Select>
+            </Field>
+
+            <Field label="Valor" required>
+              <Input
+                type="number"
+                required
+                min="1"
+                value={form.valor}
+                onChange={(e) => setForm({ ...form, valor: Number(e.target.value) })}
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Uso máximo global">
+              <Input
+                type="number"
+                min="1"
+                value={form.usoMaximo}
+                onChange={(e) => setForm({ ...form, usoMaximo: Number(e.target.value) })}
+              />
+            </Field>
+
+            <Field label="Monto mínimo ($)">
+              <Input
+                type="number"
+                min="0"
+                value={form.montoMinimo}
+                onChange={(e) => setForm({ ...form, montoMinimo: Number(e.target.value) })}
+              />
+            </Field>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

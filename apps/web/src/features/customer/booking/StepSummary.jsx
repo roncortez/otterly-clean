@@ -17,7 +17,7 @@ export default function StepSummary({ booking, service, addresses, pricing, mone
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-text">Revisa antes de confirmar</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">Revisa antes de confirmar</h2>
         <p className="mt-1 text-text-muted">Podrás cancelar sin costo si cambias de planes.</p>
       </div>
 

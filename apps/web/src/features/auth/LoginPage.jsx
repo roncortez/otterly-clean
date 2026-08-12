@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { Droplets } from 'lucide-react';
 import { useAuth, homePathForRoles } from '@/shared/auth/AuthContext';
 import { useConfig } from '@/shared/config/ConfigContext';
 import { errorMessage } from '@/shared/api/client';
@@ -37,38 +36,28 @@ export default function LoginPage() {
 
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
-      {/* Panel de marca: solo en pantallas grandes, para no robar espacio en móvil */}
-      <aside className="hidden flex-col justify-between bg-forest-800 p-12 text-text-inverse lg:flex">
-        {/* El panel oscuro invierte el color de la marca, así que aquí el
-            logotipo se pinta a medida en lugar de reutilizar BrandMark. */}
-        <div className="flex items-center gap-2.5">
-          {company.logoUrl ? (
-            <img src={company.logoUrl} alt="" className="size-9 rounded-xl object-cover" />
-          ) : (
-            <span className="flex size-9 items-center justify-center rounded-xl bg-accent-500">
-              <Droplets className="size-5 text-white" aria-hidden="true" />
-            </span>
-          )}
-          <span className="text-lg font-semibold">{company.name}</span>
-        </div>
+      {/* Panel de marca: solo en pantallas grandes, para no robar espacio en móvil.
+          Mismo verde profundo y mismo titular apretado que la portada. */}
+      <aside className="hidden flex-col justify-between bg-forest-900 p-12 text-text-inverse lg:flex">
+        <BrandMark size="lg" tone="inverse" />
 
         <div className="max-w-md">
-          <p className="text-3xl leading-tight font-semibold text-balance">
+          <p className="text-3xl leading-tight font-extrabold tracking-tight text-balance">
             Sabes quién entra a tu casa, cuándo llega y cuándo termina.
           </p>
-          <p className="mt-4 text-forest-200">
+          <p className="mt-4 text-forest-100">
             Profesionales contratados y verificados por nosotros.
           </p>
         </div>
 
-        {company.address ? <p className="text-sm text-forest-300">{company.address}</p> : null}
+        {company.address ? <p className="text-sm text-forest-200">{company.address}</p> : null}
       </aside>
 
       <div className="flex items-center justify-center px-5 py-12 sm:px-8">
         <div className="w-full max-w-sm">
           <BrandMark size="lg" className="mb-8 lg:hidden" />
 
-          <h1 className="text-2xl font-semibold text-text">Entra a tu cuenta</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-text">Entra a tu cuenta</h1>
           <p className="mt-1.5 text-text-muted">Sigue tus servicios y reserva uno nuevo.</p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">

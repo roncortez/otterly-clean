@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { CalendarSearch } from 'lucide-react';
 import { useApiQuery } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { Alert, EmptyState, PageHeader, Spinner, cx } from '@/shared/ui';
+import { Alert, ButtonLink, EmptyState, PageHeader, Spinner, cx } from '@/shared/ui';
 import { ServiceCard } from '@/shared/ui/ServiceCard';
 
 const FILTERS = [
@@ -58,12 +58,9 @@ export default function OrdersPage() {
           title="No hay servicios aquí"
           description="Prueba con otro filtro o reserva un servicio nuevo."
           action={
-            <Link
-              to="/reservar"
-              className="inline-flex h-11 items-center rounded-xl bg-forest-600 px-4 text-sm font-medium text-white hover:bg-forest-700"
-            >
+            <ButtonLink as={Link} to="/reservar" variant="accent">
               Reservar un servicio
-            </Link>
+            </ButtonLink>
           }
         />
       ) : (

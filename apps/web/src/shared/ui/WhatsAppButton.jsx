@@ -1,5 +1,6 @@
 import { MessageCircle } from 'lucide-react';
 import { useConfig } from '@/shared/config/ConfigContext';
+import { ButtonLink } from '@/shared/ui';
 
 /**
  * Enlace de contacto por WhatsApp.
@@ -8,8 +9,18 @@ import { useConfig } from '@/shared/config/ConfigContext';
  * antes estaban escritos en el componente, así que cambiar el número de
  * contacto obligaba a desplegar. Si no hay número configurado el botón no se
  * pinta, en lugar de abrir un chat con un número inexistente.
+ *
+ * Hereda la forma de los demás botones: sobre fondo claro va en `outline` y
+ * sobre el verde profundo del hero en `inverse`.
  */
-export default function WhatsAppButton({ phone, message, className = '', label = 'WhatsApp' }) {
+export default function WhatsAppButton({
+  phone,
+  message,
+  className = '',
+  label = 'WhatsApp',
+  variant = 'outline',
+  size = 'md',
+}) {
   const { company } = useConfig();
 
   const number = phone ?? company.whatsapp;
@@ -21,14 +32,16 @@ export default function WhatsAppButton({ phone, message, className = '', label =
   }`;
 
   return (
-    <a
+    <ButtonLink
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex h-11 items-center gap-2 rounded-xl border border-border-strong bg-surface-raised px-4 text-sm font-medium text-text transition-colors hover:bg-surface-sunken ${className}`}
+      variant={variant}
+      size={size}
+      className={className}
     >
       <MessageCircle className="size-4" aria-hidden="true" />
       <span>{label}</span>
-    </a>
+    </ButtonLink>
   );
 }

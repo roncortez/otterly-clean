@@ -103,7 +103,7 @@ export default function DashboardPage() {
                         {order.zoneName && ` · ${order.zoneName}`}
                       </p>
                     </div>
-                    <span className="flex shrink-0 items-center gap-1.5 rounded-lg bg-accent-600 px-3 py-1.5 text-xs font-semibold text-white">
+                    <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent-600 px-3.5 py-1.5 text-xs font-semibold text-white">
                       Asignar
                       <ArrowRight className="size-3.5" aria-hidden="true" />
                     </span>
@@ -238,7 +238,7 @@ function Metric({ label, value, icon: Icon, tone = 'neutral', to }) {
         <p className="text-sm font-medium opacity-80">{label}</p>
         <Icon className="size-4 opacity-60" aria-hidden="true" />
       </div>
-      <p className="mt-2 text-3xl font-semibold tnum">{value}</p>
+      <p className="mt-2 text-3xl font-extrabold tracking-tight tnum">{value}</p>
     </div>
   );
 

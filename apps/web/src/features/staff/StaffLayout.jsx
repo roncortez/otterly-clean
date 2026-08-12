@@ -13,20 +13,21 @@ export default function StaffLayout() {
 
   return (
     <div className="min-h-dvh bg-surface">
-      <header className="sticky top-0 z-30 border-b border-border bg-forest-800 text-text-inverse">
+      {/* Mismo verde profundo que las secciones oscuras de la portada. */}
+      <header className="sticky top-0 z-30 bg-forest-900 text-text-inverse">
         <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
           <Link to="/trabajo" className="flex items-center gap-2.5">
-            <span className="flex size-7 items-center justify-center rounded-lg bg-accent-500">
+            <span className="flex size-7 items-center justify-center rounded-lg bg-accent-600">
               <Droplets className="size-4 text-white" aria-hidden="true" />
             </span>
-            <span className="font-semibold">{user?.firstName}</span>
+            <span className="font-bold tracking-tight">{user?.firstName}</span>
           </Link>
           <div className="flex items-center gap-1">
             {/* Solo para quien además coordina: ADMIN + STAFF. */}
             {hasRole('ADMIN') ? (
               <Link
                 to="/operaciones"
-                className="rounded-lg p-2 text-forest-200 transition-colors hover:bg-forest-700 hover:text-white"
+                className="rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
                 aria-label="Ir a Operaciones"
                 title="Ir a Operaciones"
               >
@@ -36,7 +37,7 @@ export default function StaffLayout() {
             <button
               type="button"
               onClick={logout}
-              className="rounded-lg p-2 text-forest-200 transition-colors hover:bg-forest-700 hover:text-white"
+              className="rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Cerrar sesión"
             >
               <LogOut className="size-4.5" aria-hidden="true" />

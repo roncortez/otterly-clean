@@ -104,7 +104,7 @@ export default function OrderDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="font-mono text-sm text-text-subtle">{order.reference}</p>
-          <h1 className="mt-1 text-2xl font-semibold text-text">
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-text">
             {SERVICE_LABELS[order.serviceType]} · {order.planName}
           </h1>
           <p className="mt-1 text-text-muted capitalize">

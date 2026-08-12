@@ -1,4 +1,5 @@
-import { Loader2 } from 'lucide-react';
+import { useEffect } from 'react';
+import { Loader2, X } from 'lucide-react';
 
 /**
  * Componentes base.
@@ -6,6 +7,18 @@ import { Loader2 } from 'lucide-react';
  * Deliberadamente pocos y sin dependencias de librerías de UI: el objetivo es
  * un vocabulario visual pequeño y coherente que se pueda trasladar tal cual a
  * una app móvil más adelante.
+ *
+ * El lenguaje visual sale de la portada y se aplica igual en todas las
+ * consolas, para que nadie sienta que cambió de producto al iniciar sesión:
+ *
+ *   · Botones en píldora (rounded-full) que se hunden al pulsarlos.
+ *   · Verde bosque para navegar y confirmar; terracota solo para la acción
+ *     principal y para lo que está pasando ahora.
+ *   · Antetítulo en versalitas + titular apretado (font-extrabold tracking-tight).
+ *   · Tarjetas rounded-2xl sobre superficie elevada, sin bordes duros.
+ *
+ * Ningún componente usa la paleta por defecto de Tailwind (slate, emerald,
+ * rose…): todo pasa por los tokens de index.css.
  */
 
 export function cx(...classes) {
@@ -15,17 +28,21 @@ export function cx(...classes) {
 // --- Botón -----------------------------------------------------------------
 
 const BUTTON_VARIANTS = {
-  primary: 'bg-forest-600 text-white hover:bg-forest-700 active:bg-forest-800 shadow-sm',
-  accent: 'bg-accent-600 text-white hover:bg-accent-700 active:bg-accent-700 shadow-sm',
+  primary: 'bg-forest-700 text-white hover:bg-forest-600 active:bg-forest-800 shadow-sm',
+  // La llamada principal: la única que lleva terracota y sombra propia.
+  accent: 'bg-accent-600 text-white hover:bg-accent-500 shadow-[var(--shadow-cta)]',
   outline: 'border border-border-strong bg-surface-raised text-text hover:bg-surface-sunken',
   ghost: 'text-text-muted hover:bg-surface-sunken hover:text-text',
   danger: 'border border-danger/25 bg-danger-soft text-danger hover:bg-danger hover:text-white',
+  // Sobre fondos verde profundo (hero, cabeceras, panel de acceso).
+  inverse:
+    'border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20',
 };
 
 const BUTTON_SIZES = {
-  sm: 'h-9 px-3 text-sm gap-1.5',
-  md: 'h-11 px-4 text-sm gap-2',
-  lg: 'h-13 px-6 text-base gap-2',
+  sm: 'h-9 px-4 text-sm gap-1.5',
+  md: 'h-11 px-5 text-sm gap-2',
+  lg: 'h-13 px-7 text-base gap-2',
 };
 
 export function Button({
@@ -40,8 +57,8 @@ export function Button({
   return (
     <button
       className={cx(
-        'inline-flex items-center justify-center rounded-xl font-medium transition-colors',
-        'disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex items-center justify-center rounded-full font-semibold transition-all',
+        'active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
         className,
@@ -52,6 +69,26 @@ export function Button({
       {loading && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
       {children}
     </button>
+  );
+}
+
+/**
+ * Mismo botón, pero navegando. Se usa con `as={Link}` para que un enlace de
+ * react-router no tenga que copiar las clases a mano.
+ */
+export function ButtonLink({ as: Tag = 'a', variant = 'primary', size = 'md', className, children, ...props }) {
+  return (
+    <Tag
+      className={cx(
+        'inline-flex items-center justify-center rounded-full font-semibold transition-all active:scale-95',
+        BUTTON_VARIANTS[variant],
+        BUTTON_SIZES[size],
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </Tag>
   );
 }
 
@@ -75,7 +112,7 @@ export function CardHeader({ title, description, action, className }) {
   return (
     <div className={cx('flex items-start justify-between gap-4 px-5 pt-5', className)}>
       <div className="min-w-0">
-        <h2 className="text-base font-semibold text-text">{title}</h2>
+        <h2 className="text-base font-bold tracking-tight text-text">{title}</h2>
         {description && <p className="mt-0.5 text-sm text-text-muted">{description}</p>}
       </div>
       {action}
@@ -83,20 +120,65 @@ export function CardHeader({ title, description, action, className }) {
   );
 }
 
+/**
+ * Antetítulo en versalitas verdes. Es la firma tipográfica de la portada y
+ * ordena igual de bien una sección de la consola que una del sitio público.
+ */
+export function Eyebrow({ className, children }) {
+  return (
+    <span
+      className={cx(
+        'text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase',
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function PageHeader({ title, description, action, eyebrow }) {
   return (
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="mb-1 text-xs font-semibold tracking-[0.14em] text-text-subtle uppercase">
-            {eyebrow}
-          </p>
-        )}
-        <h1 className="text-2xl font-semibold text-text sm:text-3xl">{title}</h1>
+        {eyebrow && <Eyebrow className="mb-1.5 block">{eyebrow}</Eyebrow>}
+        <h1 className="text-2xl font-extrabold tracking-tight text-text sm:text-3xl">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-text-muted">{description}</p>}
       </div>
       {action}
     </header>
+  );
+}
+
+/**
+ * Encabezado centrado de las secciones largas de la portada. Mismo ritmo que
+ * PageHeader (antetítulo → titular → apoyo), solo cambia el eje.
+ */
+export function SectionHeading({ eyebrow, title, description, inverse = false, className }) {
+  return (
+    <div className={cx('text-center', className)}>
+      {eyebrow && (
+        <Eyebrow className={inverse ? 'text-forest-200' : undefined}>{eyebrow}</Eyebrow>
+      )}
+      <h2
+        className={cx(
+          'mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl',
+          inverse ? 'text-white' : 'text-text',
+        )}
+      >
+        {title}
+      </h2>
+      {description && (
+        <p
+          className={cx(
+            'mx-auto mt-3 max-w-xl text-sm leading-relaxed',
+            inverse ? 'text-forest-100' : 'text-text-muted',
+          )}
+        >
+          {description}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -192,6 +274,83 @@ export function Alert({ tone = 'danger', title, children }) {
     <div className={cx('rounded-xl border px-4 py-3 text-sm', tones[tone])} role="alert">
       {title && <p className="font-medium">{title}</p>}
       {children && <div className={cx(title && 'mt-0.5', 'opacity-90')}>{children}</div>}
+    </div>
+  );
+}
+
+// --- Superposiciones --------------------------------------------------------
+
+const MODAL_SIZES = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-2xl',
+};
+
+/**
+ * Diálogo modal.
+ *
+ * Existe porque cada pantalla que necesitaba uno se lo pintaba a mano, y cada
+ * copia se desviaba un poco: otro velo, otro radio, y ninguna cerraba con Esc.
+ * El velo es verde profundo, no negro: sigue siendo la misma marca detrás.
+ */
+export function Modal({ open, onClose, title, description, size = 'md', children, footer }) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose?.();
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-forest-950/60 p-4 backdrop-blur-sm"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose?.();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === 'string' ? title : undefined}
+        className={cx(
+          'relative w-full overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-[var(--shadow-raised)]',
+          MODAL_SIZES[size] ?? MODAL_SIZES.md,
+        )}
+      >
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="absolute top-4 right-4 rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        )}
+
+        {(title || description) && (
+          <div className="px-6 pt-6 pr-14">
+            {title && <h2 className="text-base font-bold tracking-tight text-text">{title}</h2>}
+            {description && <p className="mt-1 text-sm text-text-muted">{description}</p>}
+          </div>
+        )}
+
+        <div className="px-6 py-5">{children}</div>
+
+        {footer && (
+          <div className="flex justify-end gap-2 border-t border-border bg-surface-sunken/60 px-6 py-4">
+            {footer}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

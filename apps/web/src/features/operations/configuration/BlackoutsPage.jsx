@@ -264,7 +264,7 @@ function BlackoutRow({ blackout, serviceTypes, busy, onToggle, onDelete }) {
           type="button"
           onClick={onDelete}
           disabled={busy}
-          className="rounded-lg p-2 text-text-subtle transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-50"
+          className="rounded-full p-2 text-text-subtle transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-50"
           aria-label="Eliminar bloqueo"
           title="Eliminar bloqueo"
         >

@@ -45,7 +45,7 @@ export default function OperationsLayout() {
               end={end}
               className={({ isActive }) =>
                 cx(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-full px-3.5 py-2 text-sm font-medium transition-colors',
                   isActive
                     ? 'bg-forest-50 text-forest-700'
                     : 'text-text-muted hover:bg-surface-sunken hover:text-text',
@@ -64,14 +64,14 @@ export default function OperationsLayout() {
           {hasRole('STAFF') ? (
             <Link
               to="/trabajo"
-              className="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
+              className="mb-1 flex items-center gap-3 rounded-full px-3.5 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
             >
               <Briefcase className="size-4.5" aria-hidden="true" />
               Ir a mis trabajos
             </Link>
           ) : null}
 
-          <div className="flex items-center justify-between gap-2 rounded-lg px-3 py-2">
+          <div className="flex items-center justify-between gap-2 rounded-full px-3.5 py-2">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-text">{user?.firstName}</p>
               <p className="text-xs text-text-subtle">{user?.roles?.join(' · ')}</p>
@@ -79,7 +79,7 @@ export default function OperationsLayout() {
             <button
               type="button"
               onClick={logout}
-              className="rounded-lg p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
+              className="rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
               aria-label="Cerrar sesión"
             >
               <LogOut className="size-4" aria-hidden="true" />
@@ -91,11 +91,11 @@ export default function OperationsLayout() {
       {/* Barra superior móvil */}
       <header className="sticky top-0 z-30 border-b border-border bg-surface-raised lg:hidden">
         <div className="flex h-14 items-center justify-between px-4">
-          <span className="font-semibold text-forest-800">Operaciones</span>
+          <span className="font-bold tracking-tight text-forest-800">Operaciones</span>
           <button
             type="button"
             onClick={logout}
-            className="rounded-lg p-2 text-text-muted"
+            className="rounded-full p-2 text-text-muted"
             aria-label="Cerrar sesión"
           >
             <LogOut className="size-4.5" aria-hidden="true" />
@@ -109,7 +109,7 @@ export default function OperationsLayout() {
               end={end}
               className={({ isActive }) =>
                 cx(
-                  'shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium whitespace-nowrap',
+                  'shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium whitespace-nowrap',
                   isActive ? 'bg-forest-50 text-forest-700' : 'text-text-muted',
                 )
               }
