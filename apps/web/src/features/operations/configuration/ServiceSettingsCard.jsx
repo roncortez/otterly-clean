@@ -16,6 +16,7 @@ import {
 } from '@/shared/ui';
 import SaveBar from './SaveBar';
 import ServicePlanCard from './ServicePlanCard';
+import ImageField from './ImageField';
 
 /**
  * Configuración comercial de un tipo de servicio.
@@ -147,7 +148,7 @@ export default function ServiceSettingsCard({ service, onSaved }) {
             />
           </Field>
 
-          <Field label="Icono">
+          <Field label="Icono" hint="Se usa cuando el servicio no tiene imagen propia.">
             <Select value={form.icon} onChange={(event) => setField({ icon: event.target.value })}>
               <option value="">Sin icono</option>
               {ICON_OPTIONS.map((icon) => (
@@ -158,13 +159,16 @@ export default function ServiceSettingsCard({ service, onSaved }) {
             </Select>
           </Field>
 
-          <Field label="Imagen (URL)" hint="Si se define, sustituye al icono en la portada.">
-            <Input
-              type="url"
+          <div className="sm:col-span-2">
+            <ImageField
+              slot={`SERVICE_${service.code}`}
+              label="Imagen del servicio"
+              hint="Si se define, sustituye al icono en la portada."
               value={form.imageUrl}
-              onChange={(event) => setField({ imageUrl: event.target.value })}
+              previewClassName="h-24 w-36"
+              onChange={(url) => setField({ imageUrl: url })}
             />
-          </Field>
+          </div>
         </div>
 
         <SaveBar

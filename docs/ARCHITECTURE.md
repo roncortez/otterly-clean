@@ -270,6 +270,49 @@ El frontend lo consume todo de `GET /api/catalog/config`, que ya servía la
 configuración regional: una sola petición al arrancar, porque son datos que se
 necesitan a la vez en el primer render.
 
+### Imágenes
+
+Las imágenes públicas —logo, icono, la de cada servicio y el banner— se **suben**
+desde la pantalla de configuración y se guardan en Cloudinary. Lo que se
+persiste en la base sigue siendo una URL, así que para el resto del sistema no
+cambió nada.
+
+Dos decisiones que hacen que la cuenta no se convierta en un vertedero:
+
+**El destino es un catálogo cerrado**, no una ruta libre (`uploadService.SLOTS`):
+
+```
+otterly-clean/marca/logo
+otterly-clean/marca/icono
+otterly-clean/avisos/banner-inicio
+otterly-clean/servicios/{cleaning,laundry,alteration}
+```
+
+Ni la carpeta ni el nombre del archivo vienen nunca de la petición: quien sube
+elige una etiqueta de la lista. Si la ruta fuese un dato de entrada, cualquiera
+con sesión de ADMIN podría escribir en cualquier carpeta de la cuenta —incluida
+la de otro proyecto que comparta el mismo Cloudinary— o sobrescribir un archivo
+ajeno con un `../`. El nombre del archivo que envía el navegador se descarta
+(`use_filename: false`).
+
+**Cada destino tiene un `public_id` fijo** y se sube con `overwrite`. Cambiar el
+logo reemplaza el anterior en lugar de dejar copias acumulándose. La URL
+resultante incluye la versión que asigna Cloudinary, así que ninguna caché sirve
+la imagen vieja.
+
+El formato se comprueba por la **firma binaria** del archivo, no por el
+`Content-Type` que declara el navegador —ese dato lo escribe quien hace la
+petición—. Se admiten PNG, JPG y WebP; **SVG queda fuera** a propósito: es XML,
+admite scripts y no tiene firma binaria que comprobar.
+
+Si no hay credenciales, `uploadService.isEnabled()` devuelve `false` y la
+pantalla se degrada a un campo de URL. Un entorno sin Cloudinary sigue
+funcionando.
+
+Lo que **no** pasa por aquí: fotos de incidencias y documentos de trabajadores.
+Cloudinary sirve por URL pública y esos son datos con control de acceso; darles
+almacenamiento exige volver a pensar quién puede verlos.
+
 ### Lo que sigue estando en el código, a propósito
 
 - Las máquinas de estado y sus transiciones por rol.

@@ -33,7 +33,8 @@ export default [
           allowExportNames: [
             'useAuth',
             'useConfig',
-            'homePathForRole',
+            'useUploadConfig',
+            'homePathForRoles',
             'cx',
             'statusTone',
             'SERVICE_ICONS',

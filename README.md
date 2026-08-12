@@ -58,6 +58,21 @@ npm run dev:api                 # http://localhost:10000
 npm run dev:web                 # http://localhost:5173
 ```
 
+### Imágenes (opcional)
+
+El logo, el icono, la imagen de cada servicio y el banner se suben desde
+`/operaciones/configuracion` y se guardan en Cloudinary, organizados por
+carpeta. Para habilitarlo, rellena en `apps/api/.env`:
+
+```bash
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+```
+
+Sin esas variables la aplicación funciona igual: los campos de imagen se
+degradan a un campo de URL.
+
 El frontend habla con `/api` y Vite lo reenvía al backend, así que en
 desarrollo no hay CORS que configurar.
 

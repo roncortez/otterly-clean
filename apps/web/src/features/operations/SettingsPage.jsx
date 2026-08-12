@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { api } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useEditableForm } from '@/shared/hooks/useEditableForm';
-import { Alert, Card, CardHeader, Checkbox, Field, Input, Spinner, Textarea } from '@/shared/ui';
+import { Alert, Card, CardHeader, Checkbox, Field, Spinner, Textarea } from '@/shared/ui';
 import SaveBar from './configuration/SaveBar';
+import ImageField from './configuration/ImageField';
 
 /**
  * Avisos al cliente: el banner que aparece al entrar a la portada.
@@ -69,14 +70,14 @@ export default function SettingsPage() {
             onChange={(event) => setField({ enabled: event.target.checked })}
           />
 
-          <Field label="Imagen (URL)" hint="Opcional. Se muestra sobre el mensaje.">
-            <Input
-              type="url"
-              value={form.imageUrl}
-              onChange={(event) => setField({ imageUrl: event.target.value })}
-              placeholder="https://ejemplo.com/promocion.jpg"
-            />
-          </Field>
+          <ImageField
+            slot="BANNER"
+            label="Imagen del banner"
+            hint="Opcional. Se muestra sobre el mensaje."
+            value={form.imageUrl}
+            previewClassName="h-24 w-40"
+            onChange={(url) => setField({ imageUrl: url })}
+          />
 
           <Field label="Mensaje">
             <Textarea

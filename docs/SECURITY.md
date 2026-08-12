@@ -16,6 +16,8 @@ la seguridad en parte del producto, no en una capa técnica añadida al final.
 | Alguien se queda sin acceso administrativo por error    | No se puede retirar el rol ni desactivar al último `ADMIN` activo |
 | Un trabajador cambia precios o cierra la agenda         | Toda la configuración cuelga de `/api/operations` y exige `ADMIN` |
 | Un secreto acaba editable desde una pantalla            | La configuración administrable es una lista blanca de campos públicos; el esquema es estricto y rechaza claves desconocidas |
+| Alguien sube un archivo ejecutable disfrazado de imagen | Se valida la firma binaria, no el `Content-Type`; SVG no se admite |
+| Alguien escribe en una carpeta arbitraria del almacenamiento | El destino es un catálogo cerrado; la ruta nunca viene de la petición |
 | No se puede saber quién hizo qué                        | `audit_log` registra actor, acción, antes/después, IP y agente |
 
 ## Autenticación
@@ -181,6 +183,30 @@ exponerla no añade riesgo. Los controles:
 Se usa **helmet** para las cabeceras de seguridad y el cuerpo de las peticiones
 está limitado a 1 MB.
 
+### Subida de imágenes
+
+Solo `ADMIN`, y solo para imágenes que ya son públicas. Los controles:
+
+- **El destino no es una ruta.** Se elige de un catálogo cerrado
+  (`uploadService.SLOTS`); la carpeta y el nombre del archivo los pone el
+  servidor. El nombre que envía el navegador se descarta por completo, así que
+  un `../../` en el nombre no lleva a ninguna parte.
+- **Se comprueba la firma binaria** del archivo, no el `Content-Type` que
+  declara el cliente: ese dato se puede falsear. Un `.png` que en realidad es un
+  script se rechaza.
+- **SVG no se admite.** Es XML, puede contener scripts y no tiene firma binaria
+  que verificar. Un logo en SVG hay que convertirlo antes a PNG.
+- **En memoria, nunca en disco**: el archivo se reenvía al almacenamiento y no
+  toca el sistema de ficheros del servidor, así que no queda una carpeta de
+  subidas que alguien pueda acabar sirviendo por error.
+- Tamaño limitado (`UPLOAD_MAX_BYTES`, 5 MB por defecto) y un solo archivo por
+  petición.
+- Cada subida y cada borrado quedan en `audit_log` (`MEDIA_UPLOADED`,
+  `MEDIA_DELETED`).
+
+Las credenciales de Cloudinary son **configuración técnica**: viven en variables
+de entorno y no se pueden ver ni editar desde ninguna pantalla.
+
 ## Auditoría
 
 `audit_log` registra las operaciones sensibles: creación de pedidos, cambios de
@@ -198,6 +224,8 @@ BOOKING_BLACKOUT_UPDATED
 BOOKING_BLACKOUT_DELETED
 USER_ROLES_UPDATED              quién concedió o retiró qué rol
 USER_STATUS_CHANGED             alta o baja de una cuenta
+MEDIA_UPLOADED                  imagen subida, con destino y tamaño
+MEDIA_DELETED                   imagen retirada
 ```
 
 Los cambios de configuración y de roles guardan `before` y `after`, de modo que
@@ -211,9 +239,20 @@ conocida y deliberada de esta versión.
 
 ## Pendiente antes de producción
 
-- [ ] **Rotar las credenciales que estuvieron en el repositorio anterior**
-      (Cloudinary, Telegram, Firebase). Aunque los `.env` nunca se comitearon,
-      conviene rotarlas si se compartieron por otros medios.
+- [ ] **Rotar la `CLOUDINARY_API_SECRET` — prioritario.** La cuenta que usa la
+      subida de imágenes es la del proyecto anterior y su secreto pudo
+      compartirse por otros medios. Con ese secreto se puede escribir y borrar
+      en toda la cuenta, no solo en `otterly-clean/`. Rotarlo en el panel de
+      Cloudinary y actualizar el `.env`: no hay nada más que cambiar en el
+      código.
+- [ ] **Rotar las demás credenciales heredadas** (Telegram, Firebase), aunque ya
+      no se usen.
+- [ ] Revisar los ~220 archivos sueltos en la raíz de la cuenta de Cloudinary,
+      que vienen del proyecto anterior. Lo que sube esta aplicación queda bajo
+      `otterly-clean/`; el resto no lo toca nadie y conviene decidir si se
+      archiva o se borra.
+- [ ] Si el frontend se sirve con una CSP propia, añadir `res.cloudinary.com` a
+      `img-src`: si no, las imágenes subidas no se verán en producción.
 - [ ] Limitar los intentos de inicio de sesión por IP y por cuenta.
 - [ ] Servir todo por HTTPS y marcar `Strict-Transport-Security`.
 - [ ] Definir la política de retención: cuánto tiempo se conservan los códigos

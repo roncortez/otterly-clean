@@ -372,6 +372,53 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
+// Imagenes publicas
+//
+// El destino NO es una ruta libre: se elige de un catalogo cerrado, asi que
+// nadie puede escribir en una carpeta arbitraria de la cuenta de Cloudinary.
+// ---------------------------------------------------------------------------
+
+const uploadService = require('../../services/uploadService');
+const { singleImage } = require('../middleware/upload');
+
+/** Lo que la interfaz necesita para decidir si ofrece subida o campo de URL. */
+router.get(
+  '/uploads/config',
+  asyncHandler(async (_req, res) => {
+    res.json({ uploads: uploadService.describe() });
+  }),
+);
+
+router.post(
+  '/uploads/:slot',
+  validate({ params: schemas.uploadSlotParamSchema }),
+  singleImage('image'),
+  asyncHandler(async (req, res) => {
+    const uploaded = await uploadService.uploadImage({
+      slot: req.validatedParams.slot,
+      file: req.file,
+      actor: req.user,
+      request: req,
+    });
+    res.status(201).json({ image: uploaded });
+  }),
+);
+
+router.delete(
+  '/uploads/:slot',
+  validate({ params: schemas.uploadSlotParamSchema }),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await uploadService.removeImage({
+        slot: req.validatedParams.slot,
+        actor: req.user,
+        request: req,
+      }),
+    );
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Configuracion: empresa
 // ---------------------------------------------------------------------------
 

@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { Building2, CalendarOff, Megaphone, Sparkles } from 'lucide-react';
 import { PageHeader, cx } from '@/shared/ui';
+import { UploadConfigProvider } from './UploadConfigContext';
 
 /**
  * Configuración de la plataforma.
@@ -18,7 +19,8 @@ const TABS = [
 
 export default function ConfigurationLayout() {
   return (
-    <div>
+    // Las capacidades de subida se consultan una vez para toda la sección.
+    <UploadConfigProvider>
       <PageHeader
         title="Configuración"
         eyebrow="Operaciones"
@@ -46,6 +48,6 @@ export default function ConfigurationLayout() {
       </nav>
 
       <Outlet />
-    </div>
+    </UploadConfigProvider>
   );
 }

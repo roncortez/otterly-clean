@@ -4,6 +4,7 @@ import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useEditableForm } from '@/shared/hooks/useEditableForm';
 import { Alert, Card, CardHeader, Field, Input, Spinner, Textarea } from '@/shared/ui';
 import SaveBar from './SaveBar';
+import ImageField from './ImageField';
 
 /**
  * Datos públicos de la empresa.
@@ -23,11 +24,19 @@ const SECTIONS = [
       { key: 'tagline', label: 'Lema', hint: 'Frase corta que acompaña al nombre en la portada.' },
       {
         key: 'logoUrl',
-        label: 'Logo (URL)',
-        type: 'url',
+        label: 'Logo',
+        type: 'image',
+        slot: 'COMPANY_LOGO',
         hint: 'Se muestra en la cabecera. Si se deja vacío usamos el icono de la marca.',
       },
-      { key: 'iconUrl', label: 'Icono (URL)', type: 'url', hint: 'Versión cuadrada para usos pequeños.' },
+      {
+        key: 'iconUrl',
+        label: 'Icono',
+        type: 'image',
+        slot: 'COMPANY_ICON',
+        hint: 'Versión cuadrada para usos pequeños.',
+        previewClassName: 'size-16',
+      },
     ],
   },
   {
@@ -96,31 +105,53 @@ export default function CompanySettingsPage() {
         <Card key={section.title}>
           <CardHeader title={section.title} description={section.description} />
           <div className="grid gap-4 p-5 sm:grid-cols-2">
-            {section.fields.map((field) => (
-              <Field
-                key={field.key}
-                label={field.label}
-                hint={field.hint}
-                required={field.required}
-                className={field.type === 'textarea' ? 'sm:col-span-2' : undefined}
-              >
-                {field.type === 'textarea' ? (
-                  <Textarea
-                    rows={2}
-                    value={form[field.key] ?? ''}
-                    onChange={update(field.key)}
-                    maxLength={300}
-                  />
-                ) : (
-                  <Input
-                    type={field.type ?? 'text'}
-                    required={field.required}
-                    value={form[field.key] ?? ''}
-                    onChange={update(field.key)}
-                  />
-                )}
-              </Field>
-            ))}
+            {section.fields.map((field) => {
+              // La imagen se sube y lo que se guarda es su URL, así que sigue
+              // siendo un campo de texto para el resto del formulario.
+              if (field.type === 'image') {
+                return (
+                  <div key={field.key} className="sm:col-span-2">
+                    <ImageField
+                      slot={field.slot}
+                      label={field.label}
+                      hint={field.hint}
+                      value={form[field.key] ?? ''}
+                      previewClassName={field.previewClassName}
+                      onChange={(url) => {
+                        setValue(field.key, url);
+                        setSaved(false);
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <Field
+                  key={field.key}
+                  label={field.label}
+                  hint={field.hint}
+                  required={field.required}
+                  className={field.type === 'textarea' ? 'sm:col-span-2' : undefined}
+                >
+                  {field.type === 'textarea' ? (
+                    <Textarea
+                      rows={2}
+                      value={form[field.key] ?? ''}
+                      onChange={update(field.key)}
+                      maxLength={300}
+                    />
+                  ) : (
+                    <Input
+                      type={field.type ?? 'text'}
+                      required={field.required}
+                      value={form[field.key] ?? ''}
+                      onChange={update(field.key)}
+                    />
+                  )}
+                </Field>
+              );
+            })}
           </div>
         </Card>
       ))}

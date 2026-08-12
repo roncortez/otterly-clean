@@ -23,6 +23,18 @@ const env = {
   crypto: {
     encryptionKey: process.env.ENCRYPTION_KEY || '',
   },
+  // Almacenamiento de imagenes publicas (logo, iconos de servicio, banner).
+  // Si falta cualquiera de las tres credenciales la subida queda desactivada y
+  // la interfaz vuelve al campo de URL: la aplicacion sigue funcionando.
+  uploads: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+    apiKey: process.env.CLOUDINARY_API_KEY || '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+    // Prefijo bajo el que se agrupa TODO lo que sube esta aplicacion, para no
+    // mezclarlo con lo que ya hubiera en la cuenta.
+    baseFolder: process.env.CLOUDINARY_FOLDER || 'otterly-clean',
+    maxBytes: Number(process.env.UPLOAD_MAX_BYTES || 5 * 1024 * 1024),
+  },
   notifications: {
     driver: process.env.NOTIFICATIONS_DRIVER || 'console',
   },

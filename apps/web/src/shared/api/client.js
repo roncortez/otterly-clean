@@ -96,6 +96,35 @@ api.interceptors.response.use(
 );
 
 /**
+ * Sube un archivo.
+ *
+ * Existe como función propia por un detalle fácil de olvidar: la instancia de
+ * axios declara `Content-Type: application/json`, y con ese encabezado axios
+ * **convierte el FormData a JSON** y el archivo se pierde en silencio. Al
+ * indicar `multipart/form-data` axios respeta el FormData, y el adaptador del
+ * navegador reemplaza el encabezado por uno con el `boundary` correcto.
+ *
+ * @param {string} path        ruta relativa
+ * @param {File} file          archivo a subir
+ * @param {object} [options]
+ * @param {string} [options.field]      nombre del campo (por defecto `image`)
+ * @param {Function} [options.onProgress] recibe el porcentaje subido (0-100)
+ */
+export function uploadFile(path, file, { field = 'image', onProgress } = {}) {
+  const form = new FormData();
+  form.append(field, file);
+
+  return api.post(path, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: onProgress
+      ? (event) => {
+          if (event.total) onProgress(Math.round((event.loaded * 100) / event.total));
+        }
+      : undefined,
+  });
+}
+
+/**
  * Extrae el mensaje que se le muestra a la persona.
  * El backend envía errores con forma { error: { code, message } }.
  */

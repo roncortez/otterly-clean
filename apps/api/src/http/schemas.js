@@ -373,6 +373,15 @@ const updateRolesSchema = z.object({
 
 const serviceTypeParamSchema = z.object({ serviceType: serviceTypeEnum });
 
+/**
+ * Destino de una imagen.
+ *
+ * Los valores salen del catalogo del servicio de subida, que es cerrado: la
+ * carpeta y el nombre del archivo nunca vienen de la peticion.
+ */
+const { SLOT_CODES } = require('../services/uploadService');
+const uploadSlotParamSchema = z.object({ slot: z.enum(SLOT_CODES) });
+
 const planParamSchema = z.object({ serviceType: serviceTypeEnum, planId: id });
 
 // --- Consultas -------------------------------------------------------------
@@ -411,6 +420,7 @@ module.exports = {
   servicePlanSchema,
   serviceTypeParamSchema,
   planParamSchema,
+  uploadSlotParamSchema,
   blackoutSchema,
   updateBlackoutSchema,
   availabilityQuerySchema,
