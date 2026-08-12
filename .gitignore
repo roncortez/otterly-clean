@@ -37,3 +37,6 @@ Thumbs.db
 .playwright-cli/
 playwright-report/
 test-results/
+
+# Documentation
+docs/

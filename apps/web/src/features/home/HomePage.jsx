@@ -1,203 +1,408 @@
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  Sparkles,
+  Shirt,
+  Scissors,
   CalendarCheck,
   CheckCircle2,
-  Clock,
-  Mail,
-  MapPin,
-  Phone,
-  Scissors,
   ShieldCheck,
-  Shirt,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Key,
+  Award,
+  ArrowRight,
+  Phone,
+  Mail,
   Send,
-  Sparkles,
+  MapPin,
 } from 'lucide-react';
 import WhatsAppButton from '@/shared/ui/WhatsAppButton';
 import BrandMark from '@/shared/ui/BrandMark';
 import Overlay from '@/shared/ui/Overlay';
+import api from '@/shared/api/client';
+import Header from '@/features/home/components/Header';
+import { useTranslation } from '@/shared/i18n/I18nContext';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { api } from '@/shared/api/client';
-import { Spinner } from '@/shared/ui';
-
-/**
- * Portada pública.
- *
- * Ni los servicios ni los datos de contacto están escritos aquí: los servicios
- * llegan de /api/catalog/config —con el nombre, la descripción y el orden que
- * Operaciones haya configurado— y el contacto, de la configuración de empresa.
- * Un servicio desactivado desaparece de la portada sin tocar este archivo.
- */
-
-/**
- * Iconos disponibles para los servicios. Es un mapa cerrado a propósito: la
- * configuración guarda un nombre, no un componente, y solo se admiten los que
- * el frontend sabe pintar.
- */
-const SERVICE_ICONS = { Sparkles, Shirt, Scissors };
-
-const TRUST_BADGES = [
-  { icon: ShieldCheck, label: 'Personal verificado' },
-  { icon: Clock, label: 'Seguimiento en tiempo real' },
-  { icon: CheckCircle2, label: 'Garantía de satisfacción' },
-];
 
 export default function HomePage() {
-  const { company, serviceTypes, isLoading } = useConfig();
+  const { t } = useTranslation();
+  const { company } = useConfig();
   const [banner, setBanner] = useState(null);
-  const [overlayDismissed, setOverlayDismissed] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
+  const [openFaq, setOpenFaq] = useState(null);
 
   useEffect(() => {
-    let cancelled = false;
-
-    api
-      .get('/catalog/banner')
-      .then(({ data }) => {
-        if (!cancelled) setBanner(data);
-      })
-      .catch(() => {
-        // El banner es decorativo: si falla, la portada sigue funcionando.
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    async function fetchBanner() {
+      try {
+        const res = await api.get('/catalog/banner');
+        setBanner(res.data);
+      } catch {
+        // Ignorar si falla
+      }
+    }
+    fetchBanner();
   }, []);
 
-  // Solo lo que se puede reservar hoy, en el orden que decidió Operaciones.
-  const services = serviceTypes.filter((service) => service.bookable);
+  const toggleFaq = (index) => {
+    setOpenFaq(openFaq === index ? null : index);
+  };
 
-  if (isLoading) return <Spinner label="Cargando" />;
+  const CATEGORIES = [
+    {
+      key: 'cleaning',
+      label: t('services.cleaningTitle'),
+      icon: Sparkles,
+      badge: t('services.badgeCleaning'),
+      description: t('services.cleaningDesc'),
+      link: '/customer/booking?service=CLEANING',
+    },
+    {
+      key: 'laundry',
+      label: t('services.laundryTitle'),
+      icon: Shirt,
+      badge: t('services.badgeLaundry'),
+      description: t('services.laundryDesc'),
+      link: '/customer/booking?service=LAUNDRY',
+    },
+    {
+      key: 'repair',
+      label: t('services.repairTitle'),
+      icon: Scissors,
+      badge: t('services.badgeRepair'),
+      description: t('services.repairDesc'),
+      link: '/customer/booking?service=ALTERATION',
+    },
+  ];
+
+  const FAQS = [
+    {
+      question: t('faqs.q1'),
+      answer: t('faqs.a1'),
+    },
+    {
+      question: t('faqs.q2'),
+      answer: t('faqs.a2'),
+    },
+    {
+      question: t('faqs.q3'),
+      answer: t('faqs.a3'),
+    },
+    {
+      question: t('faqs.q4'),
+      answer: t('faqs.a4'),
+    },
+  ];
 
   return (
-    <div className="min-h-dvh bg-surface">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased">
+      {/* Banner promocional emergente */}
       <Overlay
-        isOpen={!overlayDismissed && Boolean(banner?.enabled)}
+        isOpen={showOverlay && banner?.enabled !== false}
         imageUrl={banner?.imageUrl}
         message={banner?.message}
-        onClose={() => setOverlayDismissed(true)}
+        onClose={() => setShowOverlay(false)}
       />
 
-      <header className="border-b border-border bg-surface-raised">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <BrandMark size="md" />
-          <div className="flex items-center gap-2">
-            <Link
-              to="/entrar"
-              className="rounded-xl px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
-            >
-              Entrar
-            </Link>
-            <Link
-              to="/crear-cuenta"
-              className="inline-flex h-10 items-center rounded-xl bg-forest-600 px-4 text-sm font-medium text-white transition-colors hover:bg-forest-700"
-            >
-              Crear cuenta
-            </Link>
-          </div>
+      {/* Header flotante */}
+      <Header />
+
+      {/* =========================================================================
+         1. HERO SECTION (#hero) — FULL BLEED RESPONSIVE HERO WITH CTA COLORS
+         ========================================================================= */}
+      <section id="hero" className="relative min-h-[90vh] lg:min-h-screen w-full flex flex-col justify-between overflow-hidden bg-slate-950 px-4 sm:px-6 md:px-8 pt-32 sm:pt-36 pb-12 sm:pb-16 text-white">
+        {/* Imagen de fondo Full Bleed con Overlay Gradiente cinematográfico */}
+        <div className="absolute inset-0 z-0">
+          <img
+            src="/hero_background.png"
+            alt="Otterly Clean Interior"
+            className="h-full w-full object-cover object-center scale-105 transition-transform duration-1000"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-slate-950/40" />
         </div>
-      </header>
 
-      <section className="px-6 py-20 lg:py-24">
-        <div className="mx-auto max-w-3xl text-center">
-          {company.tagline ? (
-            <p className="inline-flex items-center gap-2 rounded-full bg-forest-50 px-4 py-1.5 text-xs font-semibold text-forest-700">
-              <Sparkles className="size-3.5" aria-hidden="true" />
-              {company.tagline}
+        {/* Contenido Principal + Métricas en Layout Responsive */}
+        <div className="relative z-10 mx-auto max-w-6xl w-full my-auto flex flex-col lg:flex-row lg:items-end lg:justify-between gap-10 text-left pt-4">
+          {/* Bloque Izquierdo: Título, Subtítulo y Botones CTA */}
+          <div className="max-w-3xl space-y-5 sm:space-y-6">
+            {/* Titular principal en sentence case con Serif itálica */}
+            <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-7xl leading-tight sm:leading-[1.08]">
+              {t('hero.titlePart1')}
+              <span className="font-serif italic font-normal text-slate-100">{t('hero.titleHighlight')}</span>
+              {t('hero.titlePart2')}
+            </h1>
+
+            {/* Subtítulo */}
+            <p className="max-w-xl text-sm sm:text-base md:text-lg leading-relaxed text-slate-200 font-normal">
+              {t('hero.subtitle')}
             </p>
-          ) : null}
 
-          <h1 className="mt-6 text-4xl font-semibold tracking-tight text-text sm:text-5xl">
-            Tu espacio, <span className="text-accent-600">impecable</span>
-          </h1>
-
-          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-text-muted">
-            Profesionales verificados en tu casa. Agenda cuando te venga bien y sigue cada etapa
-            del servicio en tiempo real.
-          </p>
-
-          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              to="/reservar"
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent-600 px-6 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-700"
-            >
-              <CalendarCheck className="size-4" aria-hidden="true" />
-              Solicitar un servicio
-            </Link>
-            <WhatsAppButton label="Escríbenos por WhatsApp" />
+            {/* Botones de acción con Colores CTA Terracota */}
+            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
+              <Link
+                to="/customer/booking"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-600 px-8 py-3.5 sm:py-4 text-sm font-semibold text-white shadow-xl transition-all hover:bg-accent-500 hover:shadow-2xl active:scale-95"
+              >
+                <CalendarCheck className="h-4.5 w-4.5 text-white" />
+                {t('hero.ctaPrimary')}
+              </Link>
+              <WhatsAppButton
+                label={t('hero.ctaWhatsApp')}
+                message="Hola, me gustaría solicitar información sobre los servicios de Otterly Clean."
+                className="!rounded-full !px-7 !py-3.5 !bg-white/10 hover:!bg-white/20 !border !border-white/20 !backdrop-blur-md !text-white !justify-center"
+              />
+            </div>
           </div>
 
-          <ul className="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 border-t border-border pt-8 text-xs font-medium text-text-subtle">
-            {TRUST_BADGES.map(({ icon: Icon, label }) => (
-              <li key={label} className="flex items-center gap-2">
-                <Icon className="size-4 text-forest-600" aria-hidden="true" />
-                {label}
-              </li>
-            ))}
-          </ul>
+          {/* Bloque Derecho: Garantías / Métricas en una sola línea por ítem */}
+          <div className="flex flex-wrap items-center gap-4 sm:gap-8 lg:gap-10 border-t border-white/15 pt-6 lg:border-t-0 lg:pt-0 shrink-0">
+            {/* Métrica 1 */}
+            <div className="whitespace-nowrap text-left">
+              <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight">100% verificado</h3>
+              <p className="text-xs text-slate-300 font-normal mt-0.5">{t('hero.badgeVerified')}</p>
+            </div>
+
+            <div className="hidden sm:block h-8 w-px shrink-0 bg-white/30 self-center" />
+
+            {/* Métrica 2 */}
+            <div className="whitespace-nowrap text-left">
+              <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight">Tiempo real</h3>
+              <p className="text-xs text-slate-300 font-normal mt-0.5">{t('hero.badgeTracking')}</p>
+            </div>
+
+            <div className="hidden sm:block h-8 w-px shrink-0 bg-white/30 self-center" />
+
+            {/* Métrica 3 */}
+            <div className="whitespace-nowrap text-left">
+              <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight">Garantía 100%</h3>
+              <p className="text-xs text-slate-300 font-normal mt-0.5">{t('hero.badgeGuarantee')}</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 pb-20">
+      {/* =========================================================================
+         2. ¿CÓMO FUNCIONA? (#how-it-works)
+         ========================================================================= */}
+      <section id="how-it-works" className="mx-auto max-w-6xl px-6 py-20">
         <div className="text-center">
-          <h2 className="text-2xl font-semibold tracking-tight text-text">Nuestros servicios</h2>
-          <p className="mt-2 text-sm text-text-muted">
-            Elige lo que necesitas y reserva en un par de minutos.
+          <span className="text-xs font-semibold text-forest-700 uppercase tracking-wider">{t('howItWorks.step')}</span>
+          <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+            {t('howItWorks.title')}
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-500">
+            {t('howItWorks.subtitle')}
           </p>
         </div>
 
-        {services.length === 0 ? (
-          <p className="mt-10 rounded-2xl border border-dashed border-border-strong px-6 py-12 text-center text-sm text-text-muted">
-            No hay servicios disponibles en este momento. Escríbenos y te avisamos en cuanto
-            volvamos a abrir la agenda.
-          </p>
-        ) : (
-          <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {services.map((service) => {
-              const Icon = SERVICE_ICONS[service.icon] ?? Sparkles;
+        <div className="mt-14 grid gap-8 md:grid-cols-3">
+          {/* Paso 1 */}
+          <div className="relative flex flex-col items-center rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200/80 transition-all hover:shadow-md">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-forest-50 font-bold text-forest-700 text-sm">
+              01
+            </div>
+            <h3 className="mt-6 text-lg font-bold text-slate-900">{t('howItWorks.step1Title')}</h3>
+            <p className="mt-3 text-xs leading-relaxed text-slate-600">
+              {t('howItWorks.step1Desc')}
+            </p>
+          </div>
+
+          {/* Paso 2 */}
+          <div className="relative flex flex-col items-center rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200/80 transition-all hover:shadow-md">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-forest-50 font-bold text-forest-700 text-sm">
+              02
+            </div>
+            <h3 className="mt-6 text-lg font-bold text-slate-900">{t('howItWorks.step2Title')}</h3>
+            <p className="mt-3 text-xs leading-relaxed text-slate-600">
+              {t('howItWorks.step2Desc')}
+            </p>
+          </div>
+
+          {/* Paso 3 */}
+          <div className="relative flex flex-col items-center rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200/80 transition-all hover:shadow-md">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-forest-50 font-bold text-forest-700 text-sm">
+              03
+            </div>
+            <h3 className="mt-6 text-lg font-bold text-slate-900">{t('howItWorks.step3Title')}</h3>
+            <p className="mt-3 text-xs leading-relaxed text-slate-600">
+              {t('howItWorks.step3Desc')}
+            </p>
+          </div>
+        </div>
+      </section >
+
+      {/* =========================================================================
+         3. NUESTROS SERVICIOS (#services)
+         ========================================================================= */}
+      < section id="services" className="bg-white px-6 py-20 border-y border-slate-100" >
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center">
+            <span className="text-xs font-semibold text-forest-700 uppercase tracking-wider">{t('services.tag')}</span>
+            <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+              {t('services.title')}
+            </h2>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-500">
+              {t('services.subtitle')}
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-8 md:grid-cols-3">
+            {CATEGORIES.map((cat) => {
+              const Icon = cat.icon;
               return (
-                <article
-                  key={service.code}
-                  className="flex flex-col justify-between rounded-2xl border border-border bg-surface-raised p-7 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-raised)]"
+                <div
+                  key={cat.key}
+                  className="flex flex-col justify-between rounded-2xl bg-slate-50 p-8 shadow-sm ring-1 ring-slate-200/80 transition-all hover:bg-white hover:shadow-lg hover:ring-forest-500/30"
                 >
                   <div>
-                    {service.imageUrl ? (
-                      <img
-                        src={service.imageUrl}
-                        alt=""
-                        className="mb-5 h-32 w-full rounded-xl object-cover"
-                      />
-                    ) : (
-                      <span className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-600">
-                        <Icon className="size-6" aria-hidden="true" />
+                    <div className="flex items-center justify-between">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
+                        <Icon className="h-6 w-6" />
+                      </div>
+                      <span className="rounded-full bg-slate-200/70 px-3 py-1 text-[11px] font-medium text-slate-700">
+                        {cat.badge}
                       </span>
-                    )}
-                    <h3 className="mt-5 text-lg font-semibold text-text">{service.label}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                      {service.description}
-                    </p>
+                    </div>
+                    <h3 className="mt-6 text-xl font-bold text-slate-900">{cat.label}</h3>
+                    <p className="mt-3 text-xs leading-relaxed text-slate-600">{cat.description}</p>
                   </div>
-
-                  <Link
-                    to={`/reservar?servicio=${service.code}`}
-                    className="mt-6 inline-flex items-center gap-1 border-t border-border pt-4 text-sm font-medium text-forest-700 hover:text-forest-600"
-                  >
-                    Reservar <span aria-hidden="true">→</span>
-                  </Link>
-                </article>
+                  <div className="mt-8 border-t border-slate-200/60 pt-4">
+                    <Link
+                      to={cat.link}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest-700 hover:text-forest-900"
+                    >
+                      <span>{t('services.bookAction')}{cat.label.toLowerCase()}</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                </div>
               );
             })}
           </div>
-        )}
-      </section>
+        </div>
+      </section >
 
-      <CompanyFooter company={company} />
-    </div>
+      {/* =========================================================================
+         4. ¿QUIÉNES SOMOS? / GARANTÍAS (#about)
+         ========================================================================= */}
+      < section id="about" className="bg-forest-900 px-6 py-24 text-white" >
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+            <div>
+              <span className="text-xs font-semibold text-forest-200 uppercase tracking-wider">{t('about.tag')}</span>
+              <h2 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
+                {t('about.title')}
+              </h2>
+              <p className="mt-4 text-sm leading-relaxed text-slate-300">
+                {t('about.desc1')}
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-300">
+                {t('about.desc2')}
+              </p>
+
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+                <Link
+                  to="/customer/booking"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-600 px-6 py-3 text-xs font-semibold text-white shadow-md hover:bg-accent-700 transition-all"
+                >
+                  {t('about.ctaTry')}
+                </Link>
+              </div>
+            </div>
+
+            {/* Tarjetas de garantía */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                <ShieldCheck className="h-8 w-8 text-emerald-400" />
+                <h3 className="mt-4 text-base font-bold text-white">{t('about.card1Title')}</h3>
+                <p className="mt-2 text-xs text-slate-300">
+                  {t('about.card1Desc')}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                <Key className="h-8 w-8 text-emerald-400" />
+                <h3 className="mt-4 text-base font-bold text-white">{t('about.card2Title')}</h3>
+                <p className="mt-2 text-xs text-slate-300">
+                  {t('about.card2Desc')}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                <Clock className="h-8 w-8 text-emerald-400" />
+                <h3 className="mt-4 text-base font-bold text-white">{t('about.card3Title')}</h3>
+                <p className="mt-2 text-xs text-slate-300">
+                  {t('about.card3Desc')}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                <Award className="h-8 w-8 text-emerald-400" />
+                <h3 className="mt-4 text-base font-bold text-white">{t('about.card4Title')}</h3>
+                <p className="mt-2 text-xs text-slate-300">
+                  {t('about.card4Desc')}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section >
+
+      {/* =========================================================================
+         5. PREGUNTAS FRECUENTES (#faqs)
+         ========================================================================= */}
+      < section id="faqs" className="bg-slate-50 border-t border-slate-200/60 px-6 py-20" >
+        <div className="mx-auto max-w-4xl">
+          <div className="text-center">
+            <span className="text-xs font-semibold text-forest-700 uppercase tracking-wider">{t('faqs.tag')}</span>
+            <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+              {t('faqs.title')}
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              {t('faqs.subtitle')}
+            </p>
+          </div>
+
+          <div className="mt-12 space-y-4">
+            {FAQS.map((faq, idx) => (
+              <div
+                key={idx}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all"
+              >
+                <button
+                  onClick={() => toggleFaq(idx)}
+                  className="flex w-full items-center justify-between p-6 text-left font-bold text-slate-900 text-sm hover:text-forest-700"
+                >
+                  <span>{faq.question}</span>
+                  {openFaq === idx ? (
+                    <ChevronUp className="h-4 w-4 shrink-0 text-forest-700" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+                  )}
+                </button>
+
+                {openFaq === idx && (
+                  <div className="border-t border-slate-100 px-6 pb-6 pt-2 text-xs leading-relaxed text-slate-600">
+                    {faq.answer}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section >
+
+      {/* =========================================================================
+         6. FOOTER
+         ========================================================================= */}
+      <CompanyFooter company={company} t={t} />
+    </div >
   );
 }
 
 /** Pie con los datos de contacto administrables. Se omite lo no configurado. */
-function CompanyFooter({ company }) {
+function CompanyFooter({ company, t }) {
   const contacts = [
     { key: 'phone', icon: Phone, label: company.phone, href: `tel:${company.phone}` },
     { key: 'email', icon: Mail, label: company.email, href: `mailto:${company.email}` },
@@ -223,6 +428,14 @@ function CompanyFooter({ company }) {
             ) : null}
           </div>
 
+          <div className="flex flex-wrap items-center gap-6 text-xs font-medium text-text-muted">
+            <a href="#hero" className="hover:text-text">{t('header.home')}</a>
+            <a href="#services" className="hover:text-text">{t('header.services')}</a>
+            <a href="#how-it-works" className="hover:text-text">{t('header.howItWorks')}</a>
+            <a href="#about" className="hover:text-text">{t('header.about')}</a>
+            <a href="#faqs" className="hover:text-text">{t('header.faqs')}</a>
+          </div>
+
           {contacts.length > 0 ? (
             <ul className="space-y-2.5 text-sm">
               {contacts.map(({ key, icon: Icon, label, href }) => (
@@ -242,7 +455,7 @@ function CompanyFooter({ company }) {
         </div>
 
         <p className="mt-10 border-t border-border pt-6 text-xs text-text-subtle">
-          © {new Date().getFullYear()} {company.name}. Todos los derechos reservados.
+          © {new Date().getFullYear()} {company.name || 'Otterly Clean'}. {t('footer.rights')}
         </p>
       </div>
     </footer>
