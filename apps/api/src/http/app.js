@@ -7,6 +7,7 @@ const env = require('../config/env');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const authRoutes = require('./routes/authRoutes');
+const meRoutes = require('./routes/meRoutes');
 const catalogRoutes = require('./routes/catalogRoutes');
 const customerRoutes = require('./routes/customerRoutes');
 const staffRoutes = require('./routes/staffRoutes');
@@ -46,6 +47,9 @@ function createApp() {
   });
 
   app.use('/api/auth', authRoutes);
+  // La persona, no el rol: perfil propio, foto y onboarding. Cada ruta actua
+  // siempre sobre req.user.id, asi que no hay recurso ajeno que pedir.
+  app.use('/api/me', meRoutes);
   app.use('/api/catalog', catalogRoutes);
   app.use('/api/customer', customerRoutes);
   app.use('/api/staff', staffRoutes);

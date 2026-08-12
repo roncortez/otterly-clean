@@ -214,4 +214,7 @@ module.exports = {
   verifyAccessToken,
   signAccessToken,
   projectUser,
+  // Lo usa invitationService: aceptar una invitacion deja la sesion abierta,
+  // igual que registrarse, y no debe reimplementar como se emite.
+  buildSession,
 };

@@ -94,6 +94,30 @@ const EVENTS = Object.freeze({
     }),
   },
 
+  /**
+   * Invitación a activar la cuenta de un trabajador.
+   *
+   * El cuerpo NO lleva el enlace a propósito: se persiste en la tabla
+   * `notifications` y el enlace contiene un token que abre la cuenta. El enlace
+   * viaja solo en memoria hasta el driver (`context.activationUrl`), igual que
+   * la base guarda el hash del token y nunca el token.
+   *
+   * WhatsApp aparece como canal porque es el preferido del negocio, pero
+   * mientras no exista proveedor la notificación queda PENDING: no se marca
+   * como enviada.
+   */
+  STAFF_INVITED: {
+    audience: [AUDIENCE.STAFF],
+    channels: ['WHATSAPP', 'EMAIL'],
+    template: (ctx) => ({
+      title: `Te damos la bienvenida a ${ctx.companyName ?? 'Otterly Clean'}`,
+      body:
+        `Has sido invitado a ${ctx.companyName ?? 'Otterly Clean'}. ` +
+        'Activa tu cuenta y completa tu perfil con el enlace que te enviamos. ' +
+        `El enlace caduca en ${ctx.expiresInHours ?? 72} horas.`,
+    }),
+  },
+
   // --- Lavanderia --------------------------------------------------------
   LAUNDRY_PICKED_UP: {
     audience: [AUDIENCE.CUSTOMER],

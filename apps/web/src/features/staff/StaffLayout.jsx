@@ -1,5 +1,5 @@
 import { Outlet, Link } from 'react-router-dom';
-import { LogOut, Droplets, Sliders } from 'lucide-react';
+import { LogOut, Droplets, Sliders, UserRound } from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
 
 /**
@@ -23,6 +23,14 @@ export default function StaffLayout() {
             <span className="font-bold tracking-tight">{user?.firstName}</span>
           </Link>
           <div className="flex items-center gap-1">
+            <Link
+              to="/mi-perfil"
+              className="rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
+              aria-label="Mi perfil"
+              title="Mi perfil"
+            >
+              <UserRound className="size-4.5" aria-hidden="true" />
+            </Link>
             {/* Solo para quien además coordina: ADMIN + STAFF. */}
             {hasRole('ADMIN') ? (
               <Link

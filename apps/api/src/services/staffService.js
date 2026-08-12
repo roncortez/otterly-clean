@@ -5,9 +5,13 @@ const env = require('../config/env');
 const { db } = require('../db');
 const userRepository = require('../db/repositories/userRepository');
 const staffRepo = require('../db/repositories/staffRepository');
+const customerRepo = require('../db/repositories/customerRepository');
+const invitationRepo = require('../db/repositories/invitationRepository');
+const invitationService = require('./invitationService');
 const audit = require('./auditService');
 const { assertNotLastActiveAdmin } = require('./userService');
-const { ROLES } = require('../domain/shared/roles');
+const { ROLES, normalizeRoles } = require('../domain/shared/roles');
+const { randomToken } = require('./crypto');
 const { ConflictError, NotFoundError } = require('../domain/errors');
 
 /**
@@ -16,14 +20,27 @@ const { ConflictError, NotFoundError } = require('../domain/errors');
  * Las cuentas STAFF NO se crean por registro publico: las crea Operaciones.
  * Ese es justamente el punto que diferencia esta plataforma de un marketplace
  * abierto, y por eso vive aqui y no en authService.
+ *
+ * Lo que Operaciones aporta es lo que solo la empresa sabe: a quien contrata,
+ * que servicios puede atender, en que zonas y si la cuenta esta activa. Los
+ * datos personales —como se presenta, su biografia, su foto— los pone despues
+ * el propio trabajador en su onboarding, porque son suyos y porque nadie los
+ * escribe mejor que el.
  */
 
 async function createStaff({ payload, actor, request }) {
   const existing = await userRepository.findByEmail(payload.email);
   if (existing) throw new ConflictError('Ya existe una cuenta con ese correo', { field: 'email' });
 
-  return db.tx(async (tx) => {
-    const passwordHash = await bcrypt.hash(payload.password, env.auth.bcryptRounds);
+  const roles = normalizeRoles(payload.roles?.length ? payload.roles : [ROLES.STAFF]);
+  const active = payload.active ?? true;
+
+  const result = await db.tx(async (tx) => {
+    // La cuenta nace SIN contrasena utilizable: se guarda el hash de un valor
+    // aleatorio que nadie conoce, ni siquiera quien la crea. Solo la invitacion
+    // permite fijar una clave, asi que no existe una credencial inicial que
+    // pueda filtrarse por correo, por WhatsApp o por la memoria de un ADMIN.
+    const passwordHash = await bcrypt.hash(randomToken(32), env.auth.bcryptRounds);
 
     const user = await userRepository.create(
       {
@@ -32,9 +49,10 @@ async function createStaff({ payload, actor, request }) {
         firstName: payload.firstName,
         lastName: payload.lastName,
         phone: payload.phone,
-        roles: [ROLES.STAFF],
+        roles,
         regionCode: payload.regionCode ?? env.defaultRegion,
         locale: payload.locale ?? 'es',
+        status: active ? 'ACTIVE' : 'INACTIVE',
       },
       tx,
     );
@@ -43,15 +61,21 @@ async function createStaff({ payload, actor, request }) {
       {
         userId: user.id,
         employeeCode: payload.employeeCode,
-        displayName: payload.displayName ?? payload.firstName,
-        photoUrl: payload.photoUrl,
-        bio: payload.bio,
+        // Provisional hasta que el trabajador elija como quiere presentarse.
+        displayName: payload.firstName,
         hiredAt: payload.hiredAt,
-        skills: payload.skills ?? [],
         serviceTypes: payload.serviceTypes ?? [],
       },
       tx,
     );
+
+    if (!active) {
+      await staffRepo.updateProfile(user.id, { active: false }, tx);
+    }
+
+    if (roles.includes(ROLES.CUSTOMER)) {
+      await customerRepo.ensure(user.id, tx);
+    }
 
     if (payload.zoneIds?.length) {
       await staffRepo.setZones(user.id, payload.zoneIds, tx);
@@ -63,14 +87,24 @@ async function createStaff({ payload, actor, request }) {
         action: audit.ACTIONS.STAFF_CREATED,
         entityType: 'user',
         entityId: user.id,
-        after: { email: user.email, serviceTypes: payload.serviceTypes },
+        after: { email: user.email, roles, serviceTypes: payload.serviceTypes, active },
         request,
       },
       tx,
     );
 
-    return staffRepo.findAdminProfile(user.id, tx);
+    // La invitacion se emite en la misma transaccion: una cuenta sin forma de
+    // entrar y sin invitacion seria una cuenta muerta que alguien tendria que
+    // recordar arreglar a mano.
+    const invitation = await invitationService.invite({ userId: user.id, actor, request, tx });
+
+    return {
+      staff: await staffRepo.findAdminProfile(user.id, tx),
+      invitation,
+    };
   });
+
+  return result;
 }
 
 async function updateStaff({ staffId, payload, actor, request }) {
@@ -87,13 +121,12 @@ async function updateStaff({ staffId, payload, actor, request }) {
     }
 
     const profileFields = {};
+    // Solo lo administrativo. La presentacion del trabajador —nombre publico,
+    // biografia, habilidades y foto— es suya y se edita desde /api/me/profile:
+    // que no aparezca aqui no es un olvido, es la separacion de responsabilidades.
     const map = {
-      displayName: 'display_name',
-      photoUrl: 'photo_url',
-      bio: 'bio',
       employeeCode: 'employee_code',
       hiredAt: 'hired_at',
-      skills: 'skills',
       serviceTypes: 'service_types',
       backgroundCheckStatus: 'background_check_status',
     };
@@ -193,15 +226,53 @@ async function setActive({ staffId, active, actor, request }) {
   });
 }
 
+/**
+ * Reenvia la invitacion.
+ *
+ * Genera un enlace nuevo e invalida el anterior. Sirve tanto para el que se
+ * perdio como para el que caduco, asi que no hay dos caminos distintos que
+ * mantener.
+ */
+async function reinvite({ staffId, actor, request }) {
+  const staff = await staffRepo.findAdminProfile(staffId);
+  if (!staff) throw new NotFoundError('Trabajador', staffId);
+
+  return invitationService.invite({ userId: staffId, actor, request });
+}
+
+/**
+ * Listado con el estado de la invitacion de cada persona, para que Operaciones
+ * vea de un vistazo quien todavia no ha activado su cuenta.
+ */
 async function list(filters) {
-  return staffRepo.list(filters);
+  const staff = await staffRepo.list(filters);
+  if (staff.length === 0) return staff;
+
+  const invitations = await invitationRepo.findLatestForUsers(staff.map((member) => member.id));
+  const byUser = new Map(invitations.map((invitation) => [String(invitation.user_id), invitation]));
+
+  return staff.map((member) => ({
+    ...member,
+    invitation: invitationService.projectInvitation(byUser.get(String(member.id))),
+  }));
 }
 
 async function getAdminProfile(staffId) {
   const profile = await staffRepo.findAdminProfile(staffId);
   if (!profile) throw new NotFoundError('Trabajador', staffId);
-  const zones = await staffRepo.listZones(staffId);
-  return { ...profile, zones };
+  const [zones, invitation] = await Promise.all([
+    staffRepo.listZones(staffId),
+    invitationService.statusForUser(staffId),
+  ]);
+  return { ...profile, zones, invitation };
 }
 
-module.exports = { createStaff, updateStaff, setVerification, setActive, list, getAdminProfile };
+module.exports = {
+  createStaff,
+  updateStaff,
+  setVerification,
+  setActive,
+  reinvite,
+  list,
+  getAdminProfile,
+};

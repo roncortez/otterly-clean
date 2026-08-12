@@ -1,7 +1,7 @@
 'use strict';
 
 const { db } = require('../db');
-const env = require('../config/env');
+const drivers = require('./drivers');
 const { EVENTS, AUDIENCE, eventForStatus } = require('./events');
 
 /**
@@ -9,35 +9,12 @@ const { EVENTS, AUDIENCE, eventForStatus } = require('./events');
  *
  * El dominio dispara eventos ("el profesional llego"), no mensajes. Esta capa
  * decide destinatarios, canales y textos, persiste cada notificacion y delega
- * el envio a un driver.
+ * el envio al driver del canal (`./drivers`).
  *
- * Hoy solo existe el driver de consola: toda notificacion queda registrada en
- * la tabla `notifications` y se imprime en el log. Anadir email, SMS o push es
- * registrar un driver mas en DRIVERS, sin tocar el dominio ni las rutas.
+ * Un canal sin proveedor configurado deja la notificacion PENDING con el
+ * motivo, nunca SENT. Anadir email o WhatsApp de verdad es escribir su driver:
+ * ni el dominio ni las rutas cambian.
  */
-
-const DRIVERS = {
-  /** Desarrollo: imprime y marca como enviada. */
-  console: {
-    async send(notification) {
-      console.log(
-        `[notificacion:${notification.channel}] -> usuario ${notification.user_id}: ` +
-          `${notification.title} — ${notification.body}`,
-      );
-      return { status: 'SENT' };
-    },
-  },
-  /** Solo persiste; util para entornos donde no se quiere ruido. */
-  none: {
-    async send() {
-      return { status: 'SKIPPED' };
-    },
-  },
-};
-
-function getDriver() {
-  return DRIVERS[env.notifications.driver] ?? DRIVERS.none;
-}
 
 /**
  * Resuelve los usuarios que deben recibir un evento.
@@ -81,6 +58,9 @@ async function resolveRecipients(audiences, context, tx) {
  *
  * @param {string} eventCode
  * @param {object} context {reference, customerId, staffId, orderId, staffName}
+ *   Puede llevar datos que NO deben persistirse (por ejemplo el enlace de
+ *   activacion de una invitacion): el contexto llega al driver en memoria, la
+ *   tabla solo guarda titulo, cuerpo y un payload minimo.
  * @param {object} [tx] transaccion pg-promise
  */
 async function emit(eventCode, context, tx = db) {
@@ -93,15 +73,10 @@ async function emit(eventCode, context, tx = db) {
 
     const { title, body } = event.template(context);
     const recipients = await resolveRecipients(event.audience, context, tx);
-    const driver = getDriver();
     const created = [];
 
     for (const recipient of recipients) {
       for (const channel of event.channels) {
-        // Solo IN_APP se "envia" de verdad hoy. El resto queda persistido como
-        // PENDING para que el driver real lo procese cuando exista.
-        const isDeliverable = channel === 'IN_APP';
-
         const row = await tx.one(
           `INSERT INTO notifications
              (user_id, order_id, event, channel, title, body, payload, status)
@@ -118,14 +93,26 @@ async function emit(eventCode, context, tx = db) {
           ],
         );
 
-        if (isDeliverable) {
-          const result = await driver.send(row);
+        const driver = drivers.resolve(channel);
+        // Sin proveedor no se toca el estado: queda PENDING con el motivo, para
+        // que nadie confunda "encolado" con "entregado".
+        const result = driver.isConfigured()
+          ? await driver.send(row, context)
+          : { status: 'PENDING', error: `${channel}_DRIVER_NOT_CONFIGURED` };
+
+        if (result.status !== 'PENDING') {
           await tx.none(
             'UPDATE notifications SET status = $1, sent_at = NOW() WHERE id = $2',
             [result.status, row.id],
           );
+        } else if (result.error) {
+          await tx.none('UPDATE notifications SET error = $1 WHERE id = $2', [
+            result.error,
+            row.id,
+          ]);
         }
-        created.push(row);
+
+        created.push({ ...row, status: result.status, error: result.error ?? null });
       }
     }
 
@@ -158,4 +145,4 @@ async function markRead(userId, notificationId) {
   );
 }
 
-module.exports = { emit, listForUser, markRead, eventForStatus };
+module.exports = { emit, listForUser, markRead, eventForStatus, drivers };

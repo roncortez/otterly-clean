@@ -285,12 +285,16 @@ async function seedUsers(tx, zones) {
 
     await grantRoles(tx, user.id, s.roles ?? ['STAFF']);
 
+    // `onboarding_completed_at` con valor: estas fichas ya vienen completas, y
+    // sin la marca el equipo de ejemplo aterrizaria en el asistente de perfil
+    // en lugar de en su panel.
     await tx.none(
       `INSERT INTO staff_profiles
          (user_id, employee_code, display_name, bio, hired_at, verification_status,
-          verified_at, verified_by, background_check_status, skills, service_types)
+          verified_at, verified_by, background_check_status, skills, service_types,
+          onboarding_completed_at)
        VALUES ($1, $2, $3, $4, CURRENT_DATE - INTERVAL '6 months', 'VERIFIED',
-               NOW(), $5, 'CLEARED', $6, $7)`,
+               NOW(), $5, 'CLEARED', $6, $7, NOW())`,
       [user.id, s.code, s.first, s.bio, admin.id, s.skills, s.services],
     );
 
@@ -319,17 +323,19 @@ async function seedUsers(tx, zones) {
 
   await grantRoles(tx, customer.id, ['CUSTOMER']);
 
-  await tx.none('INSERT INTO customer_profiles (user_id, tax_id_type, tax_id) VALUES ($1, $2, $3)', [
-    customer.id,
-    'CEDULA',
-    '1712345678',
-  ]);
+  await tx.none(
+    `INSERT INTO customer_profiles (user_id, tax_id_type, tax_id, onboarding_completed_at)
+     VALUES ($1, $2, $3, NOW())`,
+    [customer.id, 'CEDULA', '1712345678'],
+  );
 
+  // Con coordenadas: la direccion de ejemplo tiene punto en el mapa, como las
+  // que crea el cliente desde la aplicacion.
   await tx.none(
     `INSERT INTO addresses
        (user_id, label, region_code, street_line1, street_line2, neighborhood, city,
-        administrative_area, reference, zone_id, is_default)
-     VALUES ($1, 'Casa', 'EC', $2, $3, $4, 'Quito', 'Pichincha', $5, $6, TRUE)`,
+        administrative_area, reference, latitude, longitude, zone_id, is_default)
+     VALUES ($1, 'Casa', 'EC', $2, $3, $4, 'Quito', 'Pichincha', $5, -0.1807, -78.4870, $6, TRUE)`,
     [
       customer.id,
       'Av. Amazonas N34-120',

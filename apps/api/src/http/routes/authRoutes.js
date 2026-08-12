@@ -2,12 +2,27 @@
 
 const express = require('express');
 const authService = require('../../services/authService');
+const invitationService = require('../../services/invitationService');
+const onboardingService = require('../../services/onboardingService');
+const profileService = require('../../services/profileService');
 const userRepository = require('../../db/repositories/userRepository');
 const { authenticate } = require('../middleware/auth');
 const { validate, asyncHandler } = require('../middleware/validate');
 const schemas = require('../schemas');
 
 const router = express.Router();
+
+/**
+ * Usuario de la sesion + si le falta completar su perfil.
+ *
+ * El estado del onboarding viaja con el usuario para que la aplicacion sepa a
+ * donde llevarle nada mas entrar, sin una peticion extra ni un parpadeo. La
+ * decision real la sigue tomando el servidor: esto es solo lo que el cliente
+ * necesita para no pintar una pantalla que va a tener que abandonar.
+ */
+async function withOnboarding(projectedUser) {
+  return { ...projectedUser, onboarding: await onboardingService.summary(projectedUser) };
+}
 
 /**
  * POST /api/auth/register
@@ -21,7 +36,7 @@ router.post(
       userAgent: req.get('user-agent'),
       request: req,
     });
-    res.status(201).json(session);
+    res.status(201).json({ ...session, user: await withOnboarding(session.user) });
   }),
 );
 
@@ -33,7 +48,7 @@ router.post(
       userAgent: req.get('user-agent'),
       request: req,
     });
-    res.json(session);
+    res.json({ ...session, user: await withOnboarding(session.user) });
   }),
 );
 
@@ -44,7 +59,57 @@ router.post(
     const session = await authService.refresh(req.body.refreshToken, {
       userAgent: req.get('user-agent'),
     });
-    res.json(session);
+    res.json({ ...session, user: await withOnboarding(session.user) });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Invitaciones
+//
+// Publicas a proposito: quien las usa todavia no tiene sesion. La proteccion es
+// el token —aleatorio, de un solo uso y caducable—, no la autenticacion.
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/auth/invitations/:token
+ * Comprueba el enlace antes de pedir la contrasena. Responde lo minimo: el
+ * nombre de pila, para saludar. Un token inexistente, caducado o ya usado
+ * responden 404 por igual, para no convertir esto en un detector de correos
+ * registrados.
+ */
+router.get(
+  '/invitations/:token',
+  validate({ params: schemas.invitationTokenParamSchema }),
+  asyncHandler(async (req, res) => {
+    const invitation = await invitationService.validateToken(req.validatedParams.token);
+    res.json({
+      invitation: {
+        firstName: invitation.first_name,
+        expiresAt: invitation.expires_at,
+      },
+    });
+  }),
+);
+
+/**
+ * POST /api/auth/invitations/:token/accept
+ * La persona elige su contrasena, el token se consume y entra con sesion
+ * abierta directamente a su onboarding.
+ */
+router.post(
+  '/invitations/:token/accept',
+  validate({
+    params: schemas.invitationTokenParamSchema,
+    body: schemas.acceptInvitationSchema,
+  }),
+  asyncHandler(async (req, res) => {
+    const session = await invitationService.accept({
+      token: req.validatedParams.token,
+      password: req.body.password,
+      userAgent: req.get('user-agent'),
+      request: req,
+    });
+    res.json({ ...session, user: await withOnboarding(session.user) });
   }),
 );
 
@@ -56,27 +121,31 @@ router.post(
   }),
 );
 
-/** Perfil del usuario autenticado. */
+/** Usuario de la sesion, con el estado de su onboarding. */
 router.get(
   '/me',
   authenticate,
   asyncHandler(async (req, res) => {
-    res.json({ user: authService.projectUser(req.user) });
+    res.json({ user: await withOnboarding(authService.projectUser(req.user)) });
   }),
 );
 
+/**
+ * PATCH /api/auth/me
+ *
+ * Se conserva por compatibilidad con lo que ya llamaba aqui, pero no tiene
+ * logica propia: delega en el mismo servicio que /api/me/profile, con su
+ * esquema estricto y su separacion entre lo que decide la persona y lo que
+ * decide la empresa. Antes escribia columnas sin validar nada.
+ */
 router.patch(
   '/me',
   authenticate,
+  validate({ body: schemas.selfProfileSchema }),
   asyncHandler(async (req, res) => {
-    const fields = {};
-    if (req.body.firstName !== undefined) fields.first_name = req.body.firstName;
-    if (req.body.lastName !== undefined) fields.last_name = req.body.lastName;
-    if (req.body.phone !== undefined) fields.phone = req.body.phone;
-    if (req.body.locale !== undefined) fields.locale = req.body.locale;
-
-    const user = await userRepository.update(req.user.id, fields);
-    res.json({ user: authService.projectUser(user) });
+    await profileService.updateProfile({ user: req.user, payload: req.body, request: req });
+    const user = await userRepository.findById(req.user.id);
+    res.json({ user: await withOnboarding(authService.projectUser(user)) });
   }),
 );
 

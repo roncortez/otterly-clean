@@ -1,80 +1,47 @@
 import { useState } from 'react';
-import { MapPin, Plus, Trash2, Star } from 'lucide-react';
+import { MapPin, Plus, Trash2, Star, Pencil } from 'lucide-react';
 import { api } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
-import {
-  Alert,
-  Button,
-  Card,
-  Checkbox,
-  EmptyState,
-  Field,
-  Input,
-  PageHeader,
-  Select,
-  Spinner,
-} from '@/shared/ui';
+import { Alert, Button, Card, EmptyState, PageHeader, Spinner } from '@/shared/ui';
+import AddressForm from './AddressForm';
 
 /**
  * Direcciones del cliente.
  *
- * El formulario se construye a partir de la configuración regional: los campos
- * y sus etiquetas ("Provincia" en Ecuador, "State" en EE.UU.) llegan del
- * backend. Cambiar de país no requiere tocar este archivo.
+ * Cada dirección son dos cosas: un punto en el mapa y un texto que el cliente
+ * escribe y corrige (ver `AddressForm`). El punto es lo que permite encontrar
+ * la casa; el texto, lo que Google no sabe de las urbanizaciones de Quito.
+ *
+ * Si la ubicación cae fuera de las zonas donde trabajamos, la dirección se
+ * guarda igual —puede ser la casa de un familiar— pero se avisa: reservar sobre
+ * ella lo rechaza el backend.
  */
 export default function AddressesPage() {
-  const { region, addressLabel, addressFields, isAddressFieldRequired } = useConfig();
+  const { region } = useConfig();
 
-  const [showForm, setShowForm] = useState(false);
+  // null = formulario cerrado; 'new' = alta; un objeto = edición.
+  const [editing, setEditing] = useState(null);
+  const [outOfArea, setOutOfArea] = useState(false);
 
   const addressQuery = useApiQuery('/customer/addresses');
-  const zonesQuery = useApiQuery('/catalog/zones');
   const { busy: saving, error: actionError, execute } = useApiAction();
 
   const addresses = addressQuery.data?.addresses ?? [];
-  const zones = zonesQuery.data?.zones ?? [];
-  const loading = addressQuery.loading || zonesQuery.loading;
-  const error = addressQuery.error ?? zonesQuery.error ?? actionError;
+  const error = addressQuery.error ?? actionError;
 
-  const [form, setForm] = useState(emptyForm());
-
-  function emptyForm() {
-    return {
-      label: 'Casa',
-      street_line1: '',
-      street_line2: '',
-      neighborhood: '',
-      city: '',
-      administrative_area: '',
-      postal_code: '',
-      reference: '',
-      zoneId: '',
-      isDefault: false,
-    };
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault();
+  async function handleSubmit(payload) {
+    const isEdit = editing && editing !== 'new';
 
     await execute(
       () =>
-        api.post('/customer/addresses', {
-          label: form.label,
-          streetLine1: form.street_line1,
-          streetLine2: form.street_line2 || null,
-          neighborhood: form.neighborhood || null,
-          city: form.city,
-          administrativeArea: form.administrative_area || null,
-          postalCode: form.postal_code || null,
-          reference: form.reference || null,
-          zoneId: form.zoneId ? Number(form.zoneId) : null,
-          isDefault: form.isDefault,
-        }),
+        isEdit
+          ? api.patch(`/customer/addresses/${editing.id}`, payload)
+          : api.post('/customer/addresses', payload),
       {
-        onSuccess: () => {
-          setForm(emptyForm());
-          setShowForm(false);
+        onSuccess: (result) => {
+          setOutOfArea(result?.data?.serviceArea?.covered === false);
+          setEditing(null);
           addressQuery.reload();
         },
       },
@@ -83,9 +50,7 @@ export default function AddressesPage() {
 
   async function handleDelete(id) {
     if (!window.confirm('¿Quitar esta dirección? Los servicios anteriores la conservan.')) return;
-    await execute(() => api.delete(`/customer/addresses/${id}`), {
-      onSuccess: addressQuery.reload,
-    });
+    await execute(() => api.delete(`/customer/addresses/${id}`), { onSuccess: addressQuery.reload });
   }
 
   async function handleSetDefault(id) {
@@ -94,9 +59,7 @@ export default function AddressesPage() {
     });
   }
 
-  if (loading) return <Spinner />;
-
-  const fields = addressFields();
+  if (addressQuery.loading) return <Spinner />;
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -104,8 +67,8 @@ export default function AddressesPage() {
         title="Tus direcciones"
         description="Dónde prestamos el servicio o recogemos tu ropa."
         action={
-          !showForm && (
-            <Button onClick={() => setShowForm(true)}>
+          !editing && (
+            <Button onClick={() => setEditing('new')}>
               <Plus className="size-4" aria-hidden="true" />
               Agregar
             </Button>
@@ -119,92 +82,36 @@ export default function AddressesPage() {
         </div>
       )}
 
-      {showForm && (
+      {outOfArea && !editing && (
+        <div className="mb-5">
+          <Alert tone="warning" title="Guardada, pero fuera de nuestra zona">
+            Todavía no damos servicio en esa ubicación. Puedes conservarla para más adelante.
+          </Alert>
+        </div>
+      )}
+
+      {editing && (
         <Card className="mb-6 p-5 sm:p-6">
-          <h2 className="mb-5 text-lg font-bold tracking-tight text-text">Nueva dirección</h2>
+          <h2 className="mb-5 text-lg font-bold tracking-tight text-text">
+            {editing === 'new' ? 'Nueva dirección' : 'Editar dirección'}
+          </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Nombre" hint="Para reconocerla rápido." required>
-              <Input
-                required
-                value={form.label}
-                onChange={(event) => setForm({ ...form, label: event.target.value })}
-                placeholder="Casa, Oficina…"
-              />
-            </Field>
-
-            {/* Los campos y sus etiquetas los define la región */}
-            {fields
-              .filter((field) => field !== 'reference')
-              .map((field) => (
-                <Field
-                  key={field}
-                  label={addressLabel(field)}
-                  required={isAddressFieldRequired(field)}
-                >
-                  <Input
-                    required={isAddressFieldRequired(field)}
-                    value={form[field] ?? ''}
-                    onChange={(event) => setForm({ ...form, [field]: event.target.value })}
-                  />
-                </Field>
-              ))}
-
-            <Field label={addressLabel('reference')} hint="Cómo reconocer el lugar al llegar.">
-              <Input
-                value={form.reference}
-                onChange={(event) => setForm({ ...form, reference: event.target.value })}
-                placeholder="Edificio Torre Azul, departamento 5B"
-              />
-            </Field>
-
-            {zones.length > 0 && (
-              <Field label="Zona" hint="Nos ayuda a asignar un profesional cercano.">
-                <Select
-                  value={form.zoneId}
-                  onChange={(event) => setForm({ ...form, zoneId: event.target.value })}
-                >
-                  <option value="">Sin especificar</option>
-                  {zones.map((zone) => (
-                    <option key={zone.id} value={zone.id}>
-                      {zone.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )}
-
-            <Checkbox
-              label="Usar como predeterminada"
-              checked={form.isDefault}
-              onChange={(event) => setForm({ ...form, isDefault: event.target.checked })}
-            />
-
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" loading={saving}>
-                Guardar dirección
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setShowForm(false);
-                  setForm(emptyForm());
-                }}
-              >
-                Cancelar
-              </Button>
-            </div>
-          </form>
+          <AddressForm
+            address={editing === 'new' ? null : editing}
+            submitting={saving}
+            submitLabel={editing === 'new' ? 'Guardar dirección' : 'Guardar cambios'}
+            onSubmit={handleSubmit}
+            onCancel={() => setEditing(null)}
+          />
         </Card>
       )}
 
-      {addresses.length === 0 && !showForm ? (
+      {addresses.length === 0 && !editing ? (
         <EmptyState
           icon={MapPin}
           title="Todavía no tienes direcciones"
           description="Agrega una para poder reservar tu primer servicio."
-          action={<Button onClick={() => setShowForm(true)}>Agregar dirección</Button>}
+          action={<Button onClick={() => setEditing('new')}>Agregar dirección</Button>}
         />
       ) : (
         <div className="space-y-3">
@@ -225,7 +132,7 @@ export default function AddressesPage() {
                       )}
                     </p>
                     <p className="mt-0.5 text-sm text-text-muted">
-                      {[address.street_line1, address.street_line2].filter(Boolean).join(' y ')}
+                      {[address.street_line1, address.street_line2].filter(Boolean).join(' · ')}
                     </p>
                     <p className="text-sm text-text-subtle">
                       {[address.neighborhood, address.city, address.administrative_area]
@@ -235,10 +142,29 @@ export default function AddressesPage() {
                     {address.reference && (
                       <p className="mt-1 text-sm text-text-subtle italic">{address.reference}</p>
                     )}
+                    {address.latitude && address.longitude ? (
+                      <p className="mt-1.5 flex items-center gap-1 text-xs text-forest-700">
+                        <MapPin className="size-3" aria-hidden="true" />
+                        Ubicación marcada en el mapa
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-text-subtle">
+                        Sin punto en el mapa: edítala para marcarlo.
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(address)}
+                    className="rounded-full p-2 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-forest-600"
+                    aria-label="Editar dirección"
+                    title="Editar"
+                  >
+                    <Pencil className="size-4" aria-hidden="true" />
+                  </button>
                   {!address.is_default && (
                     <button
                       type="button"

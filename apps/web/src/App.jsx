@@ -1,9 +1,12 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { useAuth, homePathForRoles } from '@/shared/auth/AuthContext';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useAuth, homePathForRoles, landingPathFor } from '@/shared/auth/AuthContext';
 import { Spinner } from '@/shared/ui';
 
 import LoginPage from '@/features/auth/LoginPage';
 import RegisterPage from '@/features/auth/RegisterPage';
+import ActivateAccountPage from '@/features/auth/ActivateAccountPage';
+import OnboardingPage from '@/features/onboarding/OnboardingPage';
+import ProfilePage from '@/features/profile/ProfilePage';
 import HomePage from '@/features/home/HomePage';
 
 import CustomerLayout from '@/features/customer/CustomerLayout';
@@ -34,22 +37,42 @@ import StaffJobsPage from '@/features/staff/JobsPage';
 import StaffJobDetail from '@/features/staff/JobDetailPage';
 
 /**
+ * Rutas de acceso. Se pintan como panel sobre la página en la que estabas, no
+ * como pantallas propias: ver `features/auth/AuthDialog`.
+ */
+const AUTH_PATHS = ['/entrar', '/crear-cuenta', '/activar-cuenta'];
+
+/**
  * Enrutado por audiencia.
  *
  * Cada árbol de rutas exige su rol, y con roles múltiples basta con tenerlo
  * entre los suyos: alguien con ADMIN + STAFF entra tanto en /operaciones como
  * en /trabajo. El backend vuelve a validar todo; esto solo evita que alguien
  * vea una pantalla que no le corresponde.
+ *
+ * Antes del rol se comprueba el onboarding, y ese orden importa: quien tiene el
+ * perfil a medias va a completarlo escriba la URL que escriba, y no rebota
+ * entre paneles buscando uno que le deje entrar.
  */
 function RequireRole({ role, children }) {
   const { user, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) return <Spinner label="Comprobando tu sesión" />;
   if (!isAuthenticated) return <Navigate to="/entrar" replace />;
+  if (user.onboarding?.pending) return <Navigate to="/onboarding" replace />;
   if (role && !user.roles?.includes(role)) {
     return <Navigate to={homePathForRoles(user.roles)} replace />;
   }
 
+  return children;
+}
+
+/** El onboarding solo exige sesión: es justamente lo que falta por completar. */
+function RequireSession({ children }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) return <Spinner label="Comprobando tu sesión" />;
+  if (!isAuthenticated) return <Navigate to="/entrar" replace />;
   return children;
 }
 
@@ -58,16 +81,36 @@ function RootRedirect() {
 
   if (isLoading) return <Spinner label="Cargando" />;
   if (!isAuthenticated) return <HomePage />;
-  return <Navigate to={homePathForRoles(user.roles)} replace />;
+  return <Navigate to={landingPathFor(user)} replace />;
 }
 
-export default function App() {
+function AppRoutes({ location }) {
   return (
-    <Routes>
+    <Routes location={location}>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/home" element={<HomePage />} />
-      <Route path="/entrar" element={<LoginPage />} />
-      <Route path="/crear-cuenta" element={<RegisterPage />} />
+
+      {/* Completar el perfil. Sin rol: depende de quién eres, no de dónde entras. */}
+      <Route
+        path="/onboarding"
+        element={
+          <RequireSession>
+            <OnboardingPage />
+          </RequireSession>
+        }
+      />
+
+      {/* Perfil propio: mismo sitio para clienta, trabajadora o administradora. */}
+      <Route
+        path="/mi-perfil"
+        element={
+          <RequireRole>
+            <div className="min-h-dvh bg-surface px-5 py-8">
+              <ProfilePage />
+            </div>
+          </RequireRole>
+        }
+      />
 
       {/* Cliente */}
       <Route
@@ -126,5 +169,28 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  );
+}
+
+export default function App() {
+  const location = useLocation();
+  // Al abrir el acceso desde una pantalla, esa pantalla se queda detrás. Si se
+  // llega por enlace directo no hay nada detrás, y entonces se usa la portada:
+  // un panel flotando sobre el vacío parecería un error.
+  const background = location.state?.background;
+  const isAuthRoute = AUTH_PATHS.includes(location.pathname);
+
+  return (
+    <>
+      {isAuthRoute && !background ? <HomePage /> : <AppRoutes location={background ?? location} />}
+
+      {isAuthRoute ? (
+        <Routes>
+          <Route path="/entrar" element={<LoginPage />} />
+          <Route path="/crear-cuenta" element={<RegisterPage />} />
+          <Route path="/activar-cuenta" element={<ActivateAccountPage />} />
+        </Routes>
+      ) : null}
+    </>
   );
 }

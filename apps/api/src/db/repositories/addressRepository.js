@@ -9,10 +9,15 @@ const { db } = require('../index');
  * referencian y perder la direccion romperia la trazabilidad.
  */
 
+/**
+ * La coordenada y el texto viajan siempre juntos pero son datos distintos:
+ * `latitude`/`longitude`/`google_place_id` dicen donde esta el domicilio;
+ * el resto, como lo describe el cliente. Ninguno sustituye al otro.
+ */
 const FIELDS = `
   id, user_id, label, region_code, street_line1, street_line2, neighborhood,
   city, administrative_area, postal_code, reference, latitude, longitude,
-  zone_id, is_default, created_at
+  google_place_id, zone_id, is_default, created_at
 `;
 
 async function listByUser(userId, tx = db) {
@@ -50,11 +55,11 @@ async function create(address, tx = db) {
     `INSERT INTO addresses (
        user_id, label, region_code, street_line1, street_line2, neighborhood,
        city, administrative_area, postal_code, reference, latitude, longitude,
-       zone_id, is_default
+       google_place_id, zone_id, is_default
      ) VALUES (
        $[userId], $[label], $[regionCode], $[streetLine1], $[streetLine2], $[neighborhood],
        $[city], $[administrativeArea], $[postalCode], $[reference], $[latitude], $[longitude],
-       $[zoneId], $[isDefault]
+       $[googlePlaceId], $[zoneId], $[isDefault]
      ) RETURNING ${FIELDS}`,
     address,
   );
@@ -79,6 +84,7 @@ async function update(id, userId, fields, tx = db) {
     'reference',
     'latitude',
     'longitude',
+    'google_place_id',
     'zone_id',
     'is_default',
   ];

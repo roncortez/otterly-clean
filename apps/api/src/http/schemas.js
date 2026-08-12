@@ -20,6 +20,9 @@ const phone = z
 
 const password = z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(128);
 
+const roleEnum = z.enum(['CUSTOMER', 'STAFF', 'ADMIN']);
+const serviceTypeEnum = z.enum(['CLEANING', 'LAUNDRY', 'ALTERATION']);
+
 // --- Autenticación ---------------------------------------------------------
 
 const registerSchema = z.object({
@@ -44,8 +47,28 @@ const changePasswordSchema = z.object({
   newPassword: password,
 });
 
+/**
+ * Activacion de una cuenta invitada.
+ *
+ * El token viaja en la ruta y se valida contra su hash; aqui solo se comprueba
+ * que tenga la forma que emite `crypto.randomToken` para descartar basura antes
+ * de tocar la base.
+ */
+const invitationTokenParamSchema = z.object({
+  token: z.string().regex(/^[a-f0-9]{32,128}$/, 'Invitación no válida'),
+});
+
+const acceptInvitationSchema = z.object({ password });
+
 // --- Direcciones -----------------------------------------------------------
 
+/**
+ * Direccion del cliente.
+ *
+ * Dos bloques que no se confunden: la ubicacion (coordenada y referencia del
+ * lugar de Google) y la direccion escrita, que el cliente corrige a mano porque
+ * Google no conoce urbanizaciones, conjuntos ni "junto al parque".
+ */
 const addressSchema = z.object({
   label: z.string().trim().min(1).max(60).default('Casa'),
   regionCode: z.enum(['EC', 'US']).optional(),
@@ -58,9 +81,42 @@ const addressSchema = z.object({
   reference: z.string().trim().max(500).optional().nullable(),
   latitude: z.number().min(-90).max(90).optional().nullable(),
   longitude: z.number().min(-180).max(180).optional().nullable(),
+  // Identificador del lugar elegido en el mapa. Se conserva como referencia,
+  // pero la direccion tiene que seguir sirviendo sin el.
+  googlePlaceId: z.string().trim().max(255).optional().nullable(),
   zoneId: id.optional().nullable(),
   isDefault: z.boolean().default(false),
 });
+
+/**
+ * Edicion de una direccion.
+ *
+ * Todo opcional a proposito: corregir el texto sin mover el pin y mover el pin
+ * sin reescribir el texto son dos operaciones legitimas y frecuentes.
+ */
+const updateAddressSchema = z
+  .object({
+    label: z.string().trim().min(1).max(60).optional(),
+    streetLine1: z.string().trim().min(1, 'La calle es obligatoria').max(200).optional(),
+    streetLine2: z.string().trim().max(200).optional().nullable(),
+    neighborhood: z.string().trim().max(120).optional().nullable(),
+    city: z.string().trim().min(1, 'La ciudad es obligatoria').max(120).optional(),
+    administrativeArea: z.string().trim().max(120).optional().nullable(),
+    postalCode: z.string().trim().max(20).optional().nullable(),
+    reference: z.string().trim().max(500).optional().nullable(),
+    latitude: z.number().min(-90).max(90).optional().nullable(),
+    longitude: z.number().min(-180).max(180).optional().nullable(),
+    googlePlaceId: z.string().trim().max(255).optional().nullable(),
+    zoneId: id.optional().nullable(),
+    isDefault: z.boolean().optional(),
+  })
+  .strict()
+  // Se escribe entero en lugar de derivarlo de `addressSchema` con `.partial()`
+  // justamente por esto: alli `label` e `isDefault` tienen valor por defecto, y
+  // un PATCH vacio habria "corregido" la etiqueta de la direccion a "Casa".
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'No hay nada que actualizar',
+  });
 
 // --- Detalle de limpieza ---------------------------------------------------
 
@@ -189,34 +245,84 @@ const assignSchema = z.object({
   notes: z.string().trim().max(500).optional().nullable(),
 });
 
-const createStaffSchema = z.object({
+/**
+ * Alta de un trabajador.
+ *
+ * Solo lo que la empresa sabe y decide: a quien contrata, como localizarlo,
+ * que roles tiene, que servicios puede atender y si la cuenta esta activa.
+ *
+ * No hay `password`: la cuenta nace sin contrasena utilizable y se activa con
+ * una invitacion. Tampoco hay biografia, foto ni nombre de presentacion: eso lo
+ * completa el trabajador en su onboarding, y pedirselo al ADMIN significaba que
+ * alguien escribia por el datos que son suyos.
+ */
+const createStaffFields = z.object({
   email: z.email('Correo invalido').max(255),
-  password,
   firstName: z.string().trim().min(1).max(80),
   lastName: z.string().trim().min(1).max(80),
   phone,
-  displayName: z.string().trim().max(80).optional(),
+  roles: z.array(roleEnum).min(1).max(3).optional(),
   employeeCode: z.string().trim().max(40).optional(),
-  bio: z.string().trim().max(1000).optional(),
-  photoUrl: z.string().url().max(500).optional(),
   hiredAt: isoDate.optional(),
-  skills: z.array(z.string().trim().max(40)).max(30).default([]),
-  serviceTypes: z.array(z.enum(['CLEANING', 'LAUNDRY', 'ALTERATION'])).min(1),
+  serviceTypes: z.array(serviceTypeEnum).min(1, 'Elige al menos un servicio que pueda atender'),
   zoneIds: z.array(id).max(50).default([]),
+  active: z.boolean().default(true),
   regionCode: z.enum(['EC', 'US']).optional(),
 });
 
-const updateStaffSchema = createStaffSchema
-  .omit({ email: true, password: true, serviceTypes: true })
-  .extend({
+const createStaffSchema = createStaffFields
+  // Estricto: un `password` o un `bio` en el cuerpo no se descartan en
+  // silencio. Quien los envia cree que va a fijar la contrasena o la
+  // presentacion del trabajador, y tiene que enterarse de que no es asi.
+  .strict();
+
+const updateStaffSchema = z
+  .object({
+    firstName: z.string().trim().min(1).max(80).optional(),
+    lastName: z.string().trim().min(1).max(80).optional(),
+    phone,
+    employeeCode: z.string().trim().max(40).optional(),
+    hiredAt: isoDate.optional(),
     serviceTypes: z.array(z.enum(['CLEANING', 'LAUNDRY', 'ALTERATION'])).optional(),
+    zoneIds: z.array(id).max(50).optional(),
     backgroundCheckStatus: z.enum(['NOT_STARTED', 'PENDING', 'CLEARED', 'FLAGGED']).optional(),
   })
-  .partial();
+  // Estricto: si llega `bio`, `photoUrl` o `roles` es que alguien espera poder
+  // cambiarlos desde aqui, y debe enterarse de que no es asi.
+  .strict();
 
 const verificationSchema = z.object({
   status: z.enum(['PENDING', 'IN_REVIEW', 'VERIFIED', 'REJECTED', 'EXPIRED']),
 });
+
+// --- Perfil propio y onboarding --------------------------------------------
+
+/**
+ * Lo que una persona puede cambiar de si misma.
+ *
+ * `.strict()` no es una precaucion cosmetica: es la barrera que hace que
+ * `{"roles": ["ADMIN"]}` en el cuerpo de `PATCH /api/me/profile` responda 400 en
+ * lugar de guardarse. El servicio vuelve a comprobarlo por rol, porque una sola
+ * defensa nunca es suficiente para algo asi.
+ */
+const selfProfileSchema = z
+  .object({
+    firstName: z.string().trim().min(1).max(80).optional(),
+    lastName: z.string().trim().min(1).max(80).optional(),
+    phone,
+    locale: z.enum(['es', 'en']).optional(),
+    // Solo tiene efecto para quien es STAFF; el servicio lo comprueba.
+    displayName: z.string().trim().min(1).max(80).optional(),
+    bio: z.string().trim().max(1000).optional().nullable(),
+    skills: z.array(z.string().trim().min(1).max(40)).max(30).optional(),
+    // Solo para quien es CUSTOMER.
+    taxIdType: z.enum(['RUC', 'CEDULA', 'SSN', 'EIN']).optional().nullable(),
+    taxId: z.string().trim().max(20).optional().nullable(),
+    marketingOptIn: z.boolean().optional(),
+  })
+  .strict();
+
+const onboardingPatchSchema = selfProfileSchema;
 
 const incidentSchema = z.object({
   category: z.enum([
@@ -256,9 +362,6 @@ const bagStatusSchema = z.object({
 });
 
 // --- Configuracion administrable -------------------------------------------
-
-const serviceTypeEnum = z.enum(['CLEANING', 'LAUNDRY', 'ALTERATION']);
-const roleEnum = z.enum(['CUSTOMER', 'STAFF', 'ADMIN']);
 
 /**
  * Datos publicos de la empresa.
@@ -429,7 +532,12 @@ module.exports = {
   loginSchema,
   refreshSchema,
   changePasswordSchema,
+  invitationTokenParamSchema,
+  acceptInvitationSchema,
+  selfProfileSchema,
+  onboardingPatchSchema,
   addressSchema,
+  updateAddressSchema,
   createCleaningOrderSchema,
   createLaundryOrderSchema,
   quoteSchema,

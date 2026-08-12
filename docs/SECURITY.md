@@ -12,6 +12,10 @@ la seguridad en parte del producto, no en una capa técnica añadida al final.
 | Un cliente ve o modifica pedidos de otro                | Toda lectura y escritura verifica la propiedad del recurso |
 | Un trabajador se asigna trabajo a sí mismo              | La transición a `ASSIGNED` solo la admite el rol `ADMIN` |
 | Alguien se registra como administrador                  | El registro público fuerza el rol `CUSTOMER`; el rol nunca se acepta del cliente |
+| Una contraseña inicial se filtra por correo o WhatsApp   | Nunca se envía ninguna: la cuenta nace sin contraseña utilizable y se activa con un enlace de un solo uso |
+| Un enlace de invitación filtrado abre una cuenta meses después | El token caduca, se consume al usarse y emitir uno nuevo revoca el anterior |
+| Un trabajador se asigna a sí mismo un rol o una capacidad | El perfil propio es una lista blanca de campos personales; `roles`, `service_types` y verificación no están en ella |
+| Alguien enumera las fotos de perfil de la base           | El nombre del archivo lleva un sufijo aleatorio; la referencia vive en la ficha, la URL no se adivina |
 | Un token sigue sirviendo tras desactivar a alguien      | Los roles y el estado se releen de la base en cada petición |
 | Alguien se queda sin acceso administrativo por error    | No se puede retirar el rol ni desactivar al último `ADMIN` activo |
 | Un trabajador cambia precios o cierra la agenda         | Toda la configuración cuelga de `/api/operations` y exige `ADMIN` |
@@ -32,6 +36,36 @@ la seguridad en parte del producto, no en una capa técnica añadida al final.
 - El login responde el mismo mensaje y consume un tiempo similar tanto si el
   correo no existe como si la contraseña es incorrecta, para no revelar qué
   correos están registrados.
+
+### Invitaciones: cómo entra alguien nuevo
+
+Las cuentas de trabajador las crea Operaciones, y **nunca con una contraseña
+inicial**. La cuenta nace con el hash de un valor aleatorio que no conoce nadie,
+así que no se puede entrar con ella hasta que su dueño elija su clave.
+
+El acceso llega por un enlace de un solo uso:
+
+```
+https://otterlyclean.ec/activar-cuenta?token=<64 hex>
+```
+
+- Token de **32 bytes** de `crypto.randomBytes`.
+- La base guarda **solo el SHA-256** (`user_invitations.token_hash`), igual que
+  con los refresh tokens: un volcado no permite activar ninguna cuenta.
+- **Caduca** (`INVITATION_TTL_HOURS`, 72 h por defecto).
+- **Se consume al usarse**: aceptar marca `accepted_at` dentro de la misma
+  transacción que fija la contraseña, así que no existe un instante con la clave
+  puesta y el enlace todavía válido.
+- **Emitir una nueva revoca la anterior**, de modo que en todo momento hay como
+  mucho un enlace utilizable por persona.
+- Aceptar revoca las sesiones abiertas de esa cuenta.
+- Token inexistente, caducado o ya usado responden **404 por igual**: esta ruta
+  no puede convertirse en un detector de correos registrados.
+
+El enlace **no se guarda en `notifications`**: el cuerpo del aviso es genérico y
+la URL con el token viaja solo en memoria hasta el driver. Mientras no exista un
+proveedor real de correo o WhatsApp, la respuesta de crear o reenviar la
+invitación devuelve el enlace a quien la generó, que es quien ya podía emitirlo.
 
 ### Dónde vive el token en el navegador
 
@@ -103,6 +137,47 @@ El mismo pedido se proyecta distinto según quién pregunta
 El cliente solo recibe del profesional lo necesario para confiar: nombre de
 presentación, foto, biografía y si está verificado. Nunca su apellido, teléfono
 ni su estado de antecedentes.
+
+### Perfil propio frente a datos administrativos
+
+`/api/me` es el único árbol cuyo sujeto no es un rol sino la persona, y su
+control de acceso es el más simple posible: **no hay ningún `:id` en sus rutas**,
+el recurso es siempre `req.user.id`. No existe forma de pedir ni de escribir el
+perfil de otra persona.
+
+Dentro de él, la frontera la define `profileService.SELF_EDITABLE`, una lista
+blanca de campos personales:
+
+| Dato                                             | Lo cambia |
+| ------------------------------------------------ | --------- |
+| Nombres, apellidos, teléfono, idioma              | La persona |
+| Nombre de presentación, biografía, habilidades    | La persona (si es STAFF) |
+| Foto de perfil                                    | La persona |
+| Datos de facturación y preferencias de marketing  | La persona (si es CUSTOMER) |
+| **Roles**                                         | ADMIN |
+| **Estado de la cuenta (activo/inactivo)**         | ADMIN |
+| **Capacidades de servicio (`service_types`)**     | ADMIN |
+| **Zonas, verificación, antecedentes, código de empleado, fecha de alta** | ADMIN |
+
+Que `roles` o `service_types` no aparezcan ahí no es un filtro "por si acaso":
+es que el mapa no los contiene. Además el esquema Zod es `.strict()`, así que un
+`{"roles": ["ADMIN"]}` en el cuerpo responde **400** en lugar de guardarse a
+medias, y el servicio vuelve a comprobar por rol antes de escribir. La simetría
+también se aplica en el otro sentido: `PATCH /api/operations/staff/:id` ya no
+admite `bio`, `photoUrl` ni `displayName`.
+
+### Fotos de perfil
+
+Misma tubería que las imágenes de marca —firma binaria, límite de tamaño, sin
+SVG, en memoria y nunca en disco— con dos diferencias:
+
+- **El destino se deriva de la sesión**, no de la petición: la carpeta es fija y
+  el nombre se construye con `req.user.id`.
+- **El nombre lleva un sufijo aleatorio**. Cloudinary sirve por URL pública, y un
+  nombre predecible (`usuario-42`) permitiría recorrer las fotos de toda la base.
+  La referencia se guarda en la ficha (`photo_public_id`) y la URL no se adivina.
+
+En la base solo hay referencias: la imagen nunca entra en una columna.
 
 ## Datos sensibles de acceso
 
@@ -207,6 +282,39 @@ Solo `ADMIN`, y solo para imágenes que ya son públicas. Los controles:
 Las credenciales de Cloudinary son **configuración técnica**: viven en variables
 de entorno y no se pueden ver ni editar desde ninguna pantalla.
 
+### La clave de Google Maps
+
+`VITE_GOOGLE_MAPS_API_KEY` la usa el navegador, así que **no es un secreto**:
+viaja en cada petición del mapa y cualquiera puede leerla. Tratarla como si lo
+fuera —esconderla tras el backend— no protegería nada y rompería el mapa.
+
+Lo que sí la protege son sus restricciones, y hay que configurarlas en la consola
+de Google antes de publicar:
+
+- **Restricción de aplicación**: referrers HTTP, solo los dominios de la
+  aplicación.
+- **Restricción de API**: Maps JavaScript API, Places API (New) y Geocoding API.
+  Nada más.
+
+Aun así no se escribe en el código: llega por variable de entorno, como el resto.
+Si falta, la pantalla de direcciones sigue funcionando escribiendo a mano.
+
+Las claves que sí son secretas (Cloudinary, JWT, cifrado) siguen viviendo solo en
+el backend.
+
+### Ubicación de las direcciones
+
+La coordenada que elige el cliente es un dato del negocio, no de Google: se
+guarda en `addresses.latitude/longitude` junto al texto que él escribe.
+`google_place_id` se conserva como referencia, pero **la dirección tiene que
+seguir siendo utilizable sin Google**, y las pruebas lo comprueban.
+
+Que una ubicación sea válida no significa que se atienda. La comprobación contra
+las zonas activas ocurre **en el backend**, tanto al guardar la dirección como al
+reservar: el aviso del navegador es cortesía, no control. Fuera de cobertura, la
+dirección se puede guardar —puede ser la casa de un familiar— pero la reserva se
+rechaza con `OUT_OF_SERVICE_AREA`.
+
 ## Auditoría
 
 `audit_log` registra las operaciones sensibles: creación de pedidos, cambios de
@@ -226,6 +334,11 @@ USER_ROLES_UPDATED              quién concedió o retiró qué rol
 USER_STATUS_CHANGED             alta o baja de una cuenta
 MEDIA_UPLOADED                  imagen subida, con destino y tamaño
 MEDIA_DELETED                   imagen retirada
+USER_INVITED                    quién invitó a quién, por qué canal y hasta cuándo
+USER_INVITATION_ACCEPTED        cuándo se activó la cuenta
+PROFILE_UPDATED                 qué campos cambió alguien de su propio perfil
+PROFILE_PHOTO_UPDATED           foto puesta o retirada
+ONBOARDING_COMPLETED            perfil dado por completo, con su faceta
 ```
 
 Los cambios de configuración y de roles guardan `before` y `after`, de modo que

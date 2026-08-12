@@ -23,6 +23,8 @@ const STATUS_BY_CODE = {
   UNKNOWN_PRICING_MODEL: 400,
   UNKNOWN_SERVICE_TYPE: 400,
   SERVICE_NOT_AVAILABLE: 400,
+  // La ubicacion es valida, pero la empresa todavia no opera alli.
+  OUT_OF_SERVICE_AREA: 422,
   NO_TRANSITION_PATH: 409,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,

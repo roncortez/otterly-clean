@@ -76,6 +76,35 @@ export function AuthProvider({ children }) {
     [applySession],
   );
 
+  /**
+   * Vuelve a leer el usuario de la sesión.
+   *
+   * Hace falta cuando algo cambia fuera de este contexto y afecta a por dónde
+   * puede navegar: al terminar el onboarding, sobre todo. El estado de
+   * `onboarding` viaja dentro del usuario, así que refrescarlo es lo que abre
+   * la aplicación.
+   */
+  const refreshUser = useCallback(async () => {
+    const { data } = await api.get('/auth/me');
+    setUser(data.user);
+    return data.user;
+  }, []);
+
+  /**
+   * Abre sesión con una respuesta de sesión ya obtenida.
+   *
+   * La usa la activación por invitación: el backend devuelve la sesión completa
+   * al aceptar el enlace, así que pedir la contraseña otra vez para iniciar
+   * sesión sería hacerle repetir lo que acaba de hacer.
+   */
+  const applyExternalSession = useCallback(
+    (session) => {
+      applySession(session);
+      return session.user;
+    },
+    [applySession],
+  );
+
   const logout = useCallback(async () => {
     const refreshToken = tokenStore.getRefresh();
     try {
@@ -95,11 +124,16 @@ export function AuthProvider({ children }) {
       isAuthenticated: status === 'authenticated',
       isLoading: status === 'loading',
       hasRole: (role) => Boolean(user?.roles?.includes(role)),
+      // Lo calcula el backend y viaja con el usuario. El frontend no decide si
+      // falta completar el perfil: solo obedece.
+      needsOnboarding: Boolean(user?.onboarding?.pending),
       login,
       register,
       logout,
+      refreshUser,
+      applyExternalSession,
     }),
-    [user, status, login, register, logout],
+    [user, status, login, register, logout, refreshUser, applyExternalSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -122,4 +156,17 @@ export function homePathForRoles(roles = []) {
   if (roles.includes('ADMIN')) return '/operaciones';
   if (roles.includes('STAFF')) return '/trabajo';
   return '/inicio';
+}
+
+/**
+ * A dónde llevar a alguien que acaba de entrar.
+ *
+ * Antes del panel que le corresponde va una pregunta: ¿tiene el perfil
+ * completo? Si no, primero el onboarding. Es la misma decisión que toma la
+ * guarda de navegación, en un solo sitio, para que iniciar sesión y escribir la
+ * URL a mano acaben en el mismo lugar.
+ */
+export function landingPathFor(user) {
+  if (user?.onboarding?.pending) return '/onboarding';
+  return homePathForRoles(user?.roles);
 }

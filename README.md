@@ -71,7 +71,30 @@ CLOUDINARY_API_SECRET=...
 ```
 
 Sin esas variables la aplicación funciona igual: los campos de imagen se
-degradan a un campo de URL.
+degradan a un campo de URL. Las fotos de perfil usan la misma configuración.
+
+### Mapa para elegir la dirección (opcional)
+
+El cliente marca en un mapa dónde está su casa y corrige después la dirección
+escrita. Para habilitarlo, en `apps/web/.env`:
+
+```bash
+VITE_GOOGLE_MAPS_API_KEY=...
+VITE_GOOGLE_MAPS_MAP_ID=DEMO_MAP_ID   # o uno propio, con el estilo de la marca
+```
+
+Esa clave la usa el navegador, así que **no es un secreto**: lo que la protege
+son sus restricciones de dominio y de API en la consola de Google
+([detalles](docs/SECURITY.md#la-clave-de-google-maps)). Sin clave, la dirección
+se escribe a mano y todo lo demás sigue igual.
+
+### Invitaciones
+
+En `apps/api/.env`, `APP_URL` es la dirección pública del frontend: con ella se
+construye el enlace de activación que recibe un trabajador invitado. Mientras no
+haya un proveedor real de correo o WhatsApp, ese enlace se muestra en la pantalla
+de trabajadores para reenviarlo a mano, y el sistema dice con claridad que ningún
+canal lo entregó.
 
 El frontend habla con `/api` y Vite lo reenvía al backend, así que en
 desarrollo no hay CORS que configurar.
@@ -122,8 +145,11 @@ apps/api/
 apps/web/
   src/
     shared/              cliente API, sesión, configuración regional, UI, formato
+    shared/maps/         carga de Google Maps y selector de ubicación
     features/
-      auth/              entrar y crear cuenta
+      auth/              panel de acceso: entrar, crear cuenta y activar invitación
+      onboarding/        completar el perfil, con los pasos que decide el backend
+      profile/           perfil propio: datos personales y foto
       customer/          panel, asistente de reserva, detalle, direcciones
       operations/        panel operativo, solicitudes, trabajadores, incidencias
         configuration/   empresa, servicios, agenda y avisos
@@ -154,11 +180,22 @@ cada bolsa lleva un código derivado de la orden.
 datos de la empresa, si cada servicio se ofrece y a qué precio, y cuándo la
 agenda acepta reservas. Todo eso antes exigía tocar código o seeds.
 
+**Alta de personal**: Operaciones crea la cuenta con lo que solo la empresa sabe
+(contacto, roles, servicios que puede atender, zonas) y el sistema emite una
+invitación. El trabajador elige su contraseña con un enlace de un solo uso y
+completa su propio perfil —presentación, biografía y foto— antes de entrar. Nadie
+escribe datos personales en nombre de otro y no circula ninguna contraseña por
+correo.
+
+**Direcciones**: el cliente marca en el mapa dónde está su casa y corrige la
+dirección escrita encima, porque Google no conoce las urbanizaciones de Quito. El
+backend valida contra las zonas de cobertura antes de aceptar una reserva.
+
 ### Preparado pero no implementado
 
 Pagos (el dominio ya modela importe, moneda, impuesto y estado), envío real de
-email/SMS/push (existe la abstracción y el registro), geolocalización, códigos
-QR en las bolsas, recurrencia, calificaciones y el **flujo de reserva de arreglo
-de prendas**: su configuración comercial ya es administrable, pero le faltan la
+email/WhatsApp/SMS/push (existe la abstracción de canal, el catálogo de eventos y
+el registro; falta el proveedor), códigos QR en las bolsas, recurrencia,
+calificaciones y el **flujo de reserva de arreglo de prendas**: su configuración comercial ya es administrable, pero le faltan la
 máquina de estados, el esquema de validación y el endpoint de creación. Ver
 [qué falta exactamente](docs/ARCHITECTURE.md#arreglo-de-prendas-qué-falta).

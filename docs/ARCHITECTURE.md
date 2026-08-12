@@ -131,6 +131,7 @@ orders ──┬── order_status_history    (fuente de verdad del timeline)
          └── notifications
 
 users ───┬── user_roles              (una persona, varios roles)
+         ├── user_invitations        (alta de cuenta por enlace de un solo uso)
          ├── customer_profiles
          └── staff_profiles ── staff_zones, staff_availability
 
@@ -384,12 +385,97 @@ El dominio emite **eventos** ("el profesional llegó"), no mensajes.
 `notifications/events.js` decide destinatarios, canales y textos;
 `notifications/index.js` delega el envío a un driver intercambiable.
 
-Hoy solo existe el driver de consola: todo queda registrado en la tabla
-`notifications` y las de canal `IN_APP` se marcan como enviadas. Las de EMAIL,
-SMS y PUSH quedan en `PENDING` esperando a que exista un driver real.
+Cada **canal** tiene su driver (`notifications/drivers.js`) y cada driver responde
+dos preguntas: si hay un proveedor real detrás (`isConfigured`) y cómo fue el
+envío (`send`). Hoy solo `IN_APP` tiene proveedor —la consola—; EMAIL, WHATSAPP,
+SMS y PUSH quedan en `PENDING` con el motivo (`DRIVER_NOT_CONFIGURED`).
+
+**Un canal sin proveedor nunca marca nada como enviado.** Decir `SENT` de algo
+que nadie entregó convierte la bitácora en una mentira y hace imposible detectar
+que un aviso no llegó. Integrar WhatsApp Cloud API, Twilio o un proveedor de
+correo es escribir su driver: ni el dominio ni las rutas cambian.
+
+Cuando un evento lleva algo que **no debe persistirse** —el enlace de activación
+de una invitación, que contiene un token— viaja en el contexto en memoria hasta
+el driver, y el cuerpo que se guarda en `notifications` es genérico.
 
 Emitir una notificación **nunca lanza excepción**: marcar "llegué" tiene que
 funcionar aunque el proveedor de correo esté caído.
+
+## Alta de cuenta y onboarding
+
+Quién aporta cada dato es una decisión de producto, no un detalle de formulario:
+
+```
+ADMIN crea la cuenta          →  contacto, roles, capacidades, zonas, activa
+       ↓ invitación (enlace de un solo uso)
+La persona activa su cuenta   →  elige su contraseña
+       ↓
+Onboarding                    →  su presentación, su biografía, su foto
+```
+
+Antes el ADMIN tecleaba también la biografía, la foto y la contraseña inicial del
+trabajador. Eso significaba que alguien escribía en nombre de otro datos que son
+suyos, y que existía una credencial compartida por correo. Ahora la empresa
+aporta lo que solo ella sabe y la persona aporta lo suyo.
+
+### Por qué el onboarding cuelga del perfil y no del rol
+
+`onboarding_completed_at` vive en `staff_profiles` y en `customer_profiles`, no
+en `users`. Con una sola columna, alguien que es trabajador **y** cliente daría
+por completo su perfil de cliente al terminar el de trabajador.
+
+`onboardingService` calcula, para cada persona, qué facetas le faltan
+(`pendingScopes`) y devuelve los pasos de la primera, con los valores que ya
+tiene. De ahí salen dos propiedades que importan:
+
+- **No se pregunta dos veces.** Quien se registró con teléfono no vuelve a verlo;
+  al trabajador no se le pide el nombre que ya puso Operaciones.
+- **Quien solo administra no tiene onboarding.** No hay perfil que completar, así
+  que `pending` es `false` y nada le bloquea.
+
+Los pasos los define el backend (`STEPS`) y la pantalla los pinta: no hay dos
+listas de campos que puedan desincronizarse.
+
+La guarda de navegación vive en `App.jsx` y comprueba el onboarding **antes** que
+el rol. Ese orden evita el rebote entre paneles y, sobre todo, el bucle: la
+pantalla de onboarding redirige a casa solo cuando el backend dice que ya no hay
+nada pendiente.
+
+## Ubicación de las direcciones
+
+Una dirección son dos datos complementarios que **no se sustituyen**:
+
+| Mitad                  | Qué responde                | Quién manda |
+| ---------------------- | --------------------------- | ----------- |
+| `latitude`, `longitude`, `google_place_id` | Dónde está la casa | El mapa |
+| `street_line1/2`, `neighborhood`, `city`, `administrative_area`, `reference` | Cómo se describe | El cliente |
+
+Google acierta con la ciudad y la provincia, y falla con urbanizaciones,
+conjuntos y numeraciones de Quito. Por eso el formulario **no desaparece** tras
+elegir el punto: una sugerencia solo se aplica cuando hay una acción explícita
+(elegir un resultado, mover el pin, pedir la ubicación actual o pulsar "usar la
+dirección del mapa"), y mover el pin no pisa lo que ya se corrigió a mano.
+
+No se añadieron columnas de número, edificio o departamento: `street_line1` y
+`street_line2` ya lo cubren, y duplicarlas obligaría a decidir cuál manda.
+
+### Cobertura sin PostGIS
+
+`service_zones` eran etiquetas (ciudad, provincia) y no sabían dónde están. Se
+les añadió un círculo —`center_latitude`, `center_longitude`, `radius_km`— en
+lugar de polígonos con PostGIS: basta para "Quito y los valles", se calcula con
+aritmética (`domain/shared/serviceArea.js`) y no añade una extensión a la base.
+Cuando el negocio necesite fronteras reales, se sustituye ese módulo.
+
+Dos reglas deliberadas:
+
+- **Una zona sin círculo no opina**, y si ninguna zona activa lo tiene, no se
+  rechaza nada. La restricción aparece cuando Operaciones la configura, no por
+  defecto: abrir una ciudad no puede exigir un despliegue.
+- **El sesgo del buscador sale de las zonas**, no de una constante
+  (`GET /api/catalog/config` → `maps.bias`). Ampliar la cobertura amplía también
+  dónde busca el cliente.
 
 ## Roles múltiples
 
@@ -489,10 +575,10 @@ refresca una vez y reintenta la petición original de forma transparente.
 | Área              | Qué existe ya                                                    |
 | ----------------- | ---------------------------------------------------------------- |
 | Pagos             | Tabla `payments`, importes, moneda, impuesto y estado en `orders` |
-| Email/SMS/Push    | Abstracción de canal, catálogo de eventos y registro en base      |
+| Email/WhatsApp/SMS/Push | Abstracción de canal con drivers, catálogo de eventos y registro en base; falta el proveedor |
 | Arreglo de prendas| Tipo, tabla de detalle, plan y configuración comercial administrable; falta el flujo |
 | QR / códigos      | `laundry_bags.bag_code` como texto libre                          |
-| Geolocalización   | `addresses.latitude/longitude`                                    |
+| Geolocalización   | Punto exacto por dirección y cobertura por zona; falta usarlo para navegación y distancias |
 | Multi-país        | `config/regions.js` y `service_zones`                             |
 | Disponibilidad de personal | `staff_availability` (semanal, aún no se cruza al asignar) |
 | Auditoría         | `audit_log` poblado; falta una interfaz de consulta               |

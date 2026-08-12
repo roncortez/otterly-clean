@@ -1,22 +1,56 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { I18nProvider } from '@/shared/i18n/I18nContext';
 
 /**
- * Enrutado por roles.
+ * Enrutado por roles y por estado del perfil.
  *
  * El backend es quien decide de verdad; estas pruebas cubren la otra mitad: que
- * nadie vea una consola que no le corresponde y que quien tiene dos roles pueda
- * usar las dos sin cerrar sesión.
+ * nadie vea una consola que no le corresponde, que quien tiene dos roles pueda
+ * usar las dos sin cerrar sesión, y que quien tiene el perfil a medias acabe en
+ * el onboarding escriba la URL que escriba.
  */
 
 // Sin red en las pruebas: cualquier pantalla que pida datos recibe una respuesta
 // vacía y renderiza su estado por defecto.
 vi.mock('@/shared/api/client', () => {
   const resolved = () => Promise.resolve({ data: {} });
+
+  /**
+   * El onboarding lee su estado del backend. Aquí se devuelve el mismo que
+   * declara la sesión simulada, para que la pantalla y la guarda no puedan
+   * contarse cosas distintas.
+   */
+  const get = (path) => {
+    if (!path?.includes('/me/onboarding')) return resolved();
+    const onboarding = mockAuth.current?.user?.onboarding ?? { pending: false, scope: null };
+    return Promise.resolve({
+      data: {
+        onboarding: {
+          ...onboarding,
+          steps: onboarding.pending
+            ? [
+                {
+                  code: 'PERSONAL',
+                  title: 'Tu información',
+                  pending: true,
+                  fields: [
+                    { key: 'phone', label: 'Teléfono', type: 'phone', required: true, pending: true },
+                  ],
+                },
+              ]
+            : [],
+          values: {},
+          missing: onboarding.pending ? ['phone'] : [],
+        },
+      },
+    });
+  };
+
   return {
-    api: { get: resolved, post: resolved, patch: resolved, put: resolved, delete: resolved },
-    default: { get: resolved, post: resolved, patch: resolved, put: resolved, delete: resolved },
+    api: { get, post: resolved, patch: resolved, put: resolved, delete: resolved },
+    default: { get, post: resolved, patch: resolved, put: resolved, delete: resolved },
     tokenStore: { getAccess: () => null, setAccess: () => {}, getRefresh: () => null, setRefresh: () => {}, clear: () => {} },
     setSessionExpiredHandler: () => {},
     errorMessage: () => 'error',
@@ -49,24 +83,29 @@ vi.mock('@/shared/auth/AuthContext', async (importOriginal) => {
 
 const { default: App } = await import('@/App');
 
-function signedInAs(roles) {
+function signedInAs(roles, onboarding = null) {
   mockAuth.current = {
-    user: { id: 1, firstName: 'Paula', roles },
+    user: { id: 1, firstName: 'Paula', roles, onboarding },
     roles,
     status: 'authenticated',
     isAuthenticated: true,
     isLoading: false,
     hasRole: (role) => roles.includes(role),
+    needsOnboarding: Boolean(onboarding?.pending),
     login: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
+    refreshUser: vi.fn(),
+    applyExternalSession: vi.fn(),
   };
 }
 
 function renderAt(path) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <App />
+      <I18nProvider>
+        <App />
+      </I18nProvider>
     </MemoryRouter>,
   );
 }
@@ -140,12 +179,73 @@ describe('Acceso por roles', () => {
       isAuthenticated: false,
       isLoading: false,
       hasRole: () => false,
+      needsOnboarding: false,
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
+      refreshUser: vi.fn(),
+      applyExternalSession: vi.fn(),
     };
 
     renderAt('/operaciones');
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+  });
+
+  it('el acceso se abre como panel, con la página detrás', () => {
+    mockAuth.current = {
+      user: null,
+      roles: [],
+      status: 'anonymous',
+      isAuthenticated: false,
+      isLoading: false,
+      hasRole: () => false,
+      needsOnboarding: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+      applyExternalSession: vi.fn(),
+    };
+
+    renderAt('/entrar');
+
+    // Es un diálogo sobre la portada, no una pantalla completa aparte.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    // Y la portada sigue montada detrás.
+    expect(screen.getAllByRole('banner').length).toBeGreaterThan(0);
+  });
+});
+
+describe('Guarda de onboarding', () => {
+  it('con el perfil a medias, cualquier ruta lleva al onboarding', async () => {
+    signedInAs(['STAFF'], { pending: true, scope: 'STAFF' });
+    renderAt('/trabajo');
+
+    // Acaba en el asistente, no en su panel de trabajos.
+    expect(await screen.findByText('Tu información')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Ir a Operaciones')).not.toBeInTheDocument();
+  });
+
+  it('tampoco puede saltárselo escribiendo otra URL', async () => {
+    signedInAs(['ADMIN', 'STAFF'], { pending: true, scope: 'STAFF' });
+    renderAt('/operaciones');
+
+    expect(await screen.findByText('Tu información')).toBeInTheDocument();
+    expect(screen.queryByText('Solicitudes')).not.toBeInTheDocument();
+  });
+
+  it('con el perfil completo entra con normalidad y no vuelve al onboarding', () => {
+    signedInAs(['STAFF'], { pending: false, scope: null });
+    renderAt('/trabajo');
+
+    expect(screen.getByText('Paula')).toBeInTheDocument();
+  });
+
+  it('quien no tiene nada pendiente y abre /onboarding vuelve a su panel', async () => {
+    signedInAs(['CUSTOMER'], { pending: false, scope: null });
+    renderAt('/onboarding');
+
+    expect((await screen.findAllByText('Direcciones')).length).toBeGreaterThan(0);
   });
 });

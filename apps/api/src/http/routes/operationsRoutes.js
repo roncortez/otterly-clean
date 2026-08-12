@@ -160,17 +160,45 @@ router.get(
   }),
 );
 
-/** Las cuentas de trabajador las crea la empresa, nunca un registro publico. */
+/**
+ * Alta de un trabajador.
+ *
+ * La empresa crea la cuenta con lo que solo ella sabe (contacto, roles,
+ * capacidades, zonas) y el sistema emite la invitacion. Nadie escribe una
+ * contrasena inicial: la elige la persona al aceptar el enlace.
+ *
+ * `activationUrl` se devuelve a quien invita porque mientras no exista un
+ * proveedor real de correo o WhatsApp es la unica forma de hacer llegar el
+ * enlace. No se guarda en ninguna tabla ni aparece en ningun listado.
+ */
 router.post(
   '/staff',
   validate({ body: schemas.createStaffSchema }),
   asyncHandler(async (req, res) => {
-    const staff = await staffService.createStaff({
+    const { staff, invitation } = await staffService.createStaff({
       payload: req.body,
       actor: req.user,
       request: req,
     });
-    res.status(201).json({ staff });
+    res.status(201).json({ staff, ...invitation });
+  }),
+);
+
+/**
+ * POST /api/operations/staff/:id/invite
+ * Reenvia la invitacion: emite un enlace nuevo e invalida el anterior, tanto si
+ * caduco como si se perdio.
+ */
+router.post(
+  '/staff/:id/invite',
+  validate({ params: schemas.idParamSchema }),
+  asyncHandler(async (req, res) => {
+    const result = await staffService.reinvite({
+      staffId: req.validatedParams.id,
+      actor: req.user,
+      request: req,
+    });
+    res.status(201).json(result);
   }),
 );
 
@@ -298,6 +326,11 @@ router.post(
       city: z.string().trim().min(1).max(120),
       administrativeArea: z.string().trim().max(120).optional(),
       regionCode: z.enum(['EC', 'US']).optional(),
+      // Cobertura geografica: centro y radio en kilometros. Opcional, porque
+      // una zona puede existir como etiqueta antes de decidir hasta donde llega.
+      centerLatitude: z.number().min(-90).max(90).optional(),
+      centerLongitude: z.number().min(-180).max(180).optional(),
+      radiusKm: z.number().positive().max(500).optional(),
     }),
   }),
   asyncHandler(async (req, res) => {

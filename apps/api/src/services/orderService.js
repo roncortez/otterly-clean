@@ -3,6 +3,7 @@
 const { db } = require('../db');
 const orderRepo = require('../db/repositories/orderRepository');
 const addressRepo = require('../db/repositories/addressRepository');
+const addressService = require('./addressService');
 const catalogRepo = require('../db/repositories/catalogRepository');
 const assignmentRepo = require('../db/repositories/assignmentRepository');
 const audit = require('./auditService');
@@ -70,6 +71,11 @@ async function createOrder({ serviceType, customer, payload, request }) {
   const address = await addressRepo.findByIdForUser(payload.addressId, customer.id);
   if (!address) throw new NotFoundError('Direccion', payload.addressId);
 
+  // Que Google devuelva un punto valido no significa que lo atendamos. Se
+  // comprueba aqui, en el servidor, y no solo al guardar la direccion: la
+  // cobertura pudo cambiar entre que se registro la casa y se reserva.
+  const serviceArea = await addressService.assertServiceable(address);
+
   // La direccion de entrega se valida igual. Sin esta comprobacion un cliente
   // podria enlazar su pedido a la direccion de otra persona.
   let deliveryAddress = null;
@@ -120,7 +126,9 @@ async function createOrder({ serviceType, customer, payload, request }) {
         customerId: customer.id,
         planId: plan.id,
         regionCode: region.code,
-        zoneId: address.zone_id ?? null,
+        // La zona vigente de la coordenada manda sobre la que se guardo el dia
+        // que se creo la direccion: la cobertura la puede haber movido Operaciones.
+        zoneId: serviceArea?.zoneId ?? address.zone_id ?? null,
         status: stateMachine.initialState,
         addressId: address.id,
         deliveryAddressId: deliveryAddress?.id ?? null,

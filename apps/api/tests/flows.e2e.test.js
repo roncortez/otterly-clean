@@ -744,7 +744,6 @@ describe('Panel de operaciones', () => {
       .set('Authorization', `Bearer ${auth.admin}`)
       .send({
         email: `nuevo.staff.${stamp}@otterlyclean.ec`,
-        password: 'Staff123!',
         firstName: 'Nuevo',
         lastName: 'Trabajador',
         phone: '+593991000099',
@@ -754,6 +753,8 @@ describe('Panel de operaciones', () => {
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     // Nace sin verificar: no puede recibir trabajos todavia.
     expect(res.body.staff.verification_status).toBe('PENDING');
+    // Y sin contrasena: se activa con la invitacion que emite el sistema.
+    expect(res.body.invitation.status).toBe('PENDING');
 
     const staffId = res.body.staff.id;
 

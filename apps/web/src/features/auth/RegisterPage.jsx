@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth, homePathForRoles } from '@/shared/auth/AuthContext';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth, landingPathFor } from '@/shared/auth/AuthContext';
 import { useConfig } from '@/shared/config/ConfigContext';
 import { errorMessage } from '@/shared/api/client';
-import BrandMark from '@/shared/ui/BrandMark';
 import { Alert, Button, Field, Input } from '@/shared/ui';
+import AuthDialog from './AuthDialog';
 
 export default function RegisterPage() {
   const { register } = useAuth();
   const { phonePlaceholder, phonePrefix } = useConfig();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [form, setForm] = useState({
     firstName: '',
@@ -40,7 +41,9 @@ export default function RegisterPage() {
       // El registro público siempre crea un CUSTOMER: el rol lo decide el
       // backend y nunca viaja en este formulario.
       const created = await register({ ...form, phone: normalizedPhone });
-      navigate(homePathForRoles(created.roles), { replace: true });
+      // Lo que falte del perfil se pide después, en un paso corto: aquí solo se
+      // pide lo imprescindible para tener cuenta.
+      navigate(landingPathFor(created), { replace: true });
     } catch (requestError) {
       setError(errorMessage(requestError, 'No pudimos crear tu cuenta.'));
     } finally {
@@ -49,64 +52,73 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-5 py-12">
-      <div className="w-full max-w-md">
-        <BrandMark size="lg" className="mb-8" />
-
-        <h1 className="text-2xl font-extrabold tracking-tight text-text">Crea tu cuenta</h1>
-        <p className="mt-1.5 text-text-muted">
-          Reserva y sigue cada servicio desde donde estés.
-        </p>
-
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-          {error && <Alert tone="danger">{error}</Alert>}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Nombre" required>
-              <Input required value={form.firstName} onChange={update('firstName')} autoComplete="given-name" />
-            </Field>
-            <Field label="Apellido" required>
-              <Input required value={form.lastName} onChange={update('lastName')} autoComplete="family-name" />
-            </Field>
-          </div>
-
-          <Field label="Correo electrónico" required>
-            <Input type="email" required value={form.email} onChange={update('email')} autoComplete="email" />
-          </Field>
-
-          <Field label="Teléfono" hint="Lo usamos para coordinar el acceso el día del servicio.">
-            <Input
-              type="tel"
-              value={form.phone}
-              onChange={update('phone')}
-              placeholder={phonePlaceholder}
-              autoComplete="tel"
-            />
-          </Field>
-
-          <Field label="Contraseña" hint="Mínimo 8 caracteres." required>
-            <Input
-              type="password"
-              required
-              minLength={8}
-              value={form.password}
-              onChange={update('password')}
-              autoComplete="new-password"
-            />
-          </Field>
-
-          <Button type="submit" size="lg" loading={submitting} className="w-full">
-            Crear cuenta
-          </Button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-text-muted">
+    <AuthDialog
+      title="Crea tu cuenta"
+      description="Reserva y sigue cada servicio desde donde estés."
+      aside={
+        <>
+          <p className="text-xl leading-tight font-extrabold tracking-tight text-balance">
+            Reserva en un minuto y sigue el servicio desde donde estés.
+          </p>
+          <p className="mt-3 text-sm text-forest-100">
+            Solo te pedimos lo imprescindible para empezar.
+          </p>
+        </>
+      }
+      footer={
+        <p className="text-center text-sm text-text-muted">
           ¿Ya tienes cuenta?{' '}
-          <Link to="/entrar" className="font-medium text-forest-600 hover:text-forest-700">
+          <Link
+            to="/entrar"
+            state={location.state}
+            className="font-medium text-forest-600 hover:text-forest-700"
+          >
             Entrar
           </Link>
         </p>
-      </div>
-    </main>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <Alert tone="danger">{error}</Alert>}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Nombre" required>
+            <Input required value={form.firstName} onChange={update('firstName')} autoComplete="given-name" />
+          </Field>
+          <Field label="Apellido" required>
+            <Input required value={form.lastName} onChange={update('lastName')} autoComplete="family-name" />
+          </Field>
+        </div>
+
+        <Field label="Correo electrónico" required>
+          <Input type="email" required value={form.email} onChange={update('email')} autoComplete="email" />
+        </Field>
+
+        <Field label="Teléfono" hint="Lo usamos para coordinar el acceso el día del servicio.">
+          <Input
+            type="tel"
+            value={form.phone}
+            onChange={update('phone')}
+            placeholder={phonePlaceholder}
+            autoComplete="tel"
+          />
+        </Field>
+
+        <Field label="Contraseña" hint="Mínimo 8 caracteres." required>
+          <Input
+            type="password"
+            required
+            minLength={8}
+            value={form.password}
+            onChange={update('password')}
+            autoComplete="new-password"
+          />
+        </Field>
+
+        <Button type="submit" size="lg" loading={submitting} className="w-full">
+          Crear cuenta
+        </Button>
+      </form>
+    </AuthDialog>
   );
 }

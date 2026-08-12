@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import BrandMark from '@/shared/ui/BrandMark';
 import { ButtonLink } from '@/shared/ui';
 import { useTranslation, LanguageSelector } from '@/shared/i18n/I18nContext';
@@ -12,6 +12,7 @@ import { useTranslation, LanguageSelector } from '@/shared/i18n/I18nContext';
  */
 export default function Header() {
   const { t } = useTranslation();
+  const location = useLocation();
 
   const LINKS = [
     { href: '#how-it-works', label: t('header.howItWorks') },
@@ -45,8 +46,10 @@ export default function Header() {
             <LanguageSelector tone="inverse" />
           </li>
           <li>
+            {/* `background` deja la portada detrás del panel de acceso. */}
             <Link
               to="/entrar"
+              state={{ background: location }}
               className="text-sm font-semibold text-white transition-colors hover:text-accent-300"
             >
               {t('header.login')}

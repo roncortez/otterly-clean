@@ -6,6 +6,7 @@ const serviceCatalog = require('../../services/serviceCatalogService');
 const availabilityService = require('../../services/availabilityService');
 const companyService = require('../../services/companyService');
 const settingsService = require('../../services/settingsService');
+const addressService = require('../../services/addressService');
 const { getRegion, listRegions } = require('../../config/regions');
 const { optionalAuth } = require('../middleware/auth');
 const { validate, asyncHandler } = require('../middleware/validate');
@@ -39,12 +40,28 @@ router.get(
   optionalAuth,
   asyncHandler(async (req, res) => {
     const region = getRegion(resolveRegionCode(req));
-    const [company, services] = await Promise.all([
+    const [company, services, mapHints] = await Promise.all([
       companyService.getPublic(),
       serviceCatalog.listAll(),
+      addressService.mapHints(region.code),
     ]);
 
     res.json({
+      /**
+       * Orientacion del buscador de direcciones.
+       *
+       * Sale de las zonas de cobertura activas, no de una constante escrita a
+       * mano: abrir una ciudad nueva es darle cobertura a su zona desde
+       * Operaciones, sin tocar codigo. `regionCode` en minusculas es lo que
+       * espera `includedRegionCodes` de Google.
+       *
+       * Es una preferencia, no una carcel: sesga los resultados hacia donde
+       * trabajamos, y quien decide si atendemos un punto es el backend.
+       */
+      maps: {
+        regionCode: region.code.toLowerCase(),
+        bias: mapHints,
+      },
       region: {
         code: region.code,
         name: region.name,

@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { v2: cloudinary } = require('cloudinary');
 const env = require('../config/env');
 const audit = require('./auditService');
@@ -7,13 +8,18 @@ const { SERVICE_DEFINITIONS } = require('../domain/shared/serviceTypes');
 const { DomainError, ValidationError } = require('../domain/errors');
 
 /**
- * Imagenes publicas de la plataforma.
+ * Imagenes de la plataforma.
  *
- * Aqui solo viajan imagenes que ya se muestran en la web: logo, icono, la
- * imagen de cada servicio y el banner de la portada. Nada privado ni sensible:
- * las fotos de incidencias y los documentos de los trabajadores siguen sin
- * tener almacenamiento y no deben pasar por aqui sin volver a pensar el
- * control de acceso (Cloudinary sirve por URL publica).
+ * Dos usos, con reglas distintas:
+ *
+ *   1. Imagenes de marca (logo, icono, servicios, banner). Publicas por
+ *      definicion, destino de un catalogo cerrado y solo ADMIN.
+ *   2. Fotos de perfil. Las sube su dueno, y el destino se deriva de la sesion,
+ *      nunca de la peticion.
+ *
+ * Los documentos de verificacion y las fotos de incidencias siguen sin
+ * almacenamiento: son datos sensibles y Cloudinary sirve por URL, asi que no
+ * deben pasar por aqui sin volver a pensar el control de acceso.
  */
 
 // ---------------------------------------------------------------------------
@@ -167,19 +173,10 @@ function uploadBuffer(sdk, buffer, options) {
 }
 
 /**
- * Sube una imagen al destino indicado y devuelve su URL definitiva.
- *
- * La URL incluye la version que asigna Cloudinary, asi que al reemplazar una
- * imagen cambia la URL y ninguna cache sirve la anterior.
+ * Comprobaciones que no dependen del destino: que venga algo, que quepa y que
+ * sea de verdad una imagen. La firma binaria manda sobre el `Content-Type`.
  */
-async function uploadImage({ slot, file, actor, request }) {
-  const destination = SLOTS[slot];
-  if (!destination) {
-    throw new ValidationError('Destino de imagen desconocido', [
-      { path: 'slot', message: `Valores admitidos: ${SLOT_CODES.join(', ')}` },
-    ]);
-  }
-
+function assertValidImage(file) {
   if (!file?.buffer?.length) {
     throw new ValidationError('No se recibio ninguna imagen', [
       { path: 'file', message: 'Adjunta una imagen' },
@@ -201,6 +198,25 @@ async function uploadImage({ slot, file, actor, request }) {
       { path: 'file', message: 'Formatos admitidos: PNG, JPG y WebP' },
     ]);
   }
+
+  return detected;
+}
+
+/**
+ * Sube una imagen al destino indicado y devuelve su URL definitiva.
+ *
+ * La URL incluye la version que asigna Cloudinary, asi que al reemplazar una
+ * imagen cambia la URL y ninguna cache sirve la anterior.
+ */
+async function uploadImage({ slot, file, actor, request }) {
+  const destination = SLOTS[slot];
+  if (!destination) {
+    throw new ValidationError('Destino de imagen desconocido', [
+      { path: 'slot', message: `Valores admitidos: ${SLOT_CODES.join(', ')}` },
+    ]);
+  }
+
+  assertValidImage(file);
 
   const sdk = client();
   const folder = `${env.uploads.baseFolder}/${destination.folder}`;
@@ -286,13 +302,107 @@ async function removeImage({ slot, actor, request }) {
   return { slot, publicId, result: result.result };
 }
 
+// ---------------------------------------------------------------------------
+// Fotos de perfil
+// ---------------------------------------------------------------------------
+
+/**
+ * Carpeta de las fotos de perfil.
+ *
+ * Se trata aparte del catalogo de destinos porque su identificador depende de
+ * la persona, no de una etiqueta fija. Dos decisiones deliberadas:
+ *
+ *   * El identificador se construye con el `userId` **de la sesion**, nunca con
+ *     un dato de la peticion: sigue sin haber forma de escribir en la carpeta
+ *     de otra persona ni fuera de la del proyecto.
+ *   * Lleva un sufijo aleatorio. Cloudinary sirve por URL publica, y un nombre
+ *     predecible —`usuario-42`— dejaria enumerar las fotos de toda la base. La
+ *     referencia del archivo se guarda en la ficha; la URL no se adivina.
+ */
+const PROFILE_PHOTO = Object.freeze({
+  folder: 'perfiles',
+  maxWidth: 640,
+  maxHeight: 640,
+});
+
+function profilePhotoPublicId(userId) {
+  return `usuario-${userId}-${crypto.randomBytes(6).toString('hex')}`;
+}
+
+async function uploadProfilePhoto({ userId, file, actor, request }) {
+  assertValidImage(file);
+
+  const sdk = client();
+  const folder = `${env.uploads.baseFolder}/${PROFILE_PHOTO.folder}`;
+
+  const result = await uploadBuffer(sdk, file.buffer, {
+    folder,
+    public_id: profilePhotoPublicId(userId),
+    overwrite: false,
+    resource_type: 'image',
+    use_filename: false,
+    unique_filename: false,
+    transformation: [
+      {
+        width: PROFILE_PHOTO.maxWidth,
+        height: PROFILE_PHOTO.maxHeight,
+        // Recorta centrado en la cara: una foto de perfil se muestra siempre
+        // en un circulo pequeno y encuadrarla en origen evita cabezas cortadas.
+        crop: 'fill',
+        gravity: 'face',
+        quality: 'auto:good',
+      },
+    ],
+  });
+
+  await audit.record({
+    actor,
+    action: audit.ACTIONS.MEDIA_UPLOADED,
+    entityType: 'media',
+    entityId: result.public_id,
+    after: { slot: 'PROFILE_PHOTO', userId, bytes: result.bytes, format: result.format },
+    request,
+  });
+
+  return {
+    url: result.secure_url,
+    publicId: result.public_id,
+    width: result.width,
+    height: result.height,
+    bytes: result.bytes,
+    format: result.format,
+  };
+}
+
+/**
+ * Borra un archivo por su identificador ya guardado.
+ *
+ * Solo se llama con identificadores que salieron de la base, nunca con uno
+ * recibido en una peticion. No lanza: quitar una foto que ya no estaba es el
+ * resultado que se pedia, y un fallo del almacenamiento no debe tumbar el
+ * cambio de perfil que ya se guardo.
+ */
+async function removeByPublicId(publicId) {
+  if (!publicId || !isEnabled()) return { result: 'skipped' };
+  try {
+    return await client().uploader.destroy(publicId, { invalidate: true });
+  } catch (error) {
+    console.error(`[uploads] no se pudo borrar ${publicId}:`, error.message);
+    return { result: 'error' };
+  }
+}
+
 module.exports = {
   SLOTS,
   SLOT_CODES,
   ACCEPTED_MIME_TYPES,
+  PROFILE_PHOTO,
   isEnabled,
   describe,
   detectFormat,
+  assertValidImage,
   uploadImage,
   removeImage,
+  uploadProfilePhoto,
+  removeByPublicId,
 };

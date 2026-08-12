@@ -2,14 +2,13 @@
 
 const express = require('express');
 const orderService = require('../../services/orderService');
-const addressRepo = require('../../db/repositories/addressRepository');
+const addressService = require('../../services/addressService');
 const notifications = require('../../notifications');
 const incidentService = require('../../services/incidentService');
 const laundryBagService = require('../../services/laundryBagService');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { validate, asyncHandler } = require('../middleware/validate');
 const { ROLES } = require('../../domain/shared/roles');
-const { NotFoundError } = require('../../domain/errors');
 const schemas = require('../schemas');
 
 const router = express.Router();
@@ -24,57 +23,36 @@ router.use(authenticate, requireRole(ROLES.CUSTOMER));
 router.get(
   '/addresses',
   asyncHandler(async (req, res) => {
-    res.json({ addresses: await addressRepo.listByUser(req.user.id) });
+    res.json({ addresses: await addressService.list(req.user.id) });
   }),
 );
 
+/**
+ * POST /api/customer/addresses
+ *
+ * Guarda la ubicacion del mapa y el texto que escribe el cliente. La respuesta
+ * incluye `serviceArea` para poder decirle en el momento si esa ubicacion cae
+ * en una zona que atendemos; guardarla no se bloquea, reservar sobre ella si.
+ */
 router.post(
   '/addresses',
   validate({ body: schemas.addressSchema }),
   asyncHandler(async (req, res) => {
-    const address = await addressRepo.create({
-      ...req.body,
-      userId: req.user.id,
-      regionCode: req.body.regionCode ?? req.user.region_code,
-      streetLine2: req.body.streetLine2 ?? null,
-      neighborhood: req.body.neighborhood ?? null,
-      administrativeArea: req.body.administrativeArea ?? null,
-      postalCode: req.body.postalCode ?? null,
-      reference: req.body.reference ?? null,
-      latitude: req.body.latitude ?? null,
-      longitude: req.body.longitude ?? null,
-      zoneId: req.body.zoneId ?? null,
-    });
-    res.status(201).json({ address });
+    const result = await addressService.create({ user: req.user, payload: req.body, request: req });
+    res.status(201).json(result);
   }),
 );
 
 router.patch(
   '/addresses/:id',
-  validate({ params: schemas.idParamSchema }),
+  validate({ params: schemas.idParamSchema, body: schemas.updateAddressSchema }),
   asyncHandler(async (req, res) => {
-    const fields = {};
-    const map = {
-      label: 'label',
-      streetLine1: 'street_line1',
-      streetLine2: 'street_line2',
-      neighborhood: 'neighborhood',
-      city: 'city',
-      administrativeArea: 'administrative_area',
-      postalCode: 'postal_code',
-      reference: 'reference',
-      latitude: 'latitude',
-      longitude: 'longitude',
-      zoneId: 'zone_id',
-      isDefault: 'is_default',
-    };
-    for (const [key, column] of Object.entries(map)) {
-      if (req.body[key] !== undefined) fields[column] = req.body[key];
-    }
-
-    const address = await addressRepo.update(req.validatedParams.id, req.user.id, fields);
-    if (!address) throw new NotFoundError('Direccion', req.validatedParams.id);
-    res.json({ address });
+    const result = await addressService.update({
+      user: req.user,
+      addressId: req.validatedParams.id,
+      payload: req.body,
+    });
+    res.json(result);
   }),
 );
 
@@ -82,8 +60,7 @@ router.delete(
   '/addresses/:id',
   validate({ params: schemas.idParamSchema }),
   asyncHandler(async (req, res) => {
-    const archived = await addressRepo.archive(req.validatedParams.id, req.user.id);
-    if (!archived) throw new NotFoundError('Direccion', req.validatedParams.id);
+    await addressService.archive({ user: req.user, addressId: req.validatedParams.id });
     res.status(204).send();
   }),
 );

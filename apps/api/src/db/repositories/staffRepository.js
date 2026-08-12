@@ -23,9 +23,10 @@ const ADMIN_FIELDS = `
   u.id, u.email, u.first_name, u.last_name, u.phone, u.status, u.region_code,
   u.created_at, u.last_login_at,
   COALESCE((SELECT ARRAY_AGG(ur.role ORDER BY ur.role) FROM user_roles ur WHERE ur.user_id = u.id), '{}') AS roles,
-  sp.employee_code, sp.display_name, sp.photo_url, sp.bio, sp.hired_at,
+  sp.employee_code, sp.display_name, sp.photo_url, sp.photo_public_id, sp.bio, sp.hired_at,
   sp.verification_status, sp.verified_at, sp.verified_by,
-  sp.background_check_status, sp.documents, sp.skills, sp.service_types, sp.active
+  sp.background_check_status, sp.documents, sp.skills, sp.service_types, sp.active,
+  sp.onboarding_completed_at
 `;
 
 /**
@@ -90,6 +91,7 @@ async function updateProfile(userId, fields, tx = db) {
     'employee_code',
     'display_name',
     'photo_url',
+    'photo_public_id',
     'bio',
     'hired_at',
     'verification_status',
@@ -97,6 +99,7 @@ async function updateProfile(userId, fields, tx = db) {
     'skills',
     'service_types',
     'active',
+    'onboarding_completed_at',
   ];
   const entries = Object.entries(fields).filter(([key]) => allowed.includes(key));
   if (entries.length === 0) return findAdminProfile(userId, tx);

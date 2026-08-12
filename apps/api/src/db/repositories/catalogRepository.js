@@ -92,11 +92,33 @@ async function findZoneById(id, tx = db) {
   return tx.oneOrNone('SELECT * FROM service_zones WHERE id = $1', [id]);
 }
 
-async function createZone({ regionCode, code, name, city, administrativeArea }, tx = db) {
+/**
+ * Crea una zona.
+ *
+ * El centro y el radio son opcionales: una zona sin ellos sigue sirviendo como
+ * etiqueta, simplemente no participa en la comprobacion de cobertura. Poder
+ * darselos desde Operaciones es lo que evita que abrir una ciudad nueva exija
+ * tocar codigo.
+ */
+async function createZone(
+  { regionCode, code, name, city, administrativeArea, centerLatitude, centerLongitude, radiusKm },
+  tx = db,
+) {
   return tx.one(
-    `INSERT INTO service_zones (region_code, code, name, city, administrative_area)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [regionCode, code, name, city, administrativeArea ?? null],
+    `INSERT INTO service_zones
+       (region_code, code, name, city, administrative_area,
+        center_latitude, center_longitude, radius_km)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [
+      regionCode,
+      code,
+      name,
+      city,
+      administrativeArea ?? null,
+      centerLatitude ?? null,
+      centerLongitude ?? null,
+      radiusKm ?? null,
+    ],
   );
 }
 
