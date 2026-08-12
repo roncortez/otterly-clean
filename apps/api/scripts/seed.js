@@ -198,18 +198,31 @@ async function seedExtras(tx) {
   }
 }
 
+/** Los roles viven en user_roles: una persona puede tener varios. */
+async function grantRoles(tx, userId, roles) {
+  for (const role of roles) {
+    await tx.none(
+      `INSERT INTO user_roles (user_id, role) VALUES ($1, $2)
+       ON CONFLICT (user_id, role) DO NOTHING`,
+      [userId, role],
+    );
+  }
+}
+
 async function seedUsers(tx, zones) {
   const zoneByCode = Object.fromEntries(zones.map((z) => [z.code, z.id]));
 
   // --- Administrador ------------------------------------------------------
   const admin = await tx.oneOrNone(
-    `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, region_code, locale)
-     VALUES ($1, $2, $3, $4, $5, 'ADMIN', 'EC', 'es')
+    `INSERT INTO users (email, password_hash, first_name, last_name, phone, region_code, locale)
+     VALUES ($1, $2, $3, $4, $5, 'EC', 'es')
      ON CONFLICT DO NOTHING
      RETURNING *`,
     ['admin@otterlyclean.ec', await hash('Admin123!'), 'Maria', 'Salazar', '+593991000001'],
   );
   if (!admin) return; // ya se habia sembrado
+
+  await grantRoles(tx, admin.id, ['ADMIN']);
 
   // --- Trabajadores -------------------------------------------------------
   const staffSeed = [
@@ -246,14 +259,31 @@ async function seedUsers(tx, zones) {
       zones: ['UIO-NORTE', 'UIO-CENTRO', 'UIO-SUR', 'UIO-VALLES'],
       skills: ['limpieza estándar', 'planchado'],
     },
+    // Coordinadora: trabaja en campo y ademas administra. Existe en el seed
+    // porque el caso ADMIN + STAFF es real y conviene poder probarlo sin
+    // tener que construirlo a mano.
+    {
+      email: 'paula.rios@otterlyclean.ec',
+      first: 'Paula',
+      last: 'Ríos',
+      phone: '+593991000013',
+      code: 'EMP-004',
+      bio: 'Coordina la operación diaria y cubre servicios de limpieza.',
+      services: ['CLEANING'],
+      zones: ['UIO-NORTE', 'UIO-CENTRO'],
+      skills: ['coordinación', 'limpieza profunda'],
+      roles: ['STAFF', 'ADMIN'],
+    },
   ];
 
   for (const s of staffSeed) {
     const user = await tx.one(
-      `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, region_code, locale)
-       VALUES ($1, $2, $3, $4, $5, 'STAFF', 'EC', 'es') RETURNING *`,
+      `INSERT INTO users (email, password_hash, first_name, last_name, phone, region_code, locale)
+       VALUES ($1, $2, $3, $4, $5, 'EC', 'es') RETURNING *`,
       [s.email, await hash('Staff123!'), s.first, s.last, s.phone],
     );
+
+    await grantRoles(tx, user.id, s.roles ?? ['STAFF']);
 
     await tx.none(
       `INSERT INTO staff_profiles
@@ -282,10 +312,12 @@ async function seedUsers(tx, zones) {
 
   // --- Cliente de ejemplo -------------------------------------------------
   const customer = await tx.one(
-    `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, region_code, locale)
-     VALUES ($1, $2, $3, $4, $5, 'CUSTOMER', 'EC', 'es') RETURNING *`,
+    `INSERT INTO users (email, password_hash, first_name, last_name, phone, region_code, locale)
+     VALUES ($1, $2, $3, $4, $5, 'EC', 'es') RETURNING *`,
     ['cliente@ejemplo.com', await hash('Cliente123!'), 'Andrés', 'Vaca', '+593991000020'],
   );
+
+  await grantRoles(tx, customer.id, ['CUSTOMER']);
 
   await tx.none('INSERT INTO customer_profiles (user_id, tax_id_type, tax_id) VALUES ($1, $2, $3)', [
     customer.id,
@@ -324,6 +356,7 @@ async function run() {
   console.log('    STAFF     carla.mendez@otterlyclean.ec Staff123!    (limpieza)');
   console.log('    STAFF     jorge.paredes@otterlyclean.ec Staff123!   (lavandería)');
   console.log('    STAFF     lucia.torres@otterlyclean.ec Staff123!    (ambos)');
+  console.log('    ADMIN+STAFF paula.rios@otterlyclean.ec Staff123!    (dos roles)');
   console.log('    CUSTOMER  cliente@ejemplo.com          Cliente123!');
 }
 

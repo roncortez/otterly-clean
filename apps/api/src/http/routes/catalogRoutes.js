@@ -2,13 +2,26 @@
 
 const express = require('express');
 const catalogRepo = require('../../db/repositories/catalogRepository');
+const serviceCatalog = require('../../services/serviceCatalogService');
+const availabilityService = require('../../services/availabilityService');
+const companyService = require('../../services/companyService');
+const settingsService = require('../../services/settingsService');
 const { getRegion, listRegions } = require('../../config/regions');
-const { enabledServiceTypes, SERVICE_DEFINITIONS } = require('../../domain/shared/serviceTypes');
 const { optionalAuth } = require('../middleware/auth');
-const { asyncHandler } = require('../middleware/validate');
+const { validate, asyncHandler } = require('../middleware/validate');
+const schemas = require('../schemas');
 const env = require('../../config/env');
 
 const router = express.Router();
+
+/**
+ * Catalogo publico.
+ *
+ * Es el contrato que permite que el frontend no escriba a mano ni "Provincia",
+ * ni "$", ni el telefono de la empresa, ni el nombre de un servicio. Todo lo
+ * que aqui se sirve es informacion que ya es publica por definicion: nada de
+ * secretos, credenciales ni configuracion tecnica.
+ */
 
 /** Region efectiva: la del usuario autenticado, la pedida, o la de por defecto. */
 function resolveRegionCode(req) {
@@ -17,15 +30,20 @@ function resolveRegionCode(req) {
 
 /**
  * GET /api/catalog/config
- * Toda la configuracion regional que el frontend necesita para renderizar
- * formularios: moneda, impuesto, campos de direccion, ventanas horarias.
- * Es lo que evita hardcodear "Provincia" o "$" en el cliente.
+ * Todo lo que el frontend necesita para arrancar: configuracion regional,
+ * datos publicos de la empresa y estado de los tipos de servicio. Una sola
+ * peticion, porque son datos que se necesitan a la vez en el primer render.
  */
 router.get(
   '/config',
   optionalAuth,
   asyncHandler(async (req, res) => {
     const region = getRegion(resolveRegionCode(req));
+    const [company, services] = await Promise.all([
+      companyService.getPublic(),
+      serviceCatalog.listAll(),
+    ]);
+
     res.json({
       region: {
         code: region.code,
@@ -40,35 +58,42 @@ router.get(
         taxIdTypes: region.taxIdTypes,
         booking: region.booking,
       },
+      company,
       availableRegions: listRegions().map((r) => ({ code: r.code, name: r.name })),
-      serviceTypes: Object.values(SERVICE_DEFINITIONS).map((s) => ({
-        code: s.code,
-        label: s.label,
-        description: s.description,
-        enabled: s.enabled,
-        addressModel: s.addressModel,
+      // `implemented` lo decide el codigo; `active`, Operaciones. Se exponen
+      // los dos para que la interfaz pueda explicar por que algo no aparece.
+      serviceTypes: services.map((service) => ({
+        code: service.code,
+        label: service.label,
+        description: service.description,
+        customerInfo: service.customerInfo,
+        icon: service.icon,
+        imageUrl: service.imageUrl,
+        displayOrder: service.displayOrder,
+        addressModel: service.addressModel,
+        implemented: service.implemented,
+        active: service.active,
+        bookable: service.bookable,
       })),
     });
   }),
 );
 
-/** GET /api/catalog/services — tipos de servicio ofrecidos hoy. */
+/** GET /api/catalog/company — datos publicos de contacto y marca. */
+router.get(
+  '/company',
+  asyncHandler(async (_req, res) => {
+    res.json({ company: await companyService.getPublic() });
+  }),
+);
+
+/** GET /api/catalog/services — servicios que se pueden reservar hoy. */
 router.get(
   '/services',
   optionalAuth,
   asyncHandler(async (req, res) => {
     const regionCode = resolveRegionCode(req);
-    const services = await Promise.all(
-      enabledServiceTypes().map(async (service) => ({
-        code: service.code,
-        label: service.label,
-        description: service.description,
-        addressModel: service.addressModel,
-        plans: await catalogRepo.listPlans({ serviceType: service.code, regionCode }),
-        extras: await catalogRepo.listExtras({ serviceType: service.code, regionCode }),
-      })),
-    );
-    res.json({ regionCode, services });
+    res.json({ regionCode, services: await serviceCatalog.listBookable(regionCode) });
   }),
 );
 
@@ -87,6 +112,28 @@ router.get(
   }),
 );
 
+/**
+ * GET /api/catalog/availability
+ * Dias y franjas reservables. El asistente de reserva lo usa para no ofrecer
+ * horarios que el backend va a rechazar; la decision real se sigue tomando al
+ * crear la orden.
+ */
+router.get(
+  '/availability',
+  optionalAuth,
+  validate({ query: schemas.availabilityQuerySchema }),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await availabilityService.getCalendar({
+        regionCode: resolveRegionCode(req),
+        serviceType: req.validatedQuery.serviceType,
+        from: req.validatedQuery.from,
+        to: req.validatedQuery.to,
+      }),
+    );
+  }),
+);
+
 /** GET /api/catalog/zones — zonas de cobertura activas. */
 router.get(
   '/zones',
@@ -97,12 +144,10 @@ router.get(
   }),
 );
 
-/** GET /api/catalog/banner — public promotional banner */
-const settingsService = require('../../services/settingsService');
-
+/** GET /api/catalog/banner — banner promocional publico. */
 router.get(
   '/banner',
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (_req, res) => {
     res.json(await settingsService.getBanner());
   }),
 );

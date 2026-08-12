@@ -103,6 +103,26 @@ export function addDays(days, from = new Date()) {
   return date;
 }
 
+/**
+ * Dinero en formularios de administración.
+ *
+ * El backend guarda enteros en centavos y nunca coma flotante. Estas dos
+ * funciones son el único punto donde se hace la conversión, para que ningún
+ * formulario acabe enviando 11.0000000002 como precio por hora.
+ */
+export function centsToInput(cents) {
+  if (cents === null || cents === undefined || cents === '') return '';
+  return (Number(cents) / 100).toFixed(2);
+}
+
+/** Devuelve null si el texto no es un importe válido. */
+export function inputToCents(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const amount = Number(String(value).replace(',', '.'));
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  return Math.round(amount * 100);
+}
+
 /** Dirección en una línea, para listados. */
 export function shortAddress(address) {
   if (!address) return '—';

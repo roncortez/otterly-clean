@@ -1,6 +1,7 @@
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { Droplets, Home, CalendarCheck, MapPin, LogOut, Plus, Building } from 'lucide-react';
+import { Home, CalendarCheck, MapPin, LogOut, Plus, Building } from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
+import BrandMark from '@/shared/ui/BrandMark';
 import { cx } from '@/shared/ui';
 
 const NAV = [
@@ -22,11 +23,8 @@ export default function CustomerLayout() {
     <div className="min-h-dvh bg-surface">
       <header className="sticky top-0 z-30 border-b border-border bg-surface-raised/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5">
-          <Link to="/inicio" className="flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-forest-600">
-              <Droplets className="size-4.5 text-white" aria-hidden="true" />
-            </span>
-            <span className="font-semibold text-forest-800">Otterly Clean</span>
+          <Link to="/inicio">
+            <BrandMark size="md" />
           </Link>
 
           <nav className="hidden items-center gap-1 sm:flex">

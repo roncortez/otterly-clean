@@ -7,11 +7,23 @@ const { db } = require('../index');
  *
  * `password_hash` nunca sale de este modulo salvo por findByEmailWithSecret,
  * que existe solo para el login.
+ *
+ * Los roles viven en `user_roles`, no en una columna: una persona puede ser
+ * ADMIN y STAFF a la vez. Toda lectura de usuario devuelve `roles` como array
+ * para que ninguna capa superior tenga que acordarse de hacer el JOIN.
  */
 
+const ROLES_SUBQUERY = `
+  COALESCE(
+    (SELECT ARRAY_AGG(ur.role ORDER BY ur.role) FROM user_roles ur WHERE ur.user_id = users.id),
+    '{}'
+  ) AS roles
+`;
+
 const PUBLIC_FIELDS = `
-  id, email, first_name, last_name, phone, role, region_code, locale,
-  status, last_login_at, created_at
+  id, email, first_name, last_name, phone, region_code, locale,
+  status, last_login_at, created_at,
+  ${ROLES_SUBQUERY}
 `;
 
 async function findById(id, tx = db) {
@@ -31,15 +43,18 @@ async function findByEmailWithSecret(email, tx = db) {
 }
 
 async function create(
-  { email, passwordHash, firstName, lastName, phone, role, regionCode, locale, status = 'ACTIVE' },
+  { email, passwordHash, firstName, lastName, phone, roles = [], regionCode, locale, status = 'ACTIVE' },
   tx = db,
 ) {
-  return tx.one(
-    `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, region_code, locale, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     RETURNING ${PUBLIC_FIELDS}`,
-    [email.trim(), passwordHash, firstName.trim(), lastName.trim(), phone ?? null, role, regionCode, locale, status],
+  const user = await tx.one(
+    `INSERT INTO users (email, password_hash, first_name, last_name, phone, region_code, locale, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id`,
+    [email.trim(), passwordHash, firstName.trim(), lastName.trim(), phone ?? null, regionCode, locale, status],
   );
+
+  await setRoles(user.id, roles, null, tx);
+  return findById(user.id, tx);
 }
 
 async function update(id, fields, tx = db) {
@@ -48,11 +63,11 @@ async function update(id, fields, tx = db) {
   if (entries.length === 0) return findById(id, tx);
 
   const sets = entries.map(([key], index) => `${key} = $${index + 2}`);
-  return tx.one(
-    `UPDATE users SET ${sets.join(', ')}, updated_at = NOW()
-      WHERE id = $1 RETURNING ${PUBLIC_FIELDS}`,
-    [id, ...entries.map(([, value]) => value)],
-  );
+  await tx.none(`UPDATE users SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1`, [
+    id,
+    ...entries.map(([, value]) => value),
+  ]);
+  return findById(id, tx);
 }
 
 async function updatePassword(id, passwordHash, tx = db) {
@@ -66,6 +81,48 @@ async function touchLogin(id, tx = db) {
   return tx.none('UPDATE users SET last_login_at = NOW() WHERE id = $1', [id]);
 }
 
+// ---------------------------------------------------------------------------
+// Roles
+// ---------------------------------------------------------------------------
+
+async function listRoles(userId, tx = db) {
+  const rows = await tx.any('SELECT role FROM user_roles WHERE user_id = $1 ORDER BY role', [userId]);
+  return rows.map((row) => row.role);
+}
+
+/**
+ * Reemplaza el conjunto de roles. Se borra y se inserta en la misma
+ * transaccion para que nunca exista un instante sin roles.
+ */
+async function setRoles(userId, roles, grantedBy = null, tx = db) {
+  await tx.none('DELETE FROM user_roles WHERE user_id = $1', [userId]);
+  for (const role of roles) {
+    await tx.none(
+      `INSERT INTO user_roles (user_id, role, granted_by) VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, role) DO NOTHING`,
+      [userId, role, grantedBy],
+    );
+  }
+  return listRoles(userId, tx);
+}
+
+/**
+ * Cuantos administradores activos quedarian si se excluye a esta persona.
+ *
+ * Es la comprobacion que impide dejar el sistema sin nadie que pueda entrar a
+ * Operaciones. Se ejecuta dentro de la transaccion del cambio.
+ */
+async function countActiveAdmins({ excludeUserId = null } = {}, tx = db) {
+  const row = await tx.one(
+    `SELECT COUNT(*)::int AS total
+       FROM users u
+       JOIN user_roles ur ON ur.user_id = u.id AND ur.role = 'ADMIN'
+      WHERE u.status = 'ACTIVE' AND ($1::bigint IS NULL OR u.id <> $1)`,
+    [excludeUserId],
+  );
+  return row.total;
+}
+
 /** Listado paginado con filtros, usado por Operaciones. */
 async function list({ role, status, search, page = 1, limit = 20 }, tx = db) {
   const conditions = [];
@@ -73,7 +130,9 @@ async function list({ role, status, search, page = 1, limit = 20 }, tx = db) {
 
   if (role) {
     values.push(role);
-    conditions.push(`role = $${values.length}`);
+    conditions.push(
+      `EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = users.id AND ur.role = $${values.length})`,
+    );
   }
   if (status) {
     values.push(status);
@@ -115,5 +174,8 @@ module.exports = {
   update,
   updatePassword,
   touchLogin,
+  listRoles,
+  setRoles,
+  countActiveAdmins,
   list,
 };

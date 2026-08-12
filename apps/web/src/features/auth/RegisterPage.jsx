@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Droplets } from 'lucide-react';
-import { useAuth, homePathForRole } from '@/shared/auth/AuthContext';
+import { useAuth, homePathForRoles } from '@/shared/auth/AuthContext';
 import { useConfig } from '@/shared/config/ConfigContext';
 import { errorMessage } from '@/shared/api/client';
+import BrandMark from '@/shared/ui/BrandMark';
 import { Alert, Button, Field, Input } from '@/shared/ui';
 
 export default function RegisterPage() {
@@ -37,8 +37,10 @@ export default function RegisterPage() {
           : `${phonePrefix}${phone.replace(/[\s()-]/g, '').replace(/^0/, '')}`
         : undefined;
 
+      // El registro público siempre crea un CUSTOMER: el rol lo decide el
+      // backend y nunca viaja en este formulario.
       const created = await register({ ...form, phone: normalizedPhone });
-      navigate(homePathForRole(created.role), { replace: true });
+      navigate(homePathForRoles(created.roles), { replace: true });
     } catch (requestError) {
       setError(errorMessage(requestError, 'No pudimos crear tu cuenta.'));
     } finally {
@@ -49,16 +51,11 @@ export default function RegisterPage() {
   return (
     <main className="flex min-h-dvh items-center justify-center px-5 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-8 flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-forest-600">
-            <Droplets className="size-5 text-white" aria-hidden="true" />
-          </span>
-          <span className="text-lg font-semibold text-forest-800">Otterly Clean</span>
-        </div>
+        <BrandMark size="lg" className="mb-8" />
 
         <h1 className="text-2xl font-semibold text-text">Crea tu cuenta</h1>
         <p className="mt-1.5 text-text-muted">
-          Reserva limpieza o lavandería y sigue cada servicio desde donde estés.
+          Reserva y sigue cada servicio desde donde estés.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">

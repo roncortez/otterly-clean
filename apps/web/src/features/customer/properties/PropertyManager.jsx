@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Home, Plus, Trash2, Key, MapPin, Building, AlertCircle } from 'lucide-react';
 import api from '@/shared/api/client';
+import { useApiQuery } from '@/shared/api/useApiQuery';
 
 export default function PropertyManager() {
-  const [properties, setProperties] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // La lectura pasa por useApiQuery: deriva `loading` comparando lo pedido con
+  // lo resuelto, en lugar de escribirlo con un setState dentro del efecto.
+  const propertiesQuery = useApiQuery('/customer/properties');
+  const properties = propertiesQuery.data?.properties ?? [];
+  const loading = propertiesQuery.loading;
+
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -20,21 +25,7 @@ export default function PropertyManager() {
   });
   const [error, setError] = useState('');
 
-  async function loadProperties() {
-    try {
-      setLoading(true);
-      const res = await api.get('/customer/properties');
-      setProperties(res.data.properties || []);
-    } catch {
-      setError('No se pudieron cargar tus inmuebles.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadProperties();
-  }, []);
+  const loadProperties = propertiesQuery.reload;
 
   async function handleSubmit(e) {
     e.preventDefault();

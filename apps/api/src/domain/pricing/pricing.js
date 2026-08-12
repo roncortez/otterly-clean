@@ -28,6 +28,71 @@ const PRICING_MODELS = Object.freeze({
   QUOTE: 'QUOTE',
 });
 
+/**
+ * Que puede editar Operaciones de cada modelo, y nada mas.
+ *
+ * `plan.config` es JSON libre para el motor, pero la pantalla de administracion
+ * no puede serlo: si dejara escribir claves arbitrarias, cualquier error de
+ * tipeo silenciaria un parametro y el precio saldria mal sin avisar.
+ *
+ * Este descriptor es la lista blanca. De el salen a la vez la validacion Zod
+ * del backend y el formulario que ve el administrador, de modo que no puedan
+ * desincronizarse.
+ *
+ *   amount: significado del importe base (null si el modelo no lo usa)
+ *   fields: parametros de plan.config editables
+ */
+const MODEL_PARAMETERS = Object.freeze({
+  [PRICING_MODELS.PER_HOUR]: {
+    label: 'Por hora',
+    amount: { label: 'Precio por hora' },
+    fields: [
+      { key: 'minimumHours', label: 'Minimo de horas facturables', type: 'number', min: 0, max: 24, step: 0.5 },
+    ],
+  },
+  [PRICING_MODELS.FLAT_BY_SIZE]: {
+    label: 'Plano segun tamano',
+    // El precio vive en los tramos, no en base_amount.
+    amount: null,
+    fields: [{ key: 'tiers', label: 'Tarifa por tamano de vivienda', type: 'amountMap' }],
+  },
+  [PRICING_MODELS.PER_WEIGHT]: {
+    label: 'Por peso',
+    amount: { label: 'Precio por unidad de peso' },
+    fields: [
+      { key: 'unit', label: 'Unidad', type: 'enum', options: ['kg', 'lb'] },
+      { key: 'minimumUnits', label: 'Minimo facturable', type: 'number', min: 0, max: 500, step: 0.5 },
+    ],
+  },
+  [PRICING_MODELS.PER_BAG]: {
+    label: 'Por bolsa',
+    amount: { label: 'Precio por bolsa' },
+    fields: [
+      { key: 'bagCapacityKg', label: 'Capacidad de la bolsa (kg)', type: 'number', min: 0, max: 100, step: 0.5 },
+    ],
+  },
+  [PRICING_MODELS.PER_ITEM]: {
+    label: 'Por prenda',
+    amount: { label: 'Precio por prenda' },
+    fields: [],
+  },
+  [PRICING_MODELS.FIXED]: {
+    label: 'Precio fijo',
+    amount: { label: 'Precio del servicio' },
+    fields: [],
+  },
+  [PRICING_MODELS.QUOTE]: {
+    label: 'Requiere cotizacion',
+    amount: null,
+    fields: [],
+  },
+});
+
+/** Descriptor de un modelo, para construir formularios y validaciones. */
+function describePricingModel(model) {
+  return MODEL_PARAMETERS[model] ?? null;
+}
+
 const round = (n) => Math.round(n);
 
 /**
@@ -194,4 +259,4 @@ function calculatePrice({ plan, input = {}, extras = [], region, discountAmount 
   };
 }
 
-module.exports = { PRICING_MODELS, calculatePrice };
+module.exports = { PRICING_MODELS, MODEL_PARAMETERS, describePricingModel, calculatePrice };

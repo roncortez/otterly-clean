@@ -23,6 +23,9 @@ import StepSummary from './StepSummary';
  * confirmar, para que nadie reserve sin saber cuánto va a pagar.
  */
 
+/** Tipos que el asistente sabe configurar. Los define el dominio, no la UI. */
+const KNOWN_SERVICE_TYPES = ['CLEANING', 'LAUNDRY'];
+
 const STEPS = [
   { id: 'service', label: 'Servicio' },
   { id: 'configure', label: 'Detalles' },
@@ -93,7 +96,12 @@ export default function BookingWizard() {
   const error = catalogQuery.error ?? addressQuery.error ?? actionError;
 
   const [booking, setBooking] = useState(() => ({
-    serviceType: searchParams.get('servicio') === 'LAUNDRY' ? 'LAUNDRY' : 'CLEANING',
+    // El servicio puede llegar preseleccionado desde la portada. Se acepta solo
+    // si es uno de los tipos conocidos; si el catálogo no lo ofrece, el paso 1
+    // lo corrige al primero disponible.
+    serviceType: KNOWN_SERVICE_TYPES.includes(searchParams.get('servicio'))
+      ? searchParams.get('servicio')
+      : 'CLEANING',
     planId: null,
     extraCodes: [],
     scheduledDate: toDateInput(addDays(2)),
@@ -109,10 +117,12 @@ export default function BookingWizard() {
   const updateDetail = (key, patch) =>
     setBooking((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
 
-  const service = useMemo(
-    () => catalog?.find((entry) => entry.code === booking.serviceType),
-    [catalog, booking.serviceType],
-  );
+  // Si el servicio preseleccionado ya no se ofrece (Operaciones lo desactivó),
+  // se cae al primero disponible en lugar de dejar el asistente bloqueado.
+  const service = useMemo(() => {
+    if (!catalog?.length) return undefined;
+    return catalog.find((entry) => entry.code === booking.serviceType) ?? catalog[0];
+  }, [catalog, booking.serviceType]);
 
   /**
    * Los valores por defecto se derivan durante el render en lugar de
@@ -141,11 +151,12 @@ export default function BookingWizard() {
   const effective = useMemo(
     () => ({
       ...booking,
+      serviceType: service?.code ?? booking.serviceType,
       planId: selectedPlanId,
       windowCode: selectedWindowCode,
       addressId: selectedAddressId,
     }),
-    [booking, selectedPlanId, selectedWindowCode, selectedAddressId],
+    [booking, service, selectedPlanId, selectedWindowCode, selectedAddressId],
   );
 
   const pricingInput = useMemo(() => {

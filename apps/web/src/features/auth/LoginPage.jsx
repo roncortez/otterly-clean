@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Droplets } from 'lucide-react';
-import { useAuth, homePathForRole } from '@/shared/auth/AuthContext';
+import { useAuth, homePathForRoles } from '@/shared/auth/AuthContext';
+import { useConfig } from '@/shared/config/ConfigContext';
 import { errorMessage } from '@/shared/api/client';
+import BrandMark from '@/shared/ui/BrandMark';
 import { Alert, Button, Field, Input } from '@/shared/ui';
 
 export default function LoginPage() {
   const { login, isAuthenticated, user, isLoading } = useAuth();
+  const { company } = useConfig();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({ email: '', password: '' });
@@ -14,7 +17,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (!isLoading && isAuthenticated) {
-    return <Navigate to={homePathForRole(user.role)} replace />;
+    return <Navigate to={homePathForRoles(user.roles)} replace />;
   }
 
   async function handleSubmit(event) {
@@ -24,7 +27,7 @@ export default function LoginPage() {
 
     try {
       const signedIn = await login(form);
-      navigate(homePathForRole(signedIn.role), { replace: true });
+      navigate(homePathForRoles(signedIn.roles), { replace: true });
     } catch (requestError) {
       setError(errorMessage(requestError, 'No pudimos iniciar tu sesión.'));
     } finally {
@@ -36,11 +39,17 @@ export default function LoginPage() {
     <main className="grid min-h-dvh lg:grid-cols-[1.1fr_1fr]">
       {/* Panel de marca: solo en pantallas grandes, para no robar espacio en móvil */}
       <aside className="hidden flex-col justify-between bg-forest-800 p-12 text-text-inverse lg:flex">
+        {/* El panel oscuro invierte el color de la marca, así que aquí el
+            logotipo se pinta a medida en lugar de reutilizar BrandMark. */}
         <div className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-accent-500">
-            <Droplets className="size-5 text-white" aria-hidden="true" />
-          </span>
-          <span className="text-lg font-semibold">Otterly Clean</span>
+          {company.logoUrl ? (
+            <img src={company.logoUrl} alt="" className="size-9 rounded-xl object-cover" />
+          ) : (
+            <span className="flex size-9 items-center justify-center rounded-xl bg-accent-500">
+              <Droplets className="size-5 text-white" aria-hidden="true" />
+            </span>
+          )}
+          <span className="text-lg font-semibold">{company.name}</span>
         </div>
 
         <div className="max-w-md">
@@ -48,22 +57,16 @@ export default function LoginPage() {
             Sabes quién entra a tu casa, cuándo llega y cuándo termina.
           </p>
           <p className="mt-4 text-forest-200">
-            Limpieza y lavandería a domicilio en Quito, con profesionales contratados y verificados
-            por nosotros.
+            Profesionales contratados y verificados por nosotros.
           </p>
         </div>
 
-        <p className="text-sm text-forest-300">Quito · Ecuador</p>
+        {company.address ? <p className="text-sm text-forest-300">{company.address}</p> : null}
       </aside>
 
       <div className="flex items-center justify-center px-5 py-12 sm:px-8">
         <div className="w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-forest-600">
-              <Droplets className="size-5 text-white" aria-hidden="true" />
-            </span>
-            <span className="text-lg font-semibold text-forest-800">Otterly Clean</span>
-          </div>
+          <BrandMark size="lg" className="mb-8 lg:hidden" />
 
           <h1 className="text-2xl font-semibold text-text">Entra a tu cuenta</h1>
           <p className="mt-1.5 text-text-muted">Sigue tus servicios y reserva uno nuevo.</p>

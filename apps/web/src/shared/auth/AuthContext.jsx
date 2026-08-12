@@ -89,9 +89,12 @@ export function AuthProvider({ children }) {
   const value = useMemo(
     () => ({
       user,
+      // Lista completa de roles. Una persona puede ser ADMIN y STAFF a la vez.
+      roles: user?.roles ?? [],
       status,
       isAuthenticated: status === 'authenticated',
       isLoading: status === 'loading',
+      hasRole: (role) => Boolean(user?.roles?.includes(role)),
       login,
       register,
       logout,
@@ -108,9 +111,15 @@ export function useAuth() {
   return context;
 }
 
-/** Ruta de inicio de cada rol. */
-export function homePathForRole(role) {
-  if (role === 'ADMIN') return '/operaciones';
-  if (role === 'STAFF') return '/trabajo';
+/**
+ * Ruta de inicio segun los roles.
+ *
+ * Con varios roles hace falta un desempate: se entra por la consola de mayor
+ * responsabilidad y desde ahí se puede saltar a las demas. El orden es el mismo
+ * que usa el backend en `domain/shared/roles.js`.
+ */
+export function homePathForRoles(roles = []) {
+  if (roles.includes('ADMIN')) return '/operaciones';
+  if (roles.includes('STAFF')) return '/trabajo';
   return '/inicio';
 }

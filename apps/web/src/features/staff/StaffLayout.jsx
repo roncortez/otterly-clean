@@ -1,5 +1,5 @@
 import { Outlet, Link } from 'react-router-dom';
-import { LogOut, Droplets } from 'lucide-react';
+import { LogOut, Droplets, Sliders } from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
 
 /**
@@ -9,7 +9,7 @@ import { useAuth } from '@/shared/auth/AuthContext';
  * sin menús, sin nada que distraiga del trabajo actual.
  */
 export default function StaffLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
 
   return (
     <div className="min-h-dvh bg-surface">
@@ -21,14 +21,27 @@ export default function StaffLayout() {
             </span>
             <span className="font-semibold">{user?.firstName}</span>
           </Link>
-          <button
-            type="button"
-            onClick={logout}
-            className="rounded-lg p-2 text-forest-200 transition-colors hover:bg-forest-700 hover:text-white"
-            aria-label="Cerrar sesión"
-          >
-            <LogOut className="size-4.5" aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Solo para quien además coordina: ADMIN + STAFF. */}
+            {hasRole('ADMIN') ? (
+              <Link
+                to="/operaciones"
+                className="rounded-lg p-2 text-forest-200 transition-colors hover:bg-forest-700 hover:text-white"
+                aria-label="Ir a Operaciones"
+                title="Ir a Operaciones"
+              >
+                <Sliders className="size-4.5" aria-hidden="true" />
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-lg p-2 text-forest-200 transition-colors hover:bg-forest-700 hover:text-white"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut className="size-4.5" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </header>
 

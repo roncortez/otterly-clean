@@ -6,10 +6,12 @@ const addressRepo = require('../db/repositories/addressRepository');
 const catalogRepo = require('../db/repositories/catalogRepository');
 const assignmentRepo = require('../db/repositories/assignmentRepository');
 const audit = require('./auditService');
+const serviceCatalog = require('./serviceCatalogService');
+const availability = require('./availabilityService');
 const notifications = require('../notifications');
 const { encrypt, decrypt } = require('./crypto');
 const { getRegion } = require('../config/regions');
-const { getServiceDefinition, getStateMachine } = require('../domain/shared/serviceTypes');
+const { getStateMachine } = require('../domain/shared/serviceTypes');
 const { calculatePrice } = require('../domain/pricing/pricing');
 const { buildTimeline } = require('../domain/shared/timeline');
 const {
@@ -18,7 +20,7 @@ const {
   evaluateCancellation,
 } = require('../domain/shared/policies');
 const { ROLES } = require('../domain/shared/roles');
-const { NotFoundError, ForbiddenError, DomainError } = require('../domain/errors');
+const { NotFoundError, ForbiddenError } = require('../domain/errors');
 
 /**
  * Orquestacion de ordenes.
@@ -56,12 +58,10 @@ async function quote({ planId, regionCode, pricingInput = {}, extraCodes = [] })
  * servicio, primer registro de historial y notificaciones.
  */
 async function createOrder({ serviceType, customer, payload, request }) {
-  const definition = getServiceDefinition(serviceType);
-  if (!definition.enabled) {
-    throw new DomainError('SERVICE_NOT_AVAILABLE', `${definition.label} todavia no esta disponible`, {
-      serviceType,
-    });
-  }
+  // Dos condiciones distintas: que el dominio lo implemente y que Operaciones
+  // lo este ofreciendo. Desactivar un servicio en la pantalla de configuracion
+  // tiene que cerrar tambien esta puerta, no solo ocultar el boton.
+  await serviceCatalog.assertBookable(serviceType);
 
   const stateMachine = getStateMachine(serviceType);
   const region = getRegion(customer.region_code);
@@ -88,6 +88,16 @@ async function createOrder({ serviceType, customer, payload, request }) {
     scheduledDate: payload.scheduledDate,
     windowStart: window.startTime,
     region,
+  });
+
+  // Disponibilidad comercial: la empresa puede haber cerrado ese dia o esa
+  // franja. Se comprueba aqui, no en React.
+  await availability.assertBookableSlot({
+    serviceType,
+    regionCode: region.code,
+    scheduledDate: payload.scheduledDate,
+    windowStart: window.startTime,
+    windowEnd: window.endTime,
   });
 
   const extras = await catalogRepo.findExtrasByCodes(payload.extraCodes ?? [], region.code);

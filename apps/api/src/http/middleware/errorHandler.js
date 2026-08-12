@@ -48,8 +48,11 @@ function errorHandler(error, req, res, _next) {
 
   if (error instanceof DomainError) {
     const status = STATUS_BY_CODE[error.code] ?? 400;
+    // Los detalles se esparcen ANTES del codigo y el mensaje: si un detalle se
+    // llamara `code`, sobrescribiria el codigo estable sobre el que el frontend
+    // decide, y el fallo seria silencioso.
     return res.status(status).json({
-      error: { code: error.code, message: error.message, ...error.details },
+      error: { ...error.details, code: error.code, message: error.message },
     });
   }
 

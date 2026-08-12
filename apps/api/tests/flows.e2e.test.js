@@ -92,12 +92,26 @@ describe('Configuracion regional', () => {
     expect(res.body.region.units.area).toBe('sqft');
   });
 
-  it('expone arreglo de prendas como definido pero no disponible', async () => {
+  it('expone arreglo de prendas como definido pero no reservable', async () => {
     const res = await request(app).get('/api/catalog/config');
     const alteration = res.body.serviceTypes.find((s) => s.code === 'ALTERATION');
 
     expect(alteration).toBeDefined();
-    expect(alteration.enabled).toBe(false);
+    // Dos preguntas distintas: el dominio no lo implementa todavia y
+    // Operaciones tampoco lo ofrece. Ninguna de las dos permite reservarlo.
+    expect(alteration.implemented).toBe(false);
+    expect(alteration.active).toBe(false);
+    expect(alteration.bookable).toBe(false);
+  });
+
+  it('sirve los datos publicos de la empresa sin exponer configuracion tecnica', async () => {
+    const res = await request(app).get('/api/catalog/company');
+
+    expect(res.status).toBe(200);
+    expect(res.body.company.name).toBeTruthy();
+    // Ningun secreto puede salir por el endpoint publico.
+    const serialized = JSON.stringify(res.body);
+    expect(serialized).not.toMatch(/jwtSecret|JWT_SECRET|encryptionKey|password/i);
   });
 });
 
@@ -130,10 +144,17 @@ describe('Seguridad y control de acceso', () => {
         firstName: 'Intento',
         lastName: 'Escalada',
         role: 'ADMIN', // se ignora
+        roles: ['ADMIN'], // tambien se ignora
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.user.role).toBe('CUSTOMER');
+    expect(res.body.user.roles).toEqual(['CUSTOMER']);
+
+    // Y tampoco quedo escrito en la base por otra via.
+    const granted = await db.any('SELECT role FROM user_roles WHERE user_id = $1', [
+      res.body.user.id,
+    ]);
+    expect(granted.map((row) => row.role)).toEqual(['CUSTOMER']);
 
     await db.none('DELETE FROM users WHERE id = $1', [res.body.user.id]);
   });

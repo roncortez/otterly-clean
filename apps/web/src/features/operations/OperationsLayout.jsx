@@ -1,6 +1,18 @@
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, Users, UserCog, AlertTriangle, LogOut, Droplets, Ticket, Sliders } from 'lucide-react';
+import {
+  LayoutDashboard,
+  ClipboardList,
+  Users,
+  UserCog,
+  AlertTriangle,
+  LogOut,
+  Ticket,
+  Sliders,
+  ShieldCheck,
+  Briefcase,
+} from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
+import BrandMark from '@/shared/ui/BrandMark';
 import { cx } from '@/shared/ui';
 
 const NAV = [
@@ -8,26 +20,21 @@ const NAV = [
   { to: '/operaciones/solicitudes', label: 'Solicitudes', icon: ClipboardList },
   { to: '/operaciones/trabajadores', label: 'Trabajadores', icon: UserCog },
   { to: '/operaciones/clientes', label: 'Clientes', icon: Users },
+  { to: '/operaciones/usuarios', label: 'Usuarios y roles', icon: ShieldCheck },
   { to: '/operaciones/incidencias', label: 'Incidencias', icon: AlertTriangle },
   { to: '/operaciones/cupones', label: 'Cupones', icon: Ticket },
-  { to: '/operaciones/ajustes', label: 'Ajustes', icon: Sliders },
+  { to: '/operaciones/configuracion', label: 'Configuración', icon: Sliders },
 ];
 
 /** Consola de operaciones: barra lateral fija, densidad alta. */
 export default function OperationsLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
 
   return (
     <div className="min-h-dvh bg-surface lg:flex">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface-raised lg:flex">
-        <Link to="/operaciones" className="flex h-16 items-center gap-2.5 px-5">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-forest-700">
-            <Droplets className="size-4.5 text-white" aria-hidden="true" />
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold text-forest-800">Otterly Clean</p>
-            <p className="text-[11px] text-text-subtle">Operaciones</p>
-          </div>
+        <Link to="/operaciones" className="flex h-16 items-center px-5">
+          <BrandMark size="md" subtitle="Operaciones" />
         </Link>
 
         <nav className="flex-1 space-y-0.5 px-3 py-4">
@@ -52,10 +59,22 @@ export default function OperationsLayout() {
         </nav>
 
         <div className="border-t border-border p-3">
+          {/* Quien tiene los dos roles necesita saltar entre consolas sin
+              cerrar sesión: el enlace solo aparece si de verdad puede entrar. */}
+          {hasRole('STAFF') ? (
+            <Link
+              to="/trabajo"
+              className="mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
+            >
+              <Briefcase className="size-4.5" aria-hidden="true" />
+              Ir a mis trabajos
+            </Link>
+          ) : null}
+
           <div className="flex items-center justify-between gap-2 rounded-lg px-3 py-2">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-text">{user?.firstName}</p>
-              <p className="text-xs text-text-subtle">Operaciones</p>
+              <p className="text-xs text-text-subtle">{user?.roles?.join(' · ')}</p>
             </div>
             <button
               type="button"

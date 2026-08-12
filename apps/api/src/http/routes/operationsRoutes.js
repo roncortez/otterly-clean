@@ -318,6 +318,198 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
+// Usuarios y roles
+//
+// Una persona puede tener varios roles: quien coordina la operacion tambien
+// puede salir a trabajar. Los roles se envian como conjunto completo y el
+// servicio impide que el sistema se quede sin administradores activos.
+// ---------------------------------------------------------------------------
+
+const userService = require('../../services/userService');
+
+router.get(
+  '/users',
+  validate({ query: schemas.userQuerySchema }),
+  asyncHandler(async (req, res) => {
+    res.json(await userService.list(req.validatedQuery));
+  }),
+);
+
+router.get(
+  '/users/:id',
+  validate({ params: schemas.idParamSchema }),
+  asyncHandler(async (req, res) => {
+    res.json({ user: await userService.getById(req.validatedParams.id) });
+  }),
+);
+
+router.put(
+  '/users/:id/roles',
+  validate({ params: schemas.idParamSchema, body: schemas.updateRolesSchema }),
+  asyncHandler(async (req, res) => {
+    const user = await userService.updateRoles({
+      userId: req.validatedParams.id,
+      roles: req.body.roles,
+      actor: req.user,
+      request: req,
+    });
+    res.json({ user });
+  }),
+);
+
+router.post(
+  '/users/:id/status',
+  validate({ params: schemas.idParamSchema, body: z.object({ active: z.boolean() }) }),
+  asyncHandler(async (req, res) => {
+    const user = await userService.setStatus({
+      userId: req.validatedParams.id,
+      active: req.body.active,
+      actor: req.user,
+      request: req,
+    });
+    res.json({ user });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Configuracion: empresa
+// ---------------------------------------------------------------------------
+
+const companyService = require('../../services/companyService');
+
+router.get(
+  '/settings/company',
+  asyncHandler(async (_req, res) => {
+    res.json({ company: await companyService.get() });
+  }),
+);
+
+router.patch(
+  '/settings/company',
+  validate({ body: schemas.companySettingsSchema }),
+  asyncHandler(async (req, res) => {
+    const company = await companyService.update({
+      payload: req.body,
+      actor: req.user,
+      request: req,
+    });
+    res.json({ company });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Configuracion: servicios
+//
+// Los tres tipos son fijos. Aqui se administra su capa comercial (si se
+// ofrecen, como se presentan y a que precio), nunca su maquina de estados.
+// ---------------------------------------------------------------------------
+
+const serviceCatalogService = require('../../services/serviceCatalogService');
+
+router.get(
+  '/services',
+  asyncHandler(async (req, res) => {
+    const regionCode = (req.query.region ?? req.user.region_code).toUpperCase();
+    res.json({
+      regionCode,
+      services: await serviceCatalogService.listForOperations(regionCode),
+    });
+  }),
+);
+
+router.patch(
+  '/services/:serviceType',
+  validate({ params: schemas.serviceTypeParamSchema, body: schemas.serviceSettingsSchema }),
+  asyncHandler(async (req, res) => {
+    const service = await serviceCatalogService.updateSettings({
+      serviceType: req.validatedParams.serviceType,
+      payload: req.body,
+      actor: req.user,
+      request: req,
+    });
+    res.json({ service });
+  }),
+);
+
+/** Parametros de precio del plan, dentro del modelo que ya tiene asignado. */
+router.patch(
+  '/services/:serviceType/plans/:planId',
+  validate({ params: schemas.planParamSchema, body: schemas.servicePlanSchema }),
+  asyncHandler(async (req, res) => {
+    const plan = await serviceCatalogService.updatePlan({
+      serviceType: req.validatedParams.serviceType,
+      planId: req.validatedParams.planId,
+      payload: req.body,
+      actor: req.user,
+      request: req,
+    });
+    res.json({ plan });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Configuracion: disponibilidad de la agenda
+//
+// Distinto de staff_availability: esto es cuando acepta reservas la empresa,
+// no cuando puede trabajar una persona.
+// ---------------------------------------------------------------------------
+
+const availabilityService = require('../../services/availabilityService');
+
+router.get(
+  '/booking-blackouts',
+  asyncHandler(async (req, res) => {
+    res.json({
+      blackouts: await availabilityService.list({
+        regionCode: (req.query.region ?? req.user.region_code).toUpperCase(),
+        includeInactive: true,
+        serviceType: req.query.serviceType,
+      }),
+    });
+  }),
+);
+
+router.post(
+  '/booking-blackouts',
+  validate({ body: schemas.blackoutSchema }),
+  asyncHandler(async (req, res) => {
+    const blackout = await availabilityService.create({
+      payload: req.body,
+      actor: req.user,
+      request: req,
+    });
+    res.status(201).json({ blackout });
+  }),
+);
+
+router.patch(
+  '/booking-blackouts/:id',
+  validate({ params: schemas.idParamSchema, body: schemas.updateBlackoutSchema }),
+  asyncHandler(async (req, res) => {
+    const blackout = await availabilityService.update({
+      blackoutId: req.validatedParams.id,
+      payload: req.body,
+      actor: req.user,
+      request: req,
+    });
+    res.json({ blackout });
+  }),
+);
+
+router.delete(
+  '/booking-blackouts/:id',
+  validate({ params: schemas.idParamSchema }),
+  asyncHandler(async (req, res) => {
+    await availabilityService.remove({
+      blackoutId: req.validatedParams.id,
+      actor: req.user,
+      request: req,
+    });
+    res.status(204).send();
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Cupones (Administracion)
 // ---------------------------------------------------------------------------
 

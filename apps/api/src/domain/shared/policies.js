@@ -24,27 +24,46 @@ const MS_PER_HOUR = 3_600_000;
  * a la vez habra que resolver el instante con la timezone de la region
  * (region.timezone). Ver docs/ARCHITECTURE.md
  */
-function scheduledStartAt(order) {
-  if (!order.scheduled_date) return null;
+function resolveLocalDateTime(date, time = '00:00') {
+  if (!date) return null;
 
   let year;
   let month;
   let day;
 
-  if (order.scheduled_date instanceof Date) {
-    year = order.scheduled_date.getFullYear();
-    month = order.scheduled_date.getMonth();
-    day = order.scheduled_date.getDate();
+  if (date instanceof Date) {
+    year = date.getFullYear();
+    month = date.getMonth();
+    day = date.getDate();
   } else {
-    const parts = String(order.scheduled_date).slice(0, 10).split('-').map(Number);
+    const parts = String(date).slice(0, 10).split('-').map(Number);
     if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
     [year, month, day] = [parts[0], parts[1] - 1, parts[2]];
   }
 
-  const time = String(order.scheduled_window_start ?? '00:00');
-  const [hours, minutes] = time.split(':').map(Number);
+  const [hours, minutes] = String(time ?? '00:00').split(':').map(Number);
 
   return new Date(year, month, day, hours || 0, minutes || 0, 0, 0);
+}
+
+function scheduledStartAt(order) {
+  return resolveLocalDateTime(order.scheduled_date, order.scheduled_window_start ?? '00:00');
+}
+
+/**
+ * Intervalo completo que ocupa el servicio: desde el inicio de la ventana
+ * horaria hasta su fin. Es lo que se contrasta con los bloqueos de agenda,
+ * porque un bloqueo de 14:00 a 17:00 debe chocar con una reserva de tarde
+ * aunque esta empiece a las 13:00.
+ */
+function scheduledInterval({ scheduledDate, windowStart, windowEnd }) {
+  const startAt = resolveLocalDateTime(scheduledDate, windowStart);
+  if (!startAt) return null;
+
+  // Sin hora de fin conocida, el intervalo es instantaneo: nunca se ensancha
+  // el bloqueo por suposicion.
+  const endAt = resolveLocalDateTime(scheduledDate, windowEnd ?? windowStart) ?? startAt;
+  return { startAt, endAt: endAt > startAt ? endAt : startAt };
 }
 
 /**
@@ -115,7 +134,9 @@ function resolveTimeWindow({ windowCode, region }) {
 }
 
 module.exports = {
+  resolveLocalDateTime,
   scheduledStartAt,
+  scheduledInterval,
   evaluateCancellation,
   assertValidSchedule,
   resolveTimeWindow,

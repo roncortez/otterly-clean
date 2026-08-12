@@ -9,9 +9,19 @@ const { cleaningStateMachine } = require('../src/domain/cleaning/stateMachine');
 const { laundryStateMachine } = require('../src/domain/laundry/stateMachine');
 const { calculatePrice, PRICING_MODELS } = require('../src/domain/pricing/pricing');
 const { buildTimeline } = require('../src/domain/shared/timeline');
-const { evaluateCancellation, assertValidSchedule } = require('../src/domain/shared/policies');
+const {
+  evaluateCancellation,
+  assertValidSchedule,
+  scheduledInterval,
+  resolveLocalDateTime,
+} = require('../src/domain/shared/policies');
+const {
+  findBlockingBlackout,
+  assertBookable,
+  describeDayAvailability,
+} = require('../src/domain/shared/availability');
 const { getRegion } = require('../src/config/regions');
-const { ROLES } = require('../src/domain/shared/roles');
+const { ROLES, hasRole, hasAnyRole, primaryRole, normalizeRoles } = require('../src/domain/shared/roles');
 
 const EC = getRegion('EC');
 const US = getRegion('US');
@@ -298,6 +308,155 @@ describe('Politicas de reserva y cancelacion', () => {
     // Ecuador 24 h, EE.UU. 48 h: la misma orden se juzga distinto.
     expect(EC.booking.freeCancellationHours).toBe(24);
     expect(US.booking.freeCancellationHours).toBe(48);
+  });
+});
+
+describe('Roles multiples', () => {
+  it('autoriza por pertenencia, no por rol unico', () => {
+    const coordinadora = [ROLES.STAFF, ROLES.ADMIN];
+
+    expect(hasRole(coordinadora, ROLES.ADMIN)).toBe(true);
+    expect(hasRole(coordinadora, ROLES.STAFF)).toBe(true);
+    expect(hasRole(coordinadora, ROLES.CUSTOMER)).toBe(false);
+    expect(hasAnyRole(coordinadora, [ROLES.ADMIN])).toBe(true);
+    expect(hasAnyRole([ROLES.CUSTOMER], [ROLES.ADMIN, ROLES.STAFF])).toBe(false);
+  });
+
+  it('elige un rol principal por privilegio para desempatar', () => {
+    expect(primaryRole([ROLES.STAFF, ROLES.ADMIN])).toBe(ROLES.ADMIN);
+    expect(primaryRole([ROLES.CUSTOMER, ROLES.STAFF])).toBe(ROLES.STAFF);
+    expect(primaryRole([])).toBeNull();
+  });
+
+  it('descarta roles inventados en lugar de aceptarlos', () => {
+    expect(normalizeRoles(['ADMIN', 'SUPERUSER', 'ADMIN'])).toEqual([ROLES.ADMIN]);
+    expect(normalizeRoles(null)).toEqual([]);
+  });
+});
+
+describe('Disponibilidad comercial (bloqueos de agenda)', () => {
+  const blackout = (overrides) => ({
+    id: 1,
+    service_type: null,
+    active: true,
+    starts_at: new Date(2026, 7, 20, 14, 0),
+    ends_at: new Date(2026, 7, 20, 17, 0),
+    reason: 'Inventario',
+    ...overrides,
+  });
+
+  const window = (h1, h2) => ({
+    startAt: new Date(2026, 7, 20, h1, 0),
+    endAt: new Date(2026, 7, 20, h2, 0),
+  });
+
+  it('bloquea una franja que solapa con el bloqueo', () => {
+    const { startAt, endAt } = window(13, 17);
+    const found = findBlockingBlackout({
+      blackouts: [blackout()],
+      serviceType: 'CLEANING',
+      startAt,
+      endAt,
+    });
+    expect(found).not.toBeNull();
+  });
+
+  it('no bloquea franjas que solo se tocan en el borde', () => {
+    // El bloqueo termina a las 17:00 y el servicio empieza a las 17:00.
+    // Con comparacion inclusiva se perderia una franja util cada dia.
+    const { startAt, endAt } = window(17, 20);
+    expect(
+      findBlockingBlackout({ blackouts: [blackout()], serviceType: 'CLEANING', startAt, endAt }),
+    ).toBeNull();
+  });
+
+  it('un bloqueo de un servicio no afecta a otro', () => {
+    const { startAt, endAt } = window(13, 17);
+    const soloLimpieza = [blackout({ service_type: 'CLEANING' })];
+
+    expect(
+      findBlockingBlackout({ blackouts: soloLimpieza, serviceType: 'CLEANING', startAt, endAt }),
+    ).not.toBeNull();
+    expect(
+      findBlockingBlackout({ blackouts: soloLimpieza, serviceType: 'LAUNDRY', startAt, endAt }),
+    ).toBeNull();
+  });
+
+  it('un bloqueo sin servicio es global y afecta a todos', () => {
+    const { startAt, endAt } = window(13, 17);
+    for (const serviceType of ['CLEANING', 'LAUNDRY', 'ALTERATION']) {
+      expect(
+        findBlockingBlackout({ blackouts: [blackout()], serviceType, startAt, endAt }),
+      ).not.toBeNull();
+    }
+  });
+
+  it('ignora los bloqueos desactivados', () => {
+    const { startAt, endAt } = window(13, 17);
+    expect(
+      findBlockingBlackout({
+        blackouts: [blackout({ active: false })],
+        serviceType: 'CLEANING',
+        startAt,
+        endAt,
+      }),
+    ).toBeNull();
+  });
+
+  it('lanza un error de negocio con el motivo, no un 500', () => {
+    const { startAt, endAt } = window(13, 17);
+    expect(() =>
+      assertBookable({ blackouts: [blackout()], serviceType: 'CLEANING', startAt, endAt }),
+    ).toThrow(/Inventario/);
+  });
+
+  it('describe el dia marcando solo las franjas cerradas', () => {
+    const day = describeDayAvailability({
+      date: '2026-08-20',
+      timeWindows: EC.booking.timeWindows,
+      blackouts: [blackout()],
+      serviceType: 'CLEANING',
+      resolveStart: resolveLocalDateTime,
+    });
+
+    const byCode = Object.fromEntries(day.windows.map((w) => [w.code, w]));
+    // El bloqueo es de 14:00 a 17:00: solo cae la tarde.
+    expect(byCode.MORNING.available).toBe(true);
+    expect(byCode.AFTERNOON.available).toBe(false);
+    expect(byCode.AFTERNOON.reason).toBe('Inventario');
+    expect(byCode.EVENING.available).toBe(true);
+    expect(day.fullyBlocked).toBe(false);
+  });
+
+  it('marca el dia entero cuando no queda ninguna franja', () => {
+    const day = describeDayAvailability({
+      date: '2026-08-15',
+      timeWindows: EC.booking.timeWindows,
+      blackouts: [
+        blackout({
+          starts_at: new Date(2026, 7, 15, 0, 0),
+          ends_at: new Date(2026, 7, 15, 23, 59, 59),
+          reason: 'Feriado',
+        }),
+      ],
+      serviceType: 'CLEANING',
+      resolveStart: resolveLocalDateTime,
+    });
+
+    expect(day.fullyBlocked).toBe(true);
+  });
+
+  it('el intervalo del servicio cubre toda la ventana horaria', () => {
+    const interval = scheduledInterval({
+      scheduledDate: '2026-08-20',
+      windowStart: '13:00',
+      windowEnd: '17:00',
+    });
+
+    expect(interval.startAt.getHours()).toBe(13);
+    expect(interval.endAt.getHours()).toBe(17);
+    // La fecha es la elegida, sin desplazarse por la zona horaria.
+    expect(interval.startAt.getDate()).toBe(20);
   });
 });
 

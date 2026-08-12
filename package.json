@@ -18,6 +18,9 @@
     "db:seed": "npm run db:seed --workspace @otterly-clean/api",
     "db:reset": "npm run db:reset --workspace @otterly-clean/api"
   },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  },
   "engines": {
     "node": ">=20"
   }

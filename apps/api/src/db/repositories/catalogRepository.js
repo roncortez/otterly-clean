@@ -32,6 +32,36 @@ async function findPlanByCode(code, regionCode, tx = db) {
   ]);
 }
 
+/**
+ * Actualiza los parametros comerciales de un plan.
+ *
+ * `config` guarda los parametros del modelo de precio (minimo de horas, tramos,
+ * unidad...). El servicio que llama aqui ya los valido contra el descriptor del
+ * modelo: este modulo no decide que claves son legitimas, solo persiste.
+ */
+async function updatePlan(id, fields, tx = db) {
+  const allowed = [
+    'name',
+    'description',
+    'base_amount',
+    'config',
+    'estimated_duration_minutes',
+    'active',
+    'display_order',
+  ];
+  const entries = Object.entries(fields).filter(([key]) => allowed.includes(key));
+  if (entries.length === 0) return findPlanById(id, tx);
+
+  const sets = entries.map(([key], index) =>
+    key === 'config' ? `config = $${index + 2}:json` : `${key} = $${index + 2}`,
+  );
+
+  return tx.oneOrNone(
+    `UPDATE service_plans SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+    [id, ...entries.map(([, value]) => value)],
+  );
+}
+
 async function listExtras({ serviceType, regionCode }, tx = db) {
   return tx.any(
     `SELECT * FROM service_extras
@@ -78,6 +108,7 @@ module.exports = {
   listPlans,
   findPlanById,
   findPlanByCode,
+  updatePlan,
   listExtras,
   findExtrasByCodes,
   listZones,

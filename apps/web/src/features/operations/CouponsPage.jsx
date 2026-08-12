@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Ticket, Plus, CheckCircle, XCircle, Tag, AlertCircle } from 'lucide-react';
 import api from '@/shared/api/client';
+import { useApiQuery } from '@/shared/api/useApiQuery';
 
 export default function CouponsPage() {
-  const [coupons, setCoupons] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // La lectura pasa por useApiQuery: deriva `loading` comparando lo pedido con
+  // lo resuelto, en lugar de escribirlo con un setState dentro del efecto.
+  const couponsQuery = useApiQuery('/operations/coupons');
+  const coupons = couponsQuery.data?.coupons ?? [];
+  const loading = couponsQuery.loading;
+
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     codigo: '',
@@ -17,21 +22,7 @@ export default function CouponsPage() {
   });
   const [error, setError] = useState('');
 
-  async function loadCoupons() {
-    try {
-      setLoading(true);
-      const res = await api.get('/operations/coupons');
-      setCoupons(res.data.coupons || []);
-    } catch {
-      setError('Error cargando los cupones');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadCoupons();
-  }, []);
+  const loadCoupons = couponsQuery.reload;
 
   async function handleSubmit(e) {
     e.preventDefault();

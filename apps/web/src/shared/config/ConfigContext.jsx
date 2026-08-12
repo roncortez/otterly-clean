@@ -4,11 +4,21 @@ import { api } from '@/shared/api/client';
 const ConfigContext = createContext(null);
 
 /**
- * Configuración regional servida por el backend.
+ * Valores de respaldo de la empresa.
  *
- * Ningún componente escribe "Provincia", "$" ni "IVA" a mano: todo eso llega
- * de /api/catalog/config. Cambiar de Ecuador a Estados Unidos es cambiar la
- * región del usuario, no reescribir formularios.
+ * Se declaran fuera del componente para que la referencia sea estable: si se
+ * crearan en cada render, todo lo que dependa de `company` se recalcularía sin
+ * motivo.
+ */
+const EMPTY_COMPANY = Object.freeze({ name: '', phone: '', whatsapp: '', email: '' });
+
+/**
+ * Configuración servida por el backend: región + empresa + servicios.
+ *
+ * Ningún componente escribe "Provincia", "$", "IVA", el nombre comercial ni el
+ * número de WhatsApp a mano: todo eso llega de /api/catalog/config. Cambiar de
+ * Ecuador a Estados Unidos es cambiar la región del usuario, y cambiar el
+ * teléfono de la empresa es editar una pantalla, no desplegar.
  */
 export function ConfigProvider({ children }) {
   const [config, setConfig] = useState(null);
@@ -31,12 +41,21 @@ export function ConfigProvider({ children }) {
     };
   }, []);
 
+  // El título de la pestaña también es un dato de marca: si el nombre
+  // comercial cambia, cambia aquí sin tocar index.html.
+  const companyName = config?.company?.name;
+  useEffect(() => {
+    if (companyName) document.title = `${companyName} · Servicios a domicilio`;
+  }, [companyName]);
+
   const value = useMemo(() => {
     const region = config?.region;
 
     return {
       config,
       region,
+      company: config?.company ?? EMPTY_COMPANY,
+      serviceTypes: config?.serviceTypes ?? [],
       error,
       isLoading: !config && !error,
 

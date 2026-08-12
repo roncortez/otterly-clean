@@ -255,6 +255,126 @@ const bagStatusSchema = z.object({
   weight: z.number().positive().max(100).optional().nullable(),
 });
 
+// --- Configuracion administrable -------------------------------------------
+
+const serviceTypeEnum = z.enum(['CLEANING', 'LAUNDRY', 'ALTERATION']);
+const roleEnum = z.enum(['CUSTOMER', 'STAFF', 'ADMIN']);
+
+/**
+ * Datos publicos de la empresa.
+ *
+ * Los enlaces se validan como URL para que no acaben en el frontend cadenas
+ * que el navegador interprete de forma rara (`javascript:` y similares). Se
+ * admite cadena vacia porque "sin configurar" es un estado legitimo.
+ */
+const optionalUrl = z.union([z.string().url().max(500), z.literal('')]).optional();
+const optionalText = (max) => z.string().trim().max(max).optional();
+
+const companySettingsSchema = z
+  .object({
+    name: z.string().trim().min(1, 'El nombre comercial es obligatorio').max(120).optional(),
+    tagline: optionalText(200),
+    logoUrl: optionalUrl,
+    iconUrl: optionalUrl,
+    // Contacto: se admite vacio para poder retirar un canal.
+    phone: z.union([z.string().regex(/^\+[1-9]\d{6,14}$/, 'Usa formato internacional'), z.literal('')]).optional(),
+    whatsapp: z.union([z.string().regex(/^\+[1-9]\d{6,14}$/, 'Usa formato internacional'), z.literal('')]).optional(),
+    whatsappMessage: optionalText(300),
+    telegram: optionalText(120),
+    email: z.union([z.email('Correo invalido').max(255), z.literal('')]).optional(),
+    address: optionalText(300),
+    website: optionalUrl,
+    instagram: optionalUrl,
+    facebook: optionalUrl,
+    supportHours: optionalText(160),
+  })
+  // Sin campos extra: evita que la pantalla acabe guardando basura en el JSONB.
+  .strict();
+
+/**
+ * Configuracion comercial de un servicio.
+ * El tipo de servicio no viaja en el cuerpo: va en la ruta y siempre es uno de
+ * los tres conocidos.
+ */
+const serviceSettingsSchema = z
+  .object({
+    active: z.boolean().optional(),
+    displayName: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(500).optional().nullable(),
+    customerInfo: z.string().trim().max(2000).optional().nullable(),
+    icon: z.string().trim().max(60).optional().nullable(),
+    imageUrl: z.union([z.string().url().max(500), z.literal('')]).optional().nullable(),
+    displayOrder: z.number().int().min(0).max(99).optional(),
+  })
+  .strict();
+
+/**
+ * Parametros comerciales de un plan.
+ *
+ * `pricing_model` NO esta aqui a proposito: cambiarlo exigiria datos distintos
+ * del cliente al reservar. `config` se valida en forma aqui y en contenido en
+ * serviceCatalogService, contra el descriptor del modelo real del plan.
+ */
+const servicePlanSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(500).optional().nullable(),
+    // Importes en centavos, enteros: nunca coma flotante para dinero.
+    baseAmount: z.number().int().min(0).max(10_000_000).optional(),
+    estimatedDurationMinutes: z.number().int().min(0).max(1440).optional().nullable(),
+    active: z.boolean().optional(),
+    displayOrder: z.number().int().min(0).max(99).optional(),
+    config: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+/** Fecha 'AAAA-MM-DD' o fecha y hora locales 'AAAA-MM-DDTHH:MM'. */
+const localDateTime = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/, 'Formato esperado: AAAA-MM-DD o AAAA-MM-DDTHH:MM');
+
+const blackoutSchema = z.object({
+  // null / ausente = bloqueo global para todos los servicios.
+  serviceType: serviceTypeEnum.optional().nullable(),
+  startsAt: localDateTime,
+  endsAt: localDateTime.optional().nullable(),
+  allDay: z.boolean().default(false),
+  reason: z.string().trim().max(300).optional().nullable(),
+  regionCode: z.enum(['EC', 'US']).optional(),
+});
+
+const updateBlackoutSchema = z.object({
+  serviceType: serviceTypeEnum.optional().nullable(),
+  startsAt: localDateTime.optional(),
+  endsAt: localDateTime.optional().nullable(),
+  allDay: z.boolean().optional(),
+  reason: z.string().trim().max(300).optional().nullable(),
+  active: z.boolean().optional(),
+});
+
+const availabilityQuerySchema = z.object({
+  serviceType: serviceTypeEnum.optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  region: z.enum(['EC', 'US']).optional(),
+});
+
+/**
+ * Roles de una persona.
+ *
+ * Se envia el conjunto completo, no operaciones sueltas: el estado final queda
+ * explicito y dos administradores editando a la vez no producen un resultado
+ * que ninguno pidio. La proteccion del ultimo ADMIN se aplica en el servicio,
+ * dentro de la transaccion.
+ */
+const updateRolesSchema = z.object({
+  roles: z.array(roleEnum).min(1, 'Debes asignar al menos un rol').max(3),
+});
+
+const serviceTypeParamSchema = z.object({ serviceType: serviceTypeEnum });
+
+const planParamSchema = z.object({ serviceType: serviceTypeEnum, planId: id });
+
 // --- Consultas -------------------------------------------------------------
 
 const paginationSchema = z.object({
@@ -275,10 +395,26 @@ const orderQuerySchema = paginationSchema.extend({
 
 const idParamSchema = z.object({ id });
 
+const userQuerySchema = paginationSchema.extend({
+  role: roleEnum.optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).optional(),
+  search: z.string().trim().max(100).optional(),
+});
+
 module.exports = {
   idParamSchema,
   paginationSchema,
   orderQuerySchema,
+  userQuerySchema,
+  companySettingsSchema,
+  serviceSettingsSchema,
+  servicePlanSchema,
+  serviceTypeParamSchema,
+  planParamSchema,
+  blackoutSchema,
+  updateBlackoutSchema,
+  availabilityQuerySchema,
+  updateRolesSchema,
   registerSchema,
   loginSchema,
   refreshSchema,

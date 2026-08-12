@@ -55,7 +55,9 @@ async function resolveRecipients(audiences, context, tx) {
     }
     if (audience === AUDIENCE.OPS) {
       const admins = await tx.any(
-        "SELECT id FROM users WHERE role = 'ADMIN' AND status = 'ACTIVE'",
+        `SELECT u.id FROM users u
+           JOIN user_roles ur ON ur.user_id = u.id AND ur.role = 'ADMIN'
+          WHERE u.status = 'ACTIVE'`,
       );
       recipients.push(...admins.map((a) => ({ userId: a.id, audience })));
     }

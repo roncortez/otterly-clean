@@ -14,7 +14,12 @@ trabajo.
 | ----------------------- | --------------------------------------------------------- |
 | Limpieza residencial    | Completo                                                   |
 | Lavandería a domicilio  | Completo, con trazabilidad por bolsa                       |
-| Arreglo de prendas      | Definido en el dominio y la base de datos, aún no ofrecido |
+| Arreglo de prendas      | Administrable, pero sin flujo de reserva todavía           |
+
+Los tres son **tipos fijos del dominio**: cada uno tiene su máquina de estados y
+su tabla de detalle. Lo que Operaciones administra desde la aplicación es su
+capa comercial —si se ofrecen, cómo se presentan y a qué precio—, no cómo
+funcionan. Ver [Configuración administrable](docs/ARCHITECTURE.md#configuración-administrable).
 
 ## Stack
 
@@ -60,13 +65,17 @@ desarrollo no hay CORS que configurar.
 
 Las crea `npm run db:seed`. **Solo para desarrollo.**
 
-| Rol      | Correo                         | Contraseña   | Notas                |
-| -------- | ------------------------------ | ------------ | -------------------- |
-| ADMIN    | `admin@otterlyclean.ec`        | `Admin123!`  | Operaciones          |
-| STAFF    | `carla.mendez@otterlyclean.ec` | `Staff123!`  | Solo limpieza        |
-| STAFF    | `jorge.paredes@otterlyclean.ec`| `Staff123!`  | Solo lavandería      |
-| STAFF    | `lucia.torres@otterlyclean.ec` | `Staff123!`  | Limpieza y lavandería|
-| CUSTOMER | `cliente@ejemplo.com`          | `Cliente123!`| Con dirección cargada|
+| Roles          | Correo                          | Contraseña    | Notas                          |
+| -------------- | ------------------------------- | ------------- | ------------------------------ |
+| ADMIN          | `admin@otterlyclean.ec`         | `Admin123!`   | Operaciones                    |
+| STAFF          | `carla.mendez@otterlyclean.ec`  | `Staff123!`   | Solo limpieza                  |
+| STAFF          | `jorge.paredes@otterlyclean.ec` | `Staff123!`   | Solo lavandería                |
+| STAFF          | `lucia.torres@otterlyclean.ec`  | `Staff123!`   | Limpieza y lavandería          |
+| ADMIN + STAFF  | `paula.rios@otterlyclean.ec`    | `Staff123!`   | Entra a `/operaciones` y a `/trabajo` |
+| CUSTOMER       | `cliente@ejemplo.com`           | `Cliente123!` | Con dirección cargada          |
+
+Una persona puede tener **varios roles**. La cuenta de Paula existe justamente
+para probar ese caso: la misma sesión abre las dos consolas.
 
 ## Comandos
 
@@ -102,6 +111,7 @@ apps/web/
       auth/              entrar y crear cuenta
       customer/          panel, asistente de reserva, detalle, direcciones
       operations/        panel operativo, solicitudes, trabajadores, incidencias
+        configuration/   empresa, servicios, agenda y avisos
       staff/             trabajos del día y detalle (optimizado para móvil)
 docs/
   ARCHITECTURE.md        decisiones de diseño y cómo extender
@@ -125,9 +135,15 @@ finalizó → el cliente ve cada cambio con su marca de tiempo.
 recogida, recepción, lavado, secado, doblado, listo, en camino, entregado →
 cada bolsa lleva un código derivado de la orden.
 
+**Configuración**: Operaciones cambia desde `/operaciones/configuracion` los
+datos de la empresa, si cada servicio se ofrece y a qué precio, y cuándo la
+agenda acepta reservas. Todo eso antes exigía tocar código o seeds.
+
 ### Preparado pero no implementado
 
 Pagos (el dominio ya modela importe, moneda, impuesto y estado), envío real de
 email/SMS/push (existe la abstracción y el registro), geolocalización, códigos
-QR en las bolsas, recurrencia, promociones, calificaciones y el servicio de
-arreglo de prendas.
+QR en las bolsas, recurrencia, calificaciones y el **flujo de reserva de arreglo
+de prendas**: su configuración comercial ya es administrable, pero le faltan la
+máquina de estados, el esquema de validación y el endpoint de creación. Ver
+[qué falta exactamente](docs/ARCHITECTURE.md#arreglo-de-prendas-qué-falta).

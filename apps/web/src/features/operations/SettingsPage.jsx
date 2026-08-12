@@ -1,129 +1,104 @@
-import React, { useState, useEffect } from 'react';
-import { Sliders, Save, Image, MessageSquare, AlertCircle } from 'lucide-react';
-import api from '@/shared/api/client';
+import { useMemo, useState } from 'react';
+import { api } from '@/shared/api/client';
+import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
+import { useEditableForm } from '@/shared/hooks/useEditableForm';
+import { Alert, Card, CardHeader, Checkbox, Field, Input, Spinner, Textarea } from '@/shared/ui';
+import SaveBar from './configuration/SaveBar';
+
+/**
+ * Avisos al cliente: el banner que aparece al entrar a la portada.
+ *
+ * Vive dentro de Configuración porque es lo mismo que el resto de esta sección
+ * —contenido comercial que Operaciones cambia sin desplegar—, solo que
+ * temporal.
+ */
+const EMPTY = { enabled: false, imageUrl: '', message: '' };
 
 export default function SettingsPage() {
-  const [banner, setBanner] = useState({
-    enabled: false,
-    imageUrl: '',
-    message: '',
-  });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [statusMsg, setStatusMsg] = useState('');
+  const bannerQuery = useApiQuery('/operations/settings/banner');
+  const { busy: saving, error: saveError, execute } = useApiAction();
 
-  useEffect(() => {
-    async function loadBanner() {
-      try {
-        setLoading(true);
-        const res = await api.get('/operations/settings/banner');
-        if (res.data.banner) setBanner(res.data.banner);
-      } catch {
-        // Ignorar
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadBanner();
-  }, []);
+  const [saved, setSaved] = useState(false);
 
-  async function handleSave(e) {
-    e.preventDefault();
-    try {
-      setSaving(true);
-      setStatusMsg('');
-      await api.post('/operations/settings/banner', banner);
-      setStatusMsg('Configuración guardada exitosamente.');
-    } catch {
-      setStatusMsg('Error al guardar la configuración.');
-    } finally {
-      setSaving(false);
-    }
+  // Un banner que nunca se configuró llega vacío: se completa con los valores
+  // por defecto para que el formulario tenga siempre la misma forma.
+  const loaded = useMemo(() => {
+    if (!bannerQuery.data) return null;
+    return { ...EMPTY, ...(bannerQuery.data.banner ?? {}) };
+  }, [bannerQuery.data]);
+
+  const { form, dirty, setValue, reset } = useEditableForm(loaded);
+
+  if (bannerQuery.error) return <Alert tone="danger">{bannerQuery.error}</Alert>;
+  if (!form) return <Spinner label="Cargando avisos" />;
+
+  const setField = (patch) => {
+    for (const [key, value] of Object.entries(patch)) setValue(key, value);
+    setSaved(false);
+  };
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    // El endpoint del banner reemplaza el objeto entero, así que se envía
+    // completo y no solo lo que cambió.
+    await execute(() => api.post('/operations/settings/banner', form), {
+      onSuccess: () => {
+        setSaved(true);
+        reset();
+        bannerQuery.reload();
+      },
+    });
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="border-b border-slate-200 pb-4">
-        <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-          <Sliders className="h-6 w-6 text-emerald-600" />
-          Configuración Global de la Aplicación
-        </h2>
-        <p className="text-xs text-slate-500">
-          Gestiona los anuncios promocionales, banners globales y avisos al cliente
-        </p>
-      </div>
+    <form onSubmit={handleSubmit} className="max-w-3xl">
+      <Card>
+        <CardHeader
+          title="Banner promocional"
+          description="Se muestra como aviso flotante la primera vez que alguien entra a la portada."
+        />
 
-      {statusMsg && (
-        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 border border-emerald-200">
-          <AlertCircle className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span>{statusMsg}</span>
+        <div className="space-y-4 p-5">
+          {saveError ? <Alert tone="danger">{saveError}</Alert> : null}
+
+          <Checkbox
+            label="Mostrar el banner"
+            description="Al desactivarlo el aviso deja de aparecer, pero el contenido se conserva."
+            checked={form.enabled}
+            onChange={(event) => setField({ enabled: event.target.checked })}
+          />
+
+          <Field label="Imagen (URL)" hint="Opcional. Se muestra sobre el mensaje.">
+            <Input
+              type="url"
+              value={form.imageUrl}
+              onChange={(event) => setField({ imageUrl: event.target.value })}
+              placeholder="https://ejemplo.com/promocion.jpg"
+            />
+          </Field>
+
+          <Field label="Mensaje">
+            <Textarea
+              rows={3}
+              maxLength={300}
+              value={form.message}
+              onChange={(event) => setField({ message: event.target.value })}
+              placeholder="20% de descuento en tu primera limpieza profunda."
+            />
+          </Field>
+
+          <SaveBar
+            dirty={dirty}
+            saving={saving}
+            saved={saved}
+            onReset={() => {
+              reset();
+              setSaved(false);
+            }}
+          />
         </div>
-      )}
-
-      {loading ? (
-        <div className="p-8 text-center text-xs text-slate-400">Cargando ajustes...</div>
-      ) : (
-        <form onSubmit={handleSave} className="space-y-6 rounded-2xl bg-white p-6 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm">Banner Promocional (Overlay Popup)</h3>
-              <p className="text-xs text-slate-500">Muestra una imagen o anuncio flotante cuando el cliente entra a la Home</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={banner.enabled}
-                onChange={(e) => setFormBanner({ enabled: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-            </label>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 flex items-center gap-1">
-                <Image className="h-3.5 w-3.5 text-slate-400" /> URL de Imagen del Banner
-              </label>
-              <input
-                type="url"
-                placeholder="https://ejemplo.com/imagen.jpg"
-                value={banner.imageUrl}
-                onChange={(e) => setFormBanner({ imageUrl: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 flex items-center gap-1">
-                <MessageSquare className="h-3.5 w-3.5 text-slate-400" /> Mensaje / Texto del Banner
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Escribe el mensaje o texto promocional..."
-                value={banner.message}
-                onChange={(e) => setFormBanner({ message: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-4 border-t border-slate-100">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-all disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              {saving ? 'Guardando...' : 'Guardar Cambios'}
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
+      </Card>
+    </form>
   );
-
-  function setFormBanner(updated) {
-    setBanner((prev) => ({ ...prev, ...updated }));
-  }
 }

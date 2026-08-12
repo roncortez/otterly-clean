@@ -6,6 +6,7 @@ const { db } = require('../db');
 const userRepository = require('../db/repositories/userRepository');
 const staffRepo = require('../db/repositories/staffRepository');
 const audit = require('./auditService');
+const { assertNotLastActiveAdmin } = require('./userService');
 const { ROLES } = require('../domain/shared/roles');
 const { ConflictError, NotFoundError } = require('../domain/errors');
 
@@ -31,7 +32,7 @@ async function createStaff({ payload, actor, request }) {
         firstName: payload.firstName,
         lastName: payload.lastName,
         phone: payload.phone,
-        role: ROLES.STAFF,
+        roles: [ROLES.STAFF],
         regionCode: payload.regionCode ?? env.defaultRegion,
         locale: payload.locale ?? 'es',
       },
@@ -157,6 +158,13 @@ async function setActive({ staffId, active, actor, request }) {
   if (!before) throw new NotFoundError('Trabajador', staffId);
 
   return db.tx(async (tx) => {
+    // Alguien puede ser STAFF y ADMIN a la vez: desactivarlo por la pantalla de
+    // trabajadores tambien le quitaria el acceso a Operaciones. Si es el ultimo
+    // administrador activo, el sistema se quedaria sin nadie que pueda entrar.
+    if (!active) {
+      await assertNotLastActiveAdmin(staffId, tx);
+    }
+
     await staffRepo.updateProfile(staffId, { active }, tx);
     await userRepository.update(staffId, { status: active ? 'ACTIVE' : 'INACTIVE' }, tx);
 

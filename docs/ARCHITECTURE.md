@@ -54,6 +54,24 @@ El campo `timestamps` hace que marcar un estado registre su hora
 automáticamente. Por eso el timeline del cliente tiene marcas de tiempo reales
 sin que ningún controlador las escriba a mano.
 
+### Tipo de servicio ≠ configuración comercial
+
+Son dos preguntas distintas que conviene no mezclar:
+
+| Pregunta                        | Dónde vive                     | Quién la cambia |
+| ------------------------------- | ------------------------------ | --------------- |
+| ¿Existe el flujo en el código?  | `domain/shared/serviceTypes.js` (`enabled`) | Un desarrollador |
+| ¿Lo estamos ofreciendo hoy?     | `service_settings.active`      | Operaciones      |
+
+Un servicio solo es reservable si cumple **las dos**
+(`serviceCatalogService.assertBookable`). Así se puede apagar limpieza un fin de
+semana sin desplegar, y arreglo de prendas puede administrarse ya aunque su
+flujo no exista todavía.
+
+Los **tipos** siguen siendo un conjunto cerrado de tres. No hay endpoint para
+crear un cuarto, y es deliberado: un tipo nuevo necesita máquina de estados,
+tabla de detalle y flujo de reserva. Eso es código, no una pantalla.
+
 ### Añadir un servicio nuevo
 
 El caso concreto es **arreglo de prendas**, que ya está definido pero no
@@ -64,8 +82,38 @@ ofrecido. Para activarlo:
 3. Rellenar `alteration_details` (la tabla ya existe) y su repositorio.
 4. Añadir el esquema de validación y las rutas de creación.
 
-No hay que tocar asignaciones, incidencias, auditoría, notificaciones ni la
-consola de Operaciones: todo eso es común a cualquier tipo de servicio.
+No hay que tocar asignaciones, incidencias, auditoría, notificaciones, la
+consola de Operaciones ni la configuración comercial: todo eso ya es común a
+cualquier tipo de servicio.
+
+### Arreglo de prendas: qué falta
+
+Lo que **ya está** tras esta versión:
+
+- Tipo de servicio declarado en el dominio y validado en toda la API.
+- Tabla `alteration_details` y plan `EC-ALTERATION-QUOTE` con modelo `QUOTE`.
+- Fila en `service_settings`: Operaciones edita su nombre, descripción, icono,
+  orden y texto para el cliente, y puede marcarlo como ofrecido.
+- Bloqueos de agenda y auditoría: funcionan igual que para los otros dos.
+
+Lo que **falta** para que un cliente pueda reservarlo:
+
+1. `domain/alteration/stateMachine.js`. El flujo no es como los otros: hay una
+   **inspección previa** y el precio no se conoce al reservar, así que necesita
+   estados propios (`QUOTE_PENDING`, `QUOTE_SENT`, `QUOTE_APPROVED`…).
+2. `alterationDetailSchema` en `http/schemas.js` y el insert de detalle en
+   `orderService`.
+3. `POST /api/customer/orders/alteration`.
+4. Un paso en el asistente de reserva para describir las prendas, y la pantalla
+   donde el cliente aprueba o rechaza la cotización.
+5. Decidir cómo se cobra tras la inspección: hoy `pricing_model = QUOTE`
+   devuelve total 0 y marca `requires_quote`, pero no existe el flujo que
+   sustituye ese 0 por el importe real.
+
+Marcarlo como "ofrecido" en la pantalla de configuración **no** lo hace
+reservable: la interfaz lo advierte y `assertBookable` lo rechaza igualmente,
+porque `enabled` sigue en `false`. Se prefirió eso a inventar un flujo
+incompleto para poder tachar la casilla.
 
 ## Modelo de datos
 
@@ -81,6 +129,15 @@ orders ──┬── order_status_history    (fuente de verdad del timeline)
          ├── incidents
          ├── payments                (modelado, sin integración)
          └── notifications
+
+users ───┬── user_roles              (una persona, varios roles)
+         ├── customer_profiles
+         └── staff_profiles ── staff_zones, staff_availability
+
+configuración administrable:
+  app_settings (clave 'company')     datos públicos de la empresa
+  service_settings                   capa comercial de los 3 tipos
+  booking_blackouts                  cuándo NO se aceptan reservas
 ```
 
 **Por qué una sola tabla de órdenes**: Operaciones necesita una única cola donde
@@ -153,6 +210,117 @@ hace **siempre el backend**: el asistente de reserva llama a
 `POST /api/customer/quote` para mostrar el total, y ese mismo cálculo es el que
 se guarda al confirmar.
 
+### Qué puede editar Operaciones de un precio
+
+`plan.config` es JSON libre para el motor, pero la pantalla de administración no
+puede serlo. Si dejara escribir claves arbitrarias, un `minimunHours` mal
+escrito se guardaría sin error y el mínimo dejaría de aplicarse **en silencio**:
+el cliente pagaría de menos y nadie se enteraría.
+
+Por eso `MODEL_PARAMETERS` (en `domain/pricing/pricing.js`) declara, por modelo,
+qué significa el importe base y qué parámetros son editables:
+
+```js
+PER_HOUR: {
+  amount: { label: 'Precio por hora' },
+  fields: [{ key: 'minimumHours', type: 'number', min: 0, max: 24 }],
+}
+```
+
+Ese descriptor es la única fuente: de él salen a la vez la validación del
+backend (`serviceCatalogService.normalizePlanConfig`, que descarta lo que no
+pertenece al modelo) y el formulario que ve el administrador. Así no pueden
+desincronizarse, y limpieza muestra "mínimo de horas" mientras lavandería
+muestra "unidad" y "mínimo facturable" sin que nadie lo escriba dos veces.
+
+El **modelo de precio no se puede cambiar desde la pantalla**: cada modelo pide
+datos distintos al cliente al reservar, así que cambiarlo rompería las reservas
+en curso.
+
+## Configuración administrable
+
+Antes había datos comerciales escritos en el código: el nombre de la empresa en
+cinco pantallas, el WhatsApp en un componente, los servicios de la portada en un
+array. Cambiar un teléfono exigía desplegar.
+
+La regla para decidir dónde va cada cosa:
+
+| Tipo de valor            | Ejemplo                                | Dónde vive                  |
+| ------------------------ | -------------------------------------- | --------------------------- |
+| Regla de dominio         | "solo ADMIN asigna trabajo"            | Código (`domain/`)          |
+| Configuración técnica    | `JWT_SECRET`, `CORS_ORIGINS`, `DB_*`   | Variables de entorno        |
+| Configuración regional   | moneda, impuesto, etiquetas, ventanas  | `config/regions.js`         |
+| Configuración comercial  | teléfono, precios, si un servicio se ofrece | Base de datos, editable |
+
+Solo la última fila llega a la pantalla de configuración. Lo demás sigue fuera
+**a propósito**: un impuesto o una ventana horaria cambian con el país, no con
+el día, y un secreto no debe poder editarse desde un navegador.
+
+### Dónde se guarda
+
+- **Empresa** → `app_settings`, clave `company`. Se reutiliza la tabla
+  clave→JSONB que ya existía para el banner en lugar de crear una tabla de una
+  sola fila. `companyService` define los campos válidos y rellena los que
+  falten, así que la aplicación arranca aunque la fila no exista.
+- **Servicios** → `service_settings`, con `service_type` como clave primaria. No
+  es un `BIGSERIAL` justamente para que no se puedan inventar tipos.
+- **Agenda** → `booking_blackouts`.
+
+El frontend lo consume todo de `GET /api/catalog/config`, que ya servía la
+configuración regional: una sola petición al arrancar, porque son datos que se
+necesitan a la vez en el primer render.
+
+### Lo que sigue estando en el código, a propósito
+
+- Las máquinas de estado y sus transiciones por rol.
+- Los modelos de precio (`PER_HOUR`, `FLAT_BY_SIZE`, …) y qué parámetro admite
+  cada uno.
+- La antelación mínima y la política de cancelación (`config/regions.js`).
+- Los tres tipos de servicio.
+- El mapa de iconos del frontend: la configuración guarda un nombre y solo se
+  admiten los que el frontend sabe pintar.
+
+## Disponibilidad: dos conceptos que no se mezclan
+
+```
+staff_availability   →  "¿cuándo puede trabajar Carla?"
+booking_blackouts    →  "¿cuándo acepta reservas la empresa?"
+```
+
+Se parecen y no son lo mismo. Cerrar el 25 de diciembre no cambia el horario de
+nadie, y que Carla libre el martes no cierra la agenda. Por eso son tablas
+distintas y no se consultan juntas.
+
+Un bloqueo tiene un intervalo, un motivo y opcionalmente un `service_type`.
+**Si el tipo es `NULL`, el bloqueo es global.**
+
+La decisión vive en `domain/shared/availability.js` como función pura: recibe
+los bloqueos ya leídos y responde si el intervalo choca. El solapamiento usa
+extremos abiertos (`inicio < finOtro && fin > inicioOtro`), de modo que un
+bloqueo de 14:00–17:00 y un servicio de 17:00–20:00 **no** chocan; con `<=` se
+perdería una franja útil en cada frontera.
+
+El intervalo que se contrasta es **toda la ventana horaria** del servicio, no su
+instante de inicio: así un bloqueo de 14:00 a 17:00 choca con la reserva de
+tarde aunque esta empiece a las 13:00.
+
+Tres reglas que definen el comportamiento:
+
+1. **La validación está en el backend.** `orderService.createOrder` llama a
+   `availabilityService.assertBookableSlot` antes de escribir nada. Que el
+   asistente oculte una franja es cortesía; la petición se puede construir a
+   mano.
+2. **Bloquear no cancela.** Los pedidos anteriores al bloqueo siguen en pie.
+   Cierra reservas nuevas, no rompe compromisos ya adquiridos.
+3. **Es temporal por naturaleza.** Al pasar el intervalo la agenda se reabre
+   sola, sin que nadie tenga que acordarse. Cerrar hoy nunca impide agendar
+   dentro de dos semanas.
+
+El frontend pide `GET /api/catalog/availability` y desactiva las franjas
+cerradas, mostrando el motivo. Si esa consulta falla, el asistente deja
+continuar y avisa de que se comprobará al confirmar: la respuesta correcta a "no
+sé" no es bloquear al cliente.
+
 ## Trazabilidad de la lavandería
 
 El riesgo operativo más caro de este negocio es confundir la ropa de dos
@@ -180,6 +348,61 @@ SMS y PUSH quedan en `PENDING` esperando a que exista un driver real.
 Emitir una notificación **nunca lanza excepción**: marcar "llegué" tiene que
 funcionar aunque el proveedor de correo esté caído.
 
+## Roles múltiples
+
+Una persona puede coordinar la operación **y** salir a trabajar. Eso no cabe en
+una columna `role` con un `CHECK`, y una lista separada por comas
+(`"ADMIN,STAFF"`) sería imposible de consultar e indexar. Se modela como lo que
+es: una relación, `user_roles (user_id, role)`.
+
+`users.role` se **eliminó**. Mantener las dos cosas daría dos verdades que
+pueden contradecirse; ahora los repositorios devuelven siempre `roles` como
+array y ninguna capa superior tiene que acordarse del JOIN.
+
+### El rol efectivo
+
+Con varios roles, "qué puede hacer" ya no basta: hace falta saber **cómo está
+actuando ahora**. Alguien con ADMIN + STAFF que abre `/api/staff` debe ver la
+proyección del trabajador —sin importes, sin correo del cliente—, no la del
+administrador.
+
+Como cada árbol de rutas declara su audiencia, `requireRole` fija el rol
+efectivo en `req.user.role` al que esa ruta exige:
+
+```
+/api/customer/*    → actúa como CUSTOMER
+/api/staff/*       → actúa como STAFF
+/api/operations/*  → actúa como ADMIN
+```
+
+Así el resto del sistema —proyecciones, máquina de estados, auditoría— sigue
+razonando con un solo rol, y aplica el **mínimo privilegio del contexto**, no el
+máximo del usuario. Fue lo que permitió introducir roles múltiples sin tocar
+`orderService`, `incidentService` ni las máquinas de estado.
+
+La autorización comprueba pertenencia (`hasAnyRole`), nunca igualdad.
+`primaryRole` solo se usa para desempatar cuando hay que mostrar un rol o
+decidir a qué pantalla entrar.
+
+### El último administrador
+
+`userService.assertNotLastActiveAdmin` impide quitarse el rol ADMIN o
+desactivarse si no queda ningún otro administrador activo. Sin ella, un
+descuido dejaría la instalación sin nadie capaz de entrar a Operaciones y sin
+forma de recuperarla desde la aplicación. Se comprueba **dentro de la
+transacción** del cambio, para que dos peticiones simultáneas no se den permiso
+la una a la otra.
+
+Se aplica también al desactivar desde la pantalla de trabajadores: alguien
+puede ser STAFF y ADMIN a la vez.
+
+### Roles no son capacidades
+
+`STAFF` es un rol: dice que esa persona entra a `/trabajo`. Que atienda limpieza
+o lavandería es una **capacidad profesional** y sigue viviendo en
+`staff_profiles.service_types`. Son cosas distintas y se editan en pantallas
+distintas.
+
 ## Frontend
 
 Enrutado **por audiencia**, no por entidad:
@@ -190,8 +413,19 @@ Enrutado **por audiencia**, no por entidad:
 /trabajo/*                                      → STAFF
 ```
 
-Así el control de acceso se ve al leer `App.jsx`. El backend revalida todo: el
-enrutado solo evita mostrar pantallas que no corresponden.
+Así el control de acceso se ve al leer `App.jsx`. `RequireRole` comprueba
+`user.roles.includes(role)`, de modo que ADMIN + STAFF entra en los dos árboles;
+cada consola ofrece un enlace a la otra solo si la persona tiene el rol. El
+backend revalida todo: el enrutado solo evita mostrar pantallas que no
+corresponden.
+
+### Formularios de configuración
+
+El estado del formulario se **deriva durante el render**, no se copia con un
+efecto (`shared/hooks/useEditableForm.js`): mientras nadie ha escrito nada, el
+formulario *es* lo que llegó del servidor; en cuanto se toca algo, manda el
+borrador. Así un refresco de la consulta no le pisa el texto a quien está
+escribiendo, y solo se envían los campos que cambiaron.
 
 ### Lectura de datos
 
@@ -213,9 +447,29 @@ refresca una vez y reintenta la petición original de forma transparente.
 | ----------------- | ---------------------------------------------------------------- |
 | Pagos             | Tabla `payments`, importes, moneda, impuesto y estado en `orders` |
 | Email/SMS/Push    | Abstracción de canal, catálogo de eventos y registro en base      |
-| Arreglo de prendas| Tipo de servicio, tabla de detalle y plan (inactivo)              |
+| Arreglo de prendas| Tipo, tabla de detalle, plan y configuración comercial administrable; falta el flujo |
 | QR / códigos      | `laundry_bags.bag_code` como texto libre                          |
 | Geolocalización   | `addresses.latitude/longitude`                                    |
 | Multi-país        | `config/regions.js` y `service_zones`                             |
-| Disponibilidad    | `staff_availability` (semanal, aún no se cruza al asignar)         |
+| Disponibilidad de personal | `staff_availability` (semanal, aún no se cruza al asignar) |
 | Auditoría         | `audit_log` poblado; falta una interfaz de consulta               |
+
+## Deuda conocida
+
+- **Zonas horarias.** Los bloqueos de agenda se guardan como `TIMESTAMPTZ` pero
+  se resuelven en la hora local del servidor, igual que el resto del dominio.
+  Funciona con una sola zona; al abrir Estados Unidos habrá que resolverlos con
+  `region.timezone`, junto con el resto de fechas.
+- **Logo por URL.** No se introdujo almacenamiento de archivos solo para esto:
+  el logo y las imágenes de servicio son URLs persistidas. Si más adelante hace
+  falta subir imágenes, `logoUrl` seguirá siendo el campo; solo cambia quién lo
+  rellena.
+- **Bloqueos por región.** `booking_blackouts.region_code` existe y se filtra,
+  pero la pantalla de Operaciones trabaja siempre con la región del
+  administrador.
+- **Tramos de `FLAT_BY_SIZE`.** La pantalla edita el importe de los tramos que
+  ya existen, no crea tramos nuevos: el asistente de reserva solo sabe pedir los
+  tamaños que conoce.
+- **Cruce entre bloqueos y disponibilidad del personal.** Son independientes a
+  propósito, pero nada avisa hoy de que un día abierto no tenga a nadie
+  disponible.

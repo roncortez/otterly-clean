@@ -61,18 +61,7 @@ router.get(
   '/me',
   authenticate,
   asyncHandler(async (req, res) => {
-    res.json({
-      user: {
-        id: req.user.id,
-        email: req.user.email,
-        firstName: req.user.first_name,
-        lastName: req.user.last_name,
-        phone: req.user.phone,
-        role: req.user.role,
-        regionCode: req.user.region_code,
-        locale: req.user.locale,
-      },
-    });
+    res.json({ user: authService.projectUser(req.user) });
   }),
 );
 
@@ -87,7 +76,7 @@ router.patch(
     if (req.body.locale !== undefined) fields.locale = req.body.locale;
 
     const user = await userRepository.update(req.user.id, fields);
-    res.json({ user });
+    res.json({ user: authService.projectUser(user) });
   }),
 );
 

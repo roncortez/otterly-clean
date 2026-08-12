@@ -7,7 +7,7 @@ const { db } = require('../db');
 const userRepository = require('../db/repositories/userRepository');
 const { hashToken, randomToken } = require('./crypto');
 const audit = require('./auditService');
-const { ROLES } = require('../domain/shared/roles');
+const { ROLES, primaryRole } = require('../domain/shared/roles');
 const { UnauthorizedError, ConflictError, ForbiddenError } = require('../domain/errors');
 
 /**
@@ -22,7 +22,7 @@ const { UnauthorizedError, ConflictError, ForbiddenError } = require('../domain/
 
 function signAccessToken(user) {
   return jwt.sign(
-    { sub: String(user.id), role: user.role, region: user.region_code },
+    { sub: String(user.id), roles: user.roles ?? [], region: user.region_code },
     env.auth.jwtSecret,
     { expiresIn: env.auth.accessTokenTtl },
   );
@@ -56,21 +56,30 @@ async function issueRefreshToken(userId, userAgent, tx = db) {
   return token;
 }
 
+/**
+ * Proyeccion del usuario que viaja al cliente. `roles` es la lista completa;
+ * el frontend la usa para decidir que menus mostrar, pero el backend vuelve a
+ * comprobarla en cada peticion.
+ */
+function projectUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    phone: user.phone,
+    roles: user.roles ?? [],
+    regionCode: user.region_code,
+    locale: user.locale,
+  };
+}
+
 async function buildSession(user, { userAgent } = {}, tx = db) {
   const refreshToken = await issueRefreshToken(user.id, userAgent, tx);
   return {
     accessToken: signAccessToken(user),
     refreshToken,
-    user: {
-      id: user.id,
-      email: user.email,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      phone: user.phone,
-      role: user.role,
-      regionCode: user.region_code,
-      locale: user.locale,
-    },
+    user: projectUser(user),
   };
 }
 
@@ -93,7 +102,9 @@ async function register({ email, password, firstName, lastName, phone, regionCod
         firstName,
         lastName,
         phone,
-        role: ROLES.CUSTOMER,
+        // El rol NUNCA se acepta del cliente: el registro publico solo crea
+        // clientes. STAFF y ADMIN se otorgan desde Operaciones.
+        roles: [ROLES.CUSTOMER],
         regionCode: regionCode ?? env.defaultRegion,
         locale: locale ?? 'es',
       },
@@ -118,7 +129,7 @@ async function login({ email, password }, context = {}) {
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
     await audit.record({
-      actor: { id: user.id, role: user.role },
+      actor: { id: user.id, role: primaryRole(user.roles) },
       action: audit.ACTIONS.USER_LOGIN_FAILED,
       entityType: 'user',
       entityId: user.id,
@@ -135,7 +146,7 @@ async function login({ email, password }, context = {}) {
     await userRepository.touchLogin(user.id, tx);
     await audit.record(
       {
-        actor: { id: user.id, role: user.role },
+        actor: { id: user.id, role: primaryRole(user.roles) },
         action: audit.ACTIONS.USER_LOGIN,
         entityType: 'user',
         entityId: user.id,
@@ -202,4 +213,5 @@ module.exports = {
   changePassword,
   verifyAccessToken,
   signAccessToken,
+  projectUser,
 };

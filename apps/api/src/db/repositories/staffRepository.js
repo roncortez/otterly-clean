@@ -22,10 +22,17 @@ const PUBLIC_FIELDS = `
 const ADMIN_FIELDS = `
   u.id, u.email, u.first_name, u.last_name, u.phone, u.status, u.region_code,
   u.created_at, u.last_login_at,
+  COALESCE((SELECT ARRAY_AGG(ur.role ORDER BY ur.role) FROM user_roles ur WHERE ur.user_id = u.id), '{}') AS roles,
   sp.employee_code, sp.display_name, sp.photo_url, sp.bio, sp.hired_at,
   sp.verification_status, sp.verified_at, sp.verified_by,
   sp.background_check_status, sp.documents, sp.skills, sp.service_types, sp.active
 `;
+
+/**
+ * "Es trabajador" ya no es una columna sino una pertenencia: alguien puede ser
+ * STAFF y ademas ADMIN, y debe seguir apareciendo aqui.
+ */
+const IS_STAFF = `EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role = 'STAFF')`;
 
 /** Vista publica: lo que el cliente ve del profesional asignado. */
 async function findPublicProfile(staffId, tx = db) {
@@ -33,7 +40,7 @@ async function findPublicProfile(staffId, tx = db) {
     `SELECT ${PUBLIC_FIELDS}
        FROM users u
        LEFT JOIN staff_profiles sp ON sp.user_id = u.id
-      WHERE u.id = $1 AND u.role = 'STAFF'`,
+      WHERE u.id = $1 AND ${IS_STAFF}`,
     [staffId],
   );
 }
@@ -43,7 +50,7 @@ async function findAdminProfile(staffId, tx = db) {
     `SELECT ${ADMIN_FIELDS}
        FROM users u
        JOIN staff_profiles sp ON sp.user_id = u.id
-      WHERE u.id = $1 AND u.role = 'STAFF'`,
+      WHERE u.id = $1 AND ${IS_STAFF}`,
     [staffId],
   );
 }
@@ -58,6 +65,23 @@ async function createProfile(
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [userId, employeeCode ?? null, displayName ?? null, photoUrl ?? null, bio ?? null, hiredAt ?? null, skills, serviceTypes],
+  );
+}
+
+/**
+ * Garantiza que exista el perfil operativo.
+ *
+ * Hace falta al conceder el rol STAFF a alguien que ya existia como cliente o
+ * como administrador: sin fila en staff_profiles no podria aparecer en la cola
+ * de asignaciones.
+ */
+async function ensureProfile(userId, { displayName } = {}, tx = db) {
+  return tx.oneOrNone(
+    `INSERT INTO staff_profiles (user_id, display_name)
+     VALUES ($1, $2)
+     ON CONFLICT (user_id) DO NOTHING
+     RETURNING *`,
+    [userId, displayName ?? null],
   );
 }
 
@@ -103,7 +127,7 @@ async function setVerification(userId, { status, verifiedBy }, tx = db) {
  * a quien asignar sin salir de la pantalla.
  */
 async function list({ active, verificationStatus, serviceType, date, search }, tx = db) {
-  const conditions = ["u.role = 'STAFF'"];
+  const conditions = [IS_STAFF];
   const values = [];
 
   const push = (value) => {
@@ -177,7 +201,7 @@ async function findCandidates({ serviceType, zoneId, date }, tx = db) {
                 AND o.scheduled_date = $2::date) AS jobs_today
        FROM users u
        JOIN staff_profiles sp ON sp.user_id = u.id
-      WHERE u.role = 'STAFF'
+      WHERE ${IS_STAFF}
         AND u.status = 'ACTIVE'
         AND sp.active = TRUE
         AND sp.verification_status = 'VERIFIED'
@@ -193,6 +217,7 @@ module.exports = {
   findPublicProfile,
   findAdminProfile,
   createProfile,
+  ensureProfile,
   updateProfile,
   setVerification,
   list,
