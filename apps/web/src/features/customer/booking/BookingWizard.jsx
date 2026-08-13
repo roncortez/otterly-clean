@@ -318,6 +318,15 @@ export default function BookingWizard() {
         </div>
       )}
 
+      <div className="mb-4">
+        <Button
+          variant="ghost"
+          onClick={() => (stepIndex === 0 ? navigate(-1) : setStepIndex(stepIndex - 1))}
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          {stepIndex === 0 ? 'Cancelar' : 'Atrás'}
+        </Button>
+      </div>
       <Card className="p-5 sm:p-7">
         {currentStep.id === 'service' && <StepService {...stepProps} />}
         {currentStep.id === 'configure' && <StepConfigure {...stepProps} />}
@@ -327,15 +336,7 @@ export default function BookingWizard() {
         {currentStep.id === 'summary' && <StepSummary {...stepProps} pricing={pricing} />}
       </Card>
 
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <Button
-          variant="ghost"
-          onClick={() => (stepIndex === 0 ? navigate(-1) : setStepIndex(stepIndex - 1))}
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          {stepIndex === 0 ? 'Cancelar' : 'Atrás'}
-        </Button>
-
+      <div className="mt-6 flex justify-end">
         {stepIndex < STEPS.length - 1 ? (
           <Button size="lg" disabled={!canContinue} onClick={() => setStepIndex(stepIndex + 1)}>
             Continuar

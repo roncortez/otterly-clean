@@ -24,7 +24,7 @@ export default function StepService({ booking, update, catalog, service, money }
               onClick={() => update({ serviceType: entry.code, planId: null, extraCodes: [] })}
               aria-pressed={selected}
               className={cx(
-                'flex flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all',
+                'flex cursor-pointer flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all',
                 selected
                   ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
                   : 'border-border hover:border-border-strong hover:bg-surface-sunken',

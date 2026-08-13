@@ -23,7 +23,7 @@ export default function StepAddress({ booking, update, addresses }) {
               onClick={() => update({ addressId: address.id })}
               aria-pressed={selected}
               className={cx(
-                'flex w-full items-start gap-3.5 rounded-xl border p-4 text-left transition-all',
+                'flex w-full cursor-pointer items-start gap-3.5 rounded-xl border p-4 text-left transition-all',
                 selected
                   ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
                   : 'border-border hover:border-border-strong hover:bg-surface-sunken',
@@ -65,7 +65,7 @@ export default function StepAddress({ booking, update, addresses }) {
 
       <Link
         to="/direcciones"
-        className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong py-3.5 text-sm font-medium text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong py-3.5 text-sm font-medium text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
       >
         <Plus className="size-4" aria-hidden="true" />
         Agregar otra dirección

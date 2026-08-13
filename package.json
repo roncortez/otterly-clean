@@ -8,7 +8,7 @@
     "apps/web"
   ],
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm run dev --workspace @otterly-clean/api",
     "dev:web": "npm run dev --workspace @otterly-clean/web",
     "build": "npm run build --workspace @otterly-clean/web",
@@ -19,6 +19,7 @@
     "db:reset": "npm run db:reset --workspace @otterly-clean/api"
   },
   "devDependencies": {
+    "concurrently": "^10.0.4",
     "jsdom": "^29.1.1"
   },
   "engines": {

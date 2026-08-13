@@ -57,7 +57,7 @@ export function Button({
   return (
     <button
       className={cx(
-        'inline-flex items-center justify-center rounded-full font-semibold transition-all',
+        'inline-flex cursor-pointer items-center justify-center rounded-full font-semibold transition-all',
         'active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
@@ -80,7 +80,7 @@ export function ButtonLink({ as: Tag = 'a', variant = 'primary', size = 'md', cl
   return (
     <Tag
       className={cx(
-        'inline-flex items-center justify-center rounded-full font-semibold transition-all active:scale-95',
+        'inline-flex cursor-pointer items-center justify-center rounded-full font-semibold transition-all active:scale-95',
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
         className,
@@ -421,7 +421,7 @@ export function OptionCard({ selected, title, description, meta, disabled, onSel
       disabled={disabled}
       aria-pressed={selected}
       className={cx(
-        'w-full rounded-xl border p-4 text-left transition-all',
+        'w-full cursor-pointer rounded-xl border p-4 text-left transition-all',
         'disabled:cursor-not-allowed disabled:opacity-50',
         selected
           ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'

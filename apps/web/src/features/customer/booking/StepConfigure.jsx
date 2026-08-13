@@ -138,7 +138,7 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
                 onClick={() => toggleArea(area)}
                 aria-pressed={selected}
                 className={cx(
-                  'rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
+                  'cursor-pointer rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
                   selected
                     ? 'border-forest-500 bg-forest-600 text-white'
                     : 'border-border bg-surface-raised text-text-muted hover:border-border-strong',
