@@ -397,6 +397,7 @@ describe('Configuracion de servicios', () => {
     expect(res.body.services.map((s) => s.code).sort()).toEqual([
       'ALTERATION',
       'CLEANING',
+      'KITS',
       'LAUNDRY',
     ]);
   });

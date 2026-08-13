@@ -4,6 +4,7 @@ import {
   Sparkles,
   Shirt,
   Scissors,
+  Package,
   CalendarCheck,
   ShieldCheck,
   Clock,
@@ -75,6 +76,14 @@ export default function HomePage() {
       badge: t('services.badgeRepair'),
       description: t('services.repairDesc'),
       link: '/reservar?service=ALTERATION',
+    },
+    {
+      key: 'kits',
+      label: t('services.kitsTitle'),
+      icon: Package,
+      badge: t('services.badgeKits'),
+      description: t('services.kitsDesc'),
+      link: '/reservar?service=KITS',
     },
   ];
 

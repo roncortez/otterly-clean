@@ -20,18 +20,21 @@ const hash = (plain) => bcrypt.hash(plain, env.auth.bcryptRounds);
 
 async function seedZones(tx) {
   const zones = [
-    ['EC', 'UIO-NORTE', 'Quito Norte', 'Quito', 'Pichincha'],
-    ['EC', 'UIO-CENTRO', 'Quito Centro', 'Quito', 'Pichincha'],
-    ['EC', 'UIO-SUR', 'Quito Sur', 'Quito', 'Pichincha'],
-    ['EC', 'UIO-VALLES', 'Valles (Cumbaya, Tumbaco)', 'Quito', 'Pichincha'],
+    ['EC', 'UIO-NORTE', 'Quito Norte', 'Quito', 'Pichincha', -0.1500, -78.4800, 9.00],
+    ['EC', 'UIO-CENTRO', 'Quito Centro', 'Quito', 'Pichincha', -0.2200, -78.5100, 7.00],
+    ['EC', 'UIO-SUR', 'Quito Sur', 'Quito', 'Pichincha', -0.2900, -78.5400, 9.00],
+    ['EC', 'UIO-VALLES', 'Valles (Cumbaya, Tumbaco)', 'Quito', 'Pichincha', -0.2500, -78.4400, 13.00],
   ];
 
-  for (const [region, code, name, city, area] of zones) {
+  for (const [region, code, name, city, area, lat, lon, rad] of zones) {
     await tx.none(
-      `INSERT INTO service_zones (region_code, code, name, city, administrative_area)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (region_code, code) DO NOTHING`,
-      [region, code, name, city, area],
+      `INSERT INTO service_zones (region_code, code, name, city, administrative_area, center_latitude, center_longitude, radius_km)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (region_code, code) DO UPDATE
+       SET center_latitude = EXCLUDED.center_latitude,
+           center_longitude = EXCLUDED.center_longitude,
+           radius_km = EXCLUDED.radius_km`,
+      [region, code, name, city, area, lat, lon, rad],
     );
   }
   return tx.any("SELECT * FROM service_zones WHERE region_code = 'EC'");

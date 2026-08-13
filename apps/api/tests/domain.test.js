@@ -384,7 +384,7 @@ describe('Disponibilidad comercial (bloqueos de agenda)', () => {
 
   it('un bloqueo sin servicio es global y afecta a todos', () => {
     const { startAt, endAt } = window(13, 17);
-    for (const serviceType of ['CLEANING', 'LAUNDRY', 'ALTERATION']) {
+    for (const serviceType of ['CLEANING', 'LAUNDRY', 'KITS', 'ALTERATION']) {
       expect(
         findBlockingBlackout({ blackouts: [blackout()], serviceType, startAt, endAt }),
       ).not.toBeNull();

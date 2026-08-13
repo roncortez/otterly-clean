@@ -31,25 +31,26 @@ const TYPE_LABELS = {
 export default function StepPlace(props) {
   const { booking } = props;
   const isCleaning = booking.serviceType === 'CLEANING';
+  const isKits = booking.serviceType === 'KITS';
 
   return (
     <div className="space-y-7">
       <div>
         <h2 className="text-xl font-bold tracking-tight text-text">
-          {isCleaning ? '¿Tu lugar?' : '¿Dónde y cómo?'}
+          {isCleaning ? '¿Tu lugar?' : isKits ? '¿Dónde entregamos?' : '¿Dónde y cómo?'}
         </h2>
         <p className="mt-1 text-text-muted">
           {isCleaning
             ? 'La dirección, el espacio y cómo entra el profesional.'
-            : 'La dirección donde pasamos a recoger tu ropa y cómo la coordinamos.'}
+            : isKits
+              ? 'La dirección donde recibirás tu kit.'
+              : 'La dirección donde pasamos a recoger tu ropa y cómo la coordinamos.'}
         </p>
       </div>
 
       <AddressSection {...props} />
 
-      {isCleaning && <PropertySection {...props} />}
-
-      <AccessSection {...props} />
+      {!isKits && <AccessSection {...props} />}
     </div>
   );
 }
@@ -84,7 +85,7 @@ function AddressSection({ booking, update, addresses, reloadAddresses }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium text-text">Dirección</p>
+      <p className="text-sm font-medium text-text">Lugar</p>
       <div className="space-y-2.5">
         {addresses.map((address) => (
           <AddressCard
@@ -102,23 +103,8 @@ function AddressSection({ booking, update, addresses, reloadAddresses }) {
         className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong py-3.5 text-sm font-medium text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
       >
         <Plus className="size-4" aria-hidden="true" />
-        Agregar otra dirección
+        Agregar un lugar
       </button>
-
-      <Modal
-        open={adding}
-        onClose={() => setAdding(false)}
-        title="Nueva dirección"
-        description="Se guarda con su ubicación y queda disponible para tus próximas reservas."
-      >
-        <AddressForm
-          submitting={saving}
-          error={error}
-          onSubmit={handleCreate}
-          onCancel={() => setAdding(false)}
-          submitLabel="Guardar dirección"
-        />
-      </Modal>
     </div>
   );
 }

@@ -21,7 +21,7 @@ const phone = z
 const password = z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(128);
 
 const roleEnum = z.enum(['CUSTOMER', 'STAFF', 'ADMIN']);
-const serviceTypeEnum = z.enum(['CLEANING', 'LAUNDRY', 'ALTERATION']);
+const serviceTypeEnum = z.enum(['CLEANING', 'LAUNDRY', 'KITS', 'ALTERATION']);
 
 // --- Autenticación ---------------------------------------------------------
 
@@ -194,7 +194,7 @@ const updatePropertySchema = z
 // --- Detalle de limpieza ---------------------------------------------------
 
 const cleaningDetailSchema = z.object({
-  cleaningType: z.enum(['STANDARD', 'DEEP', 'MOVE_IN_OUT', 'POST_CONSTRUCTION']).default('STANDARD'),
+  cleaningType: z.enum(['EXPRESS', 'STANDARD', 'DEEP', 'MOVE_IN_OUT', 'POST_CONSTRUCTION']).default('STANDARD'),
   // La identidad del espacio es obligatoria: limpiar sin saber que tipo de casa
   // es, cuantas habitaciones o banos tiene no tiene sentido. Ya no hay defectos
   // invisibles ("APARTMENT/0/0").
@@ -294,6 +294,25 @@ const createCleaningOrderSchema = z.object({
 const createLaundryOrderSchema = z.object({
   ...createOrderBase,
   laundry: laundryDetailSchema,
+});
+
+// --- Detalle de kits -------------------------------------------------------
+
+/**
+ * Detalle de una orden de kits de limpieza.
+ *
+ * El plan ya comunica que kit se eligio (Kit Basico / Kit Completo). Aqui solo
+ * se guarda la cantidad y las instrucciones de entrega.
+ */
+const kitDetailSchema = z.object({
+  quantity: z.number().int().min(1).max(20).default(1),
+  deliveryInstructions: z.string().trim().max(1000).optional().nullable(),
+  specialInstructions: z.string().trim().max(2000).optional().nullable(),
+});
+
+const createKitOrderSchema = z.object({
+  ...createOrderBase,
+  kits: kitDetailSchema,
 });
 
 const quoteSchema = z.object({
@@ -616,6 +635,7 @@ module.exports = {
   updatePropertySchema,
   createCleaningOrderSchema,
   createLaundryOrderSchema,
+  createKitOrderSchema,
   quoteSchema,
   transitionSchema,
   cancelSchema,

@@ -42,7 +42,13 @@ export default function StepSummary({
           value={window ? `${formatTime(window.startTime)} – ${formatTime(window.endTime)}` : '—'}
         />
         <Row
-          label={booking.serviceType === 'LAUNDRY' ? 'Recogemos en' : 'Dirección'}
+          label={
+            booking.serviceType === 'LAUNDRY'
+              ? 'Recogemos en'
+              : booking.serviceType === 'KITS'
+                ? 'Entregamos en'
+                : 'Dirección'
+          }
           value={
             address
               ? [address.street_line1, address.neighborhood, address.city]
@@ -78,7 +84,11 @@ export default function StepSummary({
             />
           </>
         )}
+        {booking.serviceType === 'KITS' && (
+          <Row label="Cantidad" value={`${booking.kits.quantity} kit${booking.kits.quantity !== 1 ? 's' : ''}`} />
+        )}
       </dl>
+
 
       <Divider />
 

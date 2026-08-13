@@ -87,6 +87,17 @@ async function insertLaundryDetails(details, tx = db) {
   );
 }
 
+async function insertKitDetails(details, tx = db) {
+  return tx.one(
+    `INSERT INTO kit_details (
+       order_id, variant_code, quantity, delivery_instructions, special_instructions
+     ) VALUES (
+       $[orderId], $[variantCode], $[quantity], $[deliveryInstructions], $[specialInstructions]
+     ) RETURNING *`,
+    details,
+  );
+}
+
 /** Datos base de la orden + cliente + direccion. Sin detalle de servicio. */
 const ORDER_BASE_QUERY = `
   SELECT o.*,
@@ -333,6 +344,7 @@ module.exports = {
   insertOrder,
   insertCleaningDetails,
   insertLaundryDetails,
+  insertKitDetails,
   findById,
   findByReference,
   findDetails,

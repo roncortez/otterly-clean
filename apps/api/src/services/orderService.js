@@ -178,6 +178,8 @@ async function createOrder({ serviceType, customer, payload, request }) {
       await insertCleaningDetail(order.id, payload, region, tx);
     } else if (serviceType === 'LAUNDRY') {
       await insertLaundryDetail(order.id, payload, region, window, tx);
+    } else if (serviceType === 'KITS') {
+      await insertKitDetail(order.id, payload, plan, tx);
     }
 
     await orderRepo.insertStatusHistory(
@@ -286,6 +288,27 @@ async function insertLaundryDetail(orderId, payload, region, window, tx) {
     tx,
   );
 }
+
+/**
+ * Detalle de una orden de kits de limpieza.
+ *
+ * El plan identifica el kit (Kit Basico / Kit Completo); aqui solo se persiste
+ * la cantidad pedida y las instrucciones de entrega.
+ */
+async function insertKitDetail(orderId, payload, plan, tx) {
+  const d = payload.kits ?? {};
+  return orderRepo.insertKitDetails(
+    {
+      orderId,
+      variantCode: plan.code,
+      quantity: d.quantity ?? 1,
+      deliveryInstructions: d.deliveryInstructions ?? null,
+      specialInstructions: d.specialInstructions ?? null,
+    },
+    tx,
+  );
+}
+
 
 // ---------------------------------------------------------------------------
 // Lectura

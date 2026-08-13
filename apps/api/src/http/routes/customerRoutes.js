@@ -116,6 +116,20 @@ router.post(
   }),
 );
 
+router.post(
+  '/orders/kits',
+  validate({ body: schemas.createKitOrderSchema }),
+  asyncHandler(async (req, res) => {
+    const order = await orderService.createOrder({
+      serviceType: 'KITS',
+      customer: req.user,
+      payload: req.body,
+      request: req,
+    });
+    res.status(201).json({ order: orderService.summarize(order) });
+  }),
+);
+
 router.get(
   '/orders',
   validate({ query: schemas.orderQuerySchema }),

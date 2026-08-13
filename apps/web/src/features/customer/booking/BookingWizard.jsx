@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Sparkles, Shirt } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Sparkles, Shirt, Package } from 'lucide-react';
 import { api, errorMessage } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
@@ -25,12 +25,13 @@ import StepSummary from './StepSummary';
  */
 
 /** Tipos que el asistente sabe configurar. Los define el dominio, no la UI. */
-const KNOWN_SERVICE_TYPES = ['CLEANING', 'LAUNDRY'];
+const KNOWN_SERVICE_TYPES = ['CLEANING', 'LAUNDRY', 'KITS'];
 
 const STEPS = [
-  { id: 'service', label: 'Tu servicio' },
-  { id: 'place', label: 'Dónde y cómo' },
-  { id: 'schedule', label: 'Cuándo' },
+  { id: 'service',   label: 'Tu servicio' },
+  { id: 'configure', label: 'Cómo lo quieres' },
+  { id: 'place',     label: 'Dónde y cómo' },
+  { id: 'schedule',  label: 'Cuándo' },
 ];
 
 const INITIAL_PROPERTY_DRAFT = {
@@ -80,6 +81,12 @@ const INITIAL_LAUNDRY = {
   specialInstructions: '',
 };
 
+const INITIAL_KITS = {
+  quantity: 1,
+  deliveryInstructions: '',
+  specialInstructions: '',
+};
+
 export default function BookingWizard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -101,27 +108,33 @@ export default function BookingWizard() {
   const { busy: submitting, error: actionError, setError, execute } = useApiAction();
   const error = catalogQuery.error ?? addressQuery.error ?? actionError;
 
-  const [booking, setBooking] = useState(() => ({
-    // El servicio puede llegar preseleccionado desde la portada. Se acepta solo
-    // si es uno de los tipos conocidos; si el catálogo no lo ofrece, el paso 1
-    // lo corrige al primero disponible.
-    serviceType: KNOWN_SERVICE_TYPES.includes(searchParams.get('servicio'))
-      ? searchParams.get('servicio')
-      : 'CLEANING',
-    planId: null,
-    extraCodes: [],
-    scheduledDate: toDateInput(addDays(2)),
-    windowCode: '',
-    addressId: null,
-    durationMinutes: 180,
-    customerNotes: '',
-    cleaning: INITIAL_CLEANING,
-    laundry: INITIAL_LAUNDRY,
-  }));
+  const [booking, setBooking] = useState(() => {
+    const rawParam = searchParams.get('servicio') || searchParams.get('service');
+    const paramUpper = rawParam ? rawParam.toUpperCase() : null;
+    const serviceType = paramUpper && KNOWN_SERVICE_TYPES.includes(paramUpper)
+      ? paramUpper
+      : null;
+    return {
+      serviceType,
+      planId: null,
+      extraCodes: [],
+      scheduledDate: toDateInput(addDays(2)),
+      windowCode: '',
+      addressId: null,
+      durationMinutes: 180,
+      customerNotes: '',
+      cleaning: INITIAL_CLEANING,
+      laundry: INITIAL_LAUNDRY,
+      kits: INITIAL_KITS,
+    };
+  });
+
+  const [showServiceModal, setShowServiceModal] = useState(false);
 
   const update = (patch) => setBooking((current) => ({ ...current, ...patch }));
   const updateDetail = (key, patch) =>
     setBooking((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
+
 
   // En limpieza el lugar se pide siempre dentro del asistente: rellena identidad
   // y acceso desde el inmueble guardado de la dirección o desde los valores por
@@ -209,6 +222,8 @@ export default function BookingWizard() {
 
   const pricingInput = useMemo(() => {
     if (effective.serviceType === 'CLEANING') return { durationMinutes: effective.durationMinutes };
+    // KITS usa FIXED: el motor no necesita ningun input adicional.
+    if (effective.serviceType === 'KITS') return {};
     const plan = service?.plans.find((entry) => entry.id === effective.planId);
     if (plan?.pricing_model === 'PER_BAG') return { bagCount: effective.laundry.estimatedBags };
     if (plan?.pricing_model === 'PER_ITEM') {
@@ -254,11 +269,12 @@ export default function BookingWizard() {
     switch (currentStep.id) {
       case 'service':
         return Boolean(effective.planId);
+      case 'configure':
+        // Todos los campos de configure tienen valores por defecto; siempre se puede avanzar.
+        return true;
       case 'place': {
         if (!effective.addressId) return false;
         if (effective.serviceType === 'CLEANING') {
-          // En limpieza el lugar siempre se persiste, así que la identidad del
-          // espacio y el nombre son obligatorios.
           const identityReady =
             Boolean(propertyDraft.propertyType) &&
             Number(propertyDraft.bedrooms) >= 0 &&
@@ -347,10 +363,18 @@ export default function BookingWizard() {
           },
         });
       }
-      return api.post('/customer/orders/laundry', {
-        ...payload,
-        laundry: { ...effective.laundry, weightUnit },
-      });
+      if (effective.serviceType === 'LAUNDRY') {
+        return api.post('/customer/orders/laundry', {
+          ...payload,
+          laundry: { ...effective.laundry, weightUnit },
+        });
+      }
+      if (effective.serviceType === 'KITS') {
+        return api.post('/customer/orders/kits', {
+          ...payload,
+          kits: { ...effective.kits },
+        });
+      }
     };
 
     await execute(request, {
@@ -360,6 +384,100 @@ export default function BookingWizard() {
   }
 
   if (loading) return <Spinner label="Preparando tu reserva" />;
+
+  if (!booking.serviceType) {
+    return (
+      <div className="mx-auto max-w-xl text-center py-16 px-4">
+        <div className="mb-6 flex justify-center">
+          <span className="flex size-16 items-center justify-center rounded-2xl bg-forest-50 text-forest-600 shadow-md">
+            <Sparkles className="size-8 animate-pulse text-forest-600" />
+          </span>
+        </div>
+        <h1 className="text-3xl font-extrabold tracking-tight text-text">
+          ¿Qué necesitas hoy?
+        </h1>
+        <p className="mt-3 text-base text-text-muted max-w-md mx-auto">
+          Comienza tu reserva seleccionando uno de nuestros servicios profesionales a domicilio.
+        </p>
+
+        <div className="mt-8">
+          <Button
+            size="lg"
+            variant="accent"
+            className="px-8 py-4 text-base font-bold shadow-lg transition-transform hover:scale-105"
+            onClick={() => setShowServiceModal(true)}
+          >
+            Comenzar reserva
+          </Button>
+        </div>
+
+        {/* Modal de Selección de Servicio */}
+        <Modal
+          open={showServiceModal}
+          onClose={() => setShowServiceModal(false)}
+          title="Selecciona un servicio"
+          description="Elige el servicio que deseas solicitar hoy."
+          size="lg"
+        >
+          <div className="grid gap-4 py-4 sm:grid-cols-3">
+            <button
+              type="button"
+              className="flex flex-col items-center p-6 rounded-xl border border-border bg-surface hover:bg-surface-sunken hover:border-forest-400 transition-all text-center gap-3 cursor-pointer"
+              onClick={() => {
+                update({ serviceType: 'CLEANING', planId: null, extraCodes: [] });
+                setShowServiceModal(false);
+                setStepIndex(0);
+              }}
+            >
+              <span className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
+                <Sparkles className="size-6" />
+              </span>
+              <div>
+                <span className="block font-bold text-text">Limpieza</span>
+                <span className="mt-1 block text-xs text-text-muted">Residencial completa</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className="flex flex-col items-center p-6 rounded-xl border border-border bg-surface hover:bg-surface-sunken hover:border-forest-400 transition-all text-center gap-3 cursor-pointer"
+              onClick={() => {
+                update({ serviceType: 'LAUNDRY', planId: null, extraCodes: [] });
+                setShowServiceModal(false);
+                setStepIndex(0);
+              }}
+            >
+              <span className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
+                <Shirt className="size-6" />
+              </span>
+              <div>
+                <span className="block font-bold text-text">Lavandería</span>
+                <span className="mt-1 block text-xs text-text-muted">Ropa impecable</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className="flex flex-col items-center p-6 rounded-xl border border-border bg-surface hover:bg-surface-sunken hover:border-forest-400 transition-all text-center gap-3 cursor-pointer"
+              onClick={() => {
+                update({ serviceType: 'KITS', planId: null, extraCodes: [] });
+                setShowServiceModal(false);
+                setStepIndex(0);
+              }}
+            >
+              <span className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
+                <Package className="size-6" />
+              </span>
+              <div>
+                <span className="block font-bold text-text">Kits</span>
+                <span className="mt-1 block text-xs text-text-muted">Insumos de limpieza</span>
+              </div>
+            </button>
+          </div>
+        </Modal>
+      </div>
+    );
+  }
 
   const stepProps = {
     booking: effective,
@@ -417,16 +535,23 @@ export default function BookingWizard() {
       <div className="mb-4">
         <Button
           variant="ghost"
-          onClick={() => (stepIndex === 0 ? navigate(-1) : setStepIndex(stepIndex - 1))}
+          onClick={() => {
+            if (stepIndex === 0) {
+              update({ serviceType: null });
+            } else {
+              setStepIndex(stepIndex - 1);
+            }
+          }}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
-          {stepIndex === 0 ? 'Cancelar' : 'Atrás'}
+          Atrás
         </Button>
       </div>
       <Card className="p-5 sm:p-7">
-        {currentStep.id === 'service' && <StepService {...stepProps} />}
-        {currentStep.id === 'place' && <StepPlace {...stepProps} />}
-        {currentStep.id === 'schedule' && <StepSchedule {...stepProps} />}
+        {currentStep.id === 'service'   && <StepService   {...stepProps} />}
+        {currentStep.id === 'configure' && <StepConfigure {...stepProps} />}
+        {currentStep.id === 'place'     && <StepPlace     {...stepProps} />}
+        {currentStep.id === 'schedule'  && <StepSchedule  {...stepProps} />}
       </Card>
 
       <div className="mt-6 flex justify-end">

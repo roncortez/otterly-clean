@@ -1,27 +1,42 @@
 import { Field, Input, Select, Checkbox, OptionCard, Divider, cx } from '@/shared/ui';
 
 /**
- * Paso 1 (detalles del servicio): definición del trabajo.
- * Cambia por completo entre limpieza y lavandería, porque son negocios
- * distintos: uno se mide en horas, el otro en kilos y preferencias de lavado.
- * La identidad del espacio (tipo, habitaciones, baños) se pide en el paso 2,
- * junto a la dirección, para que el lugar sea una sola cosa.
+ * Paso 2 (configuración del servicio): define los detalles del trabajo.
+ *
+ * Cada servicio tiene su propia vista porque sus dimensiones son distintas:
+ *   - Limpieza:   duración, áreas prioritarias, productos, fragancia.
+ *   - Lavandería: cantidad estimada, temperatura, detergente, secado.
+ *   - Kits:       cantidad de kits e instrucciones de entrega.
+ *
+ * La identidad del espacio (tipo de propiedad, habitaciones, baños) se pide
+ * en el paso 3 (Dónde y cómo), junto a la dirección, para que el lugar sea
+ * una sola cosa cohesiva.
  */
 export default function StepConfigure(props) {
-  return props.booking.serviceType === 'CLEANING' ? (
-    <CleaningStep {...props} />
-  ) : (
-    <LaundryStep {...props} />
-  );
+  const { booking } = props;
+  if (booking.serviceType === 'LAUNDRY') return <LaundryStep {...props} />;
+  if (booking.serviceType === 'KITS') return <KitsStep    {...props} />;
+  return <CleaningStep {...props} />;
 }
+
+// =============================================================================
+// LIMPIEZA
+// =============================================================================
 
 const PRIORITY_AREAS = ['Cocina', 'Baños', 'Dormitorios', 'Sala', 'Comedor', 'Balcón', 'Lavandería'];
 
+/**
+ * Opciones de duración. Se muestran solo las que son iguales o mayores al
+ * mínimo que define el plan elegido; si el plan tiene 5h mínimo no tiene
+ * sentido ofrecer 2h.
+ */
 const DURATIONS = [
-  { minutes: 120, label: '2 horas', hint: 'Espacio pequeño' },
+  { minutes: 120, label: '2 horas', hint: 'Área pequeña' },
   { minutes: 180, label: '3 horas', hint: 'Lo más habitual' },
   { minutes: 240, label: '4 horas', hint: 'Casa grande' },
+  { minutes: 300, label: '5 horas', hint: 'Profunda completa' },
   { minutes: 360, label: '6 horas', hint: 'Limpieza a fondo' },
+  { minutes: 480, label: '8 horas', hint: 'Espacio muy grande' },
 ];
 
 function CleaningStep({ booking, update, updateDetail, service, money, areaUnit }) {
@@ -35,11 +50,21 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
     updateDetail('cleaning', { priorityAreas: areas });
   };
 
-  const toggleExtra = (code) => {
-    const codes = booking.extraCodes.includes(code)
-      ? booking.extraCodes.filter((item) => item !== code)
-      : [...booking.extraCodes, code];
-    update({ extraCodes: codes });
+  // Buscamos los extras de ropa in situ en el catálogo para obtener sus precios.
+  const insituWDF = extras.find((e) => e.code === 'CLEAN-IN-SITU-WASH-DRY-FOLD');
+  const insituWDFI = extras.find((e) => e.code === 'CLEAN-IN-SITU-WASH-DRY-FOLD-IRON');
+  const insituIron = extras.find((e) => e.code === 'CLEAN-IN-SITU-IRON');
+
+  const selectedInSitu = booking.extraCodes.find((c) => c.startsWith('CLEAN-IN-SITU-')) || null;
+
+  const handleSelectInSitu = (code) => {
+    // Filtramos cualquier código in-situ previo
+    const filtered = booking.extraCodes.filter((c) => !c.startsWith('CLEAN-IN-SITU-'));
+    if (code) {
+      update({ extraCodes: [...filtered, code] });
+    } else {
+      update({ extraCodes: filtered });
+    }
   };
 
   return (
@@ -47,39 +72,10 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
       <div>
         <h2 className="text-xl font-bold tracking-tight text-text">Cómo quieres tu limpieza</h2>
         <p className="mt-1 text-text-muted">
-          Cuéntanos qué es lo más importante y cuánto tiempo reservamos.
+          Cuéntanos qué es lo más importante e indícanos si necesitas adicionales de ropa.
         </p>
       </div>
 
-      <Field
-        label={`Tamaño aproximado (${areaUnit})`}
-        hint="Opcional. Nos ayuda a estimar mejor el tiempo."
-      >
-        <Input
-          type="number"
-          min="1"
-          value={cleaning.areaValue}
-          onChange={(event) => updateDetail('cleaning', { areaValue: event.target.value })}
-          placeholder="95"
-        />
-      </Field>
-
-      <div>
-        <p className="mb-2.5 text-sm font-medium text-text">¿Cuánto tiempo reservamos?</p>
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {DURATIONS.map((option) => (
-            <OptionCard
-              key={option.minutes}
-              selected={booking.durationMinutes === option.minutes}
-              onSelect={() => update({ durationMinutes: option.minutes })}
-              title={option.label}
-              description={option.hint}
-            />
-          ))}
-        </div>
-      </div>
-
-      <Divider />
 
       <div>
         <p className="mb-2.5 text-sm font-medium text-text">¿Qué es lo más importante?</p>
@@ -106,37 +102,49 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
         </div>
       </div>
 
-      {extras.length > 0 && (
-        <div>
-          <p className="mb-2.5 text-sm font-medium text-text">Tareas adicionales</p>
-          <div className="space-y-2">
-            {extras.map((extra) => (
-              <label
-                key={extra.code}
-                className={cx(
-                  'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors',
-                  booking.extraCodes.includes(extra.code)
-                    ? 'border-forest-500 bg-forest-50'
-                    : 'border-border hover:bg-surface-sunken',
-                )}
-              >
-                <span className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={booking.extraCodes.includes(extra.code)}
-                    onChange={() => toggleExtra(extra.code)}
-                    className="size-4.5 rounded border-border-strong text-forest-600 focus:ring-forest-500/25"
-                  />
-                  <span className="text-sm font-medium text-text">{extra.name}</span>
-                </span>
-                <span className="text-sm font-semibold text-forest-700 tnum">
-                  +{money(extra.amount)}
-                </span>
-              </label>
-            ))}
-          </div>
+      <Divider />
+
+      <div>
+        <p className="mb-1 text-sm font-bold text-text">Adicional</p>
+        <p className="mb-3 text-xs text-text-subtle">
+          Se realiza con los equipos e insumos del cliente. Elige una opción adicional si lo requieres.
+        </p>
+        <div className="space-y-2.5">
+          <OptionCard
+            selected={selectedInSitu === null}
+            onSelect={() => handleSelectInSitu(null)}
+            title="Ninguno"
+            description="No requiero servicio adicional de ropa."
+          />
+          {insituWDF && (
+            <OptionCard
+              selected={selectedInSitu === insituWDF.code}
+              onSelect={() => handleSelectInSitu(insituWDF.code)}
+              title={insituWDF.name}
+              description="Lavado, secado y doblado de ropa en tu hogar."
+              meta={`+${money(insituWDF.amount)}`}
+            />
+          )}
+          {insituWDFI && (
+            <OptionCard
+              selected={selectedInSitu === insituWDFI.code}
+              onSelect={() => handleSelectInSitu(insituWDFI.code)}
+              title={insituWDFI.name}
+              description="Lavado, secado, doblado y planchado completo en tu hogar."
+              meta={`+${money(insituWDFI.amount)}`}
+            />
+          )}
+          {insituIron && (
+            <OptionCard
+              selected={selectedInSitu === insituIron.code}
+              onSelect={() => handleSelectInSitu(insituIron.code)}
+              title={insituIron.name}
+              description="Servicio exclusivo de planchado en tu hogar."
+              meta={`+${money(insituIron.amount)}`}
+            />
+          )}
         </div>
-      )}
+      </div>
 
       <Divider />
 
@@ -169,6 +177,10 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
     </div>
   );
 }
+
+// =============================================================================
+// LAVANDERÍA
+// =============================================================================
 
 const WASH_TEMPERATURES = [
   { value: 'COLD', label: 'Fría', hint: 'Cuida los colores' },
@@ -352,6 +364,50 @@ function LaundryStep({ booking, update, updateDetail, service, money, weightUnit
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// =============================================================================
+// KITS DE LIMPIEZA
+// =============================================================================
+
+function KitsStep({ booking, updateDetail }) {
+  const { kits } = booking;
+
+  return (
+    <div className="space-y-7">
+      <div>
+        <h2 className="text-xl font-bold tracking-tight text-text">Detalles de tu pedido</h2>
+        <p className="mt-1 text-text-muted">
+          Dinos cuántos kits necesitas y cualquier instrucción para la entrega.
+        </p>
+      </div>
+
+      <Field label="Cantidad" hint="Máximo 20 kits por pedido.">
+        <Input
+          type="number"
+          min="1"
+          max="20"
+          value={kits.quantity}
+          onChange={(event) =>
+            updateDetail('kits', { quantity: Math.max(1, Number(event.target.value) || 1) })
+          }
+        />
+      </Field>
+
+      <Field
+        label="Instrucciones de entrega"
+        hint="Opcional. Portería, horario preferido, código de acceso…"
+      >
+        <Input
+          value={kits.deliveryInstructions}
+          onChange={(event) =>
+            updateDetail('kits', { deliveryInstructions: event.target.value })
+          }
+          placeholder="Dejar con el portero si no hay nadie en casa"
+        />
+      </Field>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 const { cleaningStateMachine } = require('../cleaning/stateMachine');
 const { laundryStateMachine } = require('../laundry/stateMachine');
+const { kitsStateMachine } = require('../kits/stateMachine');
 const { DomainError } = require('../errors');
 
 /**
@@ -16,6 +17,7 @@ const { DomainError } = require('../errors');
 const SERVICE_TYPES = Object.freeze({
   CLEANING: 'CLEANING',
   LAUNDRY: 'LAUNDRY',
+  KITS: 'KITS',
   ALTERATION: 'ALTERATION',
 });
 
@@ -39,6 +41,16 @@ const SERVICE_DEFINITIONS = Object.freeze({
     stateMachine: laundryStateMachine,
     // Hay recogida y entrega: pueden ser direcciones distintas.
     addressModel: 'PICKUP_DELIVERY',
+  },
+  KITS: {
+    code: 'KITS',
+    label: 'Kits de limpieza',
+    description: 'Productos de limpieza seleccionados y entregados en tu puerta.',
+    enabled: true,
+    detailTable: 'kit_details',
+    stateMachine: kitsStateMachine,
+    // El cliente recibe el kit en su domicilio: una sola direccion de entrega.
+    addressModel: 'SINGLE',
   },
   ALTERATION: {
     code: 'ALTERATION',

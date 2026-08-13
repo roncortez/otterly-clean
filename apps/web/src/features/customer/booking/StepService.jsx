@@ -1,90 +1,93 @@
-import { Sparkles, Shirt } from 'lucide-react';
-import { OptionCard, cx } from '@/shared/ui';
+import { Sparkles, Shirt, Package } from 'lucide-react';
+import { OptionCard } from '@/shared/ui';
 
-const ICONS = { CLEANING: Sparkles, LAUNDRY: Shirt };
+const ICONS = { CLEANING: Sparkles, LAUNDRY: Shirt, KITS: Package };
 
 /** Paso 1: qué servicio y con qué plan. */
 export default function StepService({ booking, update, catalog, service, money }) {
+  const Icon = ICONS[booking.serviceType] ?? Sparkles;
+
   return (
     <div className="space-y-7">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-text">¿Qué necesitas?</h2>
-        <p className="mt-1 text-text-muted">Elige el servicio y el tipo que mejor te sirva.</p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {catalog?.map((entry) => {
-          const Icon = ICONS[entry.code] ?? Sparkles;
-          const selected = booking.serviceType === entry.code;
-
-          return (
-            <button
-              key={entry.code}
-              type="button"
-              onClick={() => update({ serviceType: entry.code, planId: null, extraCodes: [] })}
-              aria-pressed={selected}
-              className={cx(
-                'flex cursor-pointer flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all',
-                selected
-                  ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
-                  : 'border-border hover:border-border-strong hover:bg-surface-sunken',
-              )}
-            >
-              <span
-                className={cx(
-                  'flex size-10 items-center justify-center rounded-xl',
-                  selected ? 'bg-forest-600 text-white' : 'bg-surface-sunken text-text-muted',
-                )}
-              >
-                <Icon className="size-5" aria-hidden="true" />
-              </span>
-              <span>
-                <span className="block font-semibold text-text">{entry.label}</span>
-                <span className="mt-0.5 block text-sm text-text-muted">{entry.description}</span>
-              </span>
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
+          <Icon className="size-5" aria-hidden="true" />
+        </span>
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-text">
+            {service?.label || 'Servicio'}
+          </h2>
+          <p className="mt-0.5 text-sm text-text-muted">
+            Selecciona el plan que prefieres solicitar.
+          </p>
+        </div>
       </div>
 
       {service && (
-        <div>
-          <h3 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
-            Tipo de {service.label.toLowerCase()}
-          </h3>
-          <div className="space-y-2.5">
-            {service.plans.map((plan) => (
-              <OptionCard
-                key={plan.id}
-                selected={booking.planId === plan.id}
-                onSelect={() => update({ planId: plan.id })}
-                title={plan.name}
-                description={plan.description}
-                meta={priceLabel(plan, money)}
-              />
-            ))}
-          </div>
+        <div className="space-y-3">
+          {service.plans.map((plan) => (
+            <OptionCard
+              key={plan.id}
+              selected={booking.planId === plan.id}
+              onSelect={() =>
+                update({
+                  planId: plan.id,
+                  // Al elegir el plan, la duración se ajusta al valor fijo estimado de dicho plan.
+                  // Así no hay selector manual de duración.
+                  durationMinutes: plan.estimated_duration_minutes ?? undefined,
+                })
+              }
+              title={plan.name}
+              description={
+                <div className="space-y-1">
+                  <p className="text-text-muted">{plan.description}</p>
+                  {plan.service_type === 'CLEANING' && plan.estimated_duration_minutes && (
+                    <p className="text-xs font-semibold text-forest-700">
+                      Duración máxima: {plan.estimated_duration_minutes / 60} horas
+                    </p>
+                  )}
+                </div>
+              }
+              meta={priceLabel(plan, money)}
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-/** Etiqueta de precio según la modalidad de cobro del plan. */
+/**
+ * Etiqueta de precio según la modalidad de cobro del plan.
+ *
+ * Para el servicio de limpieza (CLEANING), la tarifa por hora se multiplica
+ * directamente por la duración máxima fija para mostrar el precio total final.
+ */
 function priceLabel(plan, money) {
-  const amount = money(plan.base_amount);
+  if (plan.service_type === 'CLEANING' && plan.pricing_model === 'PER_HOUR') {
+    const hours = Number(plan.estimated_duration_minutes ?? 0) / 60;
+    return money(plan.base_amount * hours);
+  }
+
   switch (plan.pricing_model) {
-    case 'PER_HOUR':
-      return `${amount} / hora`;
+    case 'PER_HOUR': {
+      const minHours = Number(plan.config?.minimumHours ?? 0);
+      if (minHours > 0) {
+        return `Desde ${money(plan.base_amount * minHours)}`;
+      }
+      return `${money(plan.base_amount)} / hora`;
+    }
     case 'PER_WEIGHT':
-      return `${amount} / ${plan.config?.unit ?? 'kg'}`;
+      return `${money(plan.base_amount)} / ${plan.config?.unit ?? 'kg'}`;
     case 'PER_BAG':
-      return `${amount} / bolsa`;
+      return `${money(plan.base_amount)} / bolsa`;
     case 'PER_ITEM':
-      return `${amount} / prenda`;
+      return `${money(plan.base_amount)} / prenda`;
+    case 'FIXED':
+      return money(plan.base_amount);
     case 'QUOTE':
       return 'Con cotización';
     default:
-      return amount;
+      return money(plan.base_amount);
   }
 }
