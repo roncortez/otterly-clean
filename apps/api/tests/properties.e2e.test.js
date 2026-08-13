@@ -108,7 +108,8 @@ describe('Crear un inmueble', () => {
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(res.body.property.name).toBe('Departamento 5B');
     expect(res.body.property.propertyType).toBe('APARTMENT');
-    expect(res.body.property.accessCode).toBe('4821#');
+    expect(res.body.property.accessCode).toBeNull();
+    expect(res.body.property.hasAccessCode).toBe(true);
 
     // El codigo de acceso queda cifrado, nunca en texto plano.
     const row = await db.one('SELECT access_code FROM properties WHERE id = $1', [
@@ -258,7 +259,8 @@ describe('Leer inmuebles y direcciones', () => {
       propertyType: 'APARTMENT',
       bedrooms: 2,
       bathrooms: 2,
-      accessCode: '4821#',
+      accessCode: null,
+      hasAccessCode: true,
       notes: null,
       accessMethod: null,
       accessInstructions: null,
@@ -305,7 +307,8 @@ describe('Actualizar un inmueble (PATCH)', () => {
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.property.accessCode).toBe('9999#');
+    expect(res.body.property.accessCode).toBeNull();
+    expect(res.body.property.hasAccessCode).toBe(true);
     expect(res.body.property.accessInstructions).toContain('portón');
     expect(res.body.property.customerPresent).toBe(true);
     // Los campos ausentes se quedan como estaban.
@@ -333,6 +336,7 @@ describe('Actualizar un inmueble (PATCH)', () => {
 
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.property.accessCode).toBeNull();
+    expect(res.body.property.hasAccessCode).toBe(false);
     expect(res.body.property.hasPets).toBe(false);
     expect(res.body.property.pets).toEqual([]);
   });

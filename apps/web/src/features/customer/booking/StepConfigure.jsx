@@ -39,7 +39,7 @@ const DURATIONS = [
   { minutes: 480, label: '8 horas', hint: 'Espacio muy grande' },
 ];
 
-function CleaningStep({ booking, update, updateDetail, service, money, areaUnit }) {
+function CleaningStep({ booking, update, updateDetail, service, money }) {
   const { cleaning } = booking;
   const extras = service?.extras ?? [];
 
@@ -76,9 +76,8 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
         </p>
       </div>
 
-
-      <div>
-        <p className="mb-2.5 text-sm font-medium text-text">¿Qué es lo más importante?</p>
+      <p className="text-sm font-medium text-text">¿Qué es lo más importante?</p>
+      <div className="flex flex-col gap-2">
         <div className="flex flex-wrap gap-2">
           {PRIORITY_AREAS.map((area) => {
             const selected = cleaning.priorityAreas.includes(area);
@@ -100,7 +99,9 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
             );
           })}
         </div>
+
       </div>
+
 
       <Divider />
 
@@ -173,6 +174,17 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
             placeholder="Sin fragancia, cítrico, lavanda…"
           />
         </Field>
+      </div>
+
+      <Divider />
+
+      <div className="mt-4">
+        <label className="block text-sm font-medium text-text">Instrucciones especiales</label>
+        <input
+          value={cleaning.specialInstructions || ''}
+          onChange={(e) => updateDetail('cleaning', { specialInstructions: e.target.value })}
+          placeholder="Ej: Limpiar el horno, lavar ventanas, etc."
+          className="mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus:border-forest-500 focus:outline-none" />
       </div>
     </div>
   );

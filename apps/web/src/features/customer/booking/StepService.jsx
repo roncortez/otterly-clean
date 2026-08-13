@@ -4,7 +4,7 @@ import { OptionCard } from '@/shared/ui';
 const ICONS = { CLEANING: Sparkles, LAUNDRY: Shirt, KITS: Package };
 
 /** Paso 1: qué servicio y con qué plan. */
-export default function StepService({ booking, update, catalog, service, money }) {
+export default function StepService({ booking, update, service, money }) {
   const Icon = ICONS[booking.serviceType] ?? Sparkles;
 
   return (
@@ -39,14 +39,14 @@ export default function StepService({ booking, update, catalog, service, money }
               }
               title={plan.name}
               description={
-                <div className="space-y-1">
-                  <p className="text-text-muted">{plan.description}</p>
+                <span className="block space-y-1">
+                  <span className="block text-text-muted">{plan.description}</span>
                   {plan.service_type === 'CLEANING' && plan.estimated_duration_minutes && (
-                    <p className="text-xs font-semibold text-forest-700">
+                    <span className="block text-xs font-semibold text-forest-700">
                       Duración máxima: {plan.estimated_duration_minutes / 60} horas
-                    </p>
+                    </span>
                   )}
-                </div>
+                </span>
               }
               meta={priceLabel(plan, money)}
             />

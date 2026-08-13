@@ -175,7 +175,7 @@ async function createOrder({ serviceType, customer, payload, request }) {
     );
 
     if (serviceType === 'CLEANING') {
-      await insertCleaningDetail(order.id, payload, region, tx);
+      await insertCleaningDetail(order.id, payload, region, property, tx);
     } else if (serviceType === 'LAUNDRY') {
       await insertLaundryDetail(order.id, payload, region, window, tx);
     } else if (serviceType === 'KITS') {
@@ -216,8 +216,16 @@ async function createOrder({ serviceType, customer, payload, request }) {
   });
 }
 
-async function insertCleaningDetail(orderId, payload, region, tx) {
+async function insertCleaningDetail(orderId, payload, region, property, tx) {
   const d = payload.cleaning ?? {};
+
+  let accessSecretEncrypted = null;
+  if (d.accessSecret) {
+    accessSecretEncrypted = encrypt(d.accessSecret);
+  } else if (property?.access_code) {
+    accessSecretEncrypted = property.access_code;
+  }
+
   return orderRepo.insertCleaningDetails(
     {
       orderId,
@@ -235,8 +243,7 @@ async function insertCleaningDetail(orderId, payload, region, tx) {
       customerPresent: d.customerPresent ?? true,
       accessMethod: d.accessMethod ?? 'CUSTOMER_OPENS',
       accessInstructions: d.accessInstructions ?? null,
-      // Codigos y ubicacion de llaves se cifran antes de tocar la base.
-      accessSecretEncrypted: encrypt(d.accessSecret),
+      accessSecretEncrypted,
       parkingInstructions: d.parkingInstructions ?? null,
       hasPets: d.hasPets ?? false,
       pets: d.pets ?? [],

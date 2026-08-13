@@ -321,7 +321,7 @@ export function Modal({ open, onClose, title, description, size = 'md', children
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
         className={cx(
-          'relative w-full overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-[var(--shadow-raised)]',
+          'relative flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-[var(--shadow-raised)]',
           MODAL_SIZES[size] ?? MODAL_SIZES.md,
         )}
       >
@@ -330,23 +330,23 @@ export function Modal({ open, onClose, title, description, size = 'md', children
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="absolute top-4 right-4 rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
+            className="absolute top-4 right-4 cursor-pointer rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
         )}
 
         {(title || description) && (
-          <div className="px-6 pt-6 pr-14">
+          <div className="shrink-0 px-6 pt-6 pr-14">
             {title && <h2 className="text-base font-bold tracking-tight text-text">{title}</h2>}
             {description && <p className="mt-1 text-sm text-text-muted">{description}</p>}
           </div>
         )}
 
-        <div className="px-6 py-5">{children}</div>
+        <div className="min-h-0 overflow-y-auto px-6 py-5">{children}</div>
 
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-border bg-surface-sunken/60 px-6 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-surface-sunken/60 px-6 py-4">
             {footer}
           </div>
         )}

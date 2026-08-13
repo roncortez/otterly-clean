@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Sparkles, Shirt, Package } from 'lucide-react';
 import { api, errorMessage } from '@/shared/api/client';
@@ -34,12 +34,6 @@ const STEPS = [
   { id: 'schedule',  label: 'Cuándo' },
 ];
 
-const INITIAL_PROPERTY_DRAFT = {
-  name: '',
-  propertyType: 'APARTMENT',
-  bedrooms: 1,
-  bathrooms: 1,
-};
 
 const INITIAL_CLEANING = {
   cleaningType: 'STANDARD',
@@ -95,6 +89,11 @@ export default function BookingWizard() {
   const [stepIndex, setStepIndex] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pricing, setPricing] = useState(null);
+  const onNextHandlerRef = useRef(null);
+
+  const registerOnNext = useCallback((fn) => {
+    onNextHandlerRef.current = fn;
+  }, []);
 
   const catalogQuery = useApiQuery('/catalog/services');
   const addressQuery = useApiQuery('/customer/addresses');
@@ -136,10 +135,7 @@ export default function BookingWizard() {
     setBooking((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
 
 
-  // En limpieza el lugar se pide siempre dentro del asistente: rellena identidad
-  // y acceso desde el inmueble guardado de la dirección o desde los valores por
-  // defecto, y al confirmar se crea o se reemplaza el guardado.
-  const [propertyDraft, setPropertyDraft] = useState(INITIAL_PROPERTY_DRAFT);
+
 
   // Si el servicio preseleccionado ya no se ofrece (Operaciones lo desactivó),
   // se cae al primero disponible en lugar de dejar el asistente bloqueado.
@@ -171,42 +167,6 @@ export default function BookingWizard() {
     return (addresses.find((address) => address.is_default) ?? addresses[0])?.id ?? null;
   }, [booking.addressId, addresses]);
 
-  // La dirección efectivamente elegida y el inmueble que vive en ella (si hay):
-  // le dice al paso de lugar si puede rellenar con datos ya guardados.
-  const selectedAddress = useMemo(
-    () => addresses.find((address) => address.id === selectedAddressId) ?? null,
-    [addresses, selectedAddressId],
-  );
-  const savedProperty = selectedAddress?.property ?? null;
-
-  // Al elegir una dirección (o al aterrizar en la que viene por defecto) se
-  // llena el formulario del lugar con lo guardado en ella; si no tiene inmueble
-  // se dejan los valores por defecto para que no queden datos de otra casa. Se
-  // ajusta durante el render solo cuando cambia la dirección: editar después no
-  // se pisa, y volver a tocar la misma dirección no resetea lo ya corregido.
-  const [prefilledAddressId, setPrefilledAddressId] = useState(null);
-  if (selectedAddressId !== prefilledAddressId && booking.serviceType === 'CLEANING') {
-    setPrefilledAddressId(selectedAddressId);
-    const identity = {
-      propertyType: savedProperty?.propertyType ?? 'APARTMENT',
-      bedrooms: savedProperty?.bedrooms ?? 1,
-      bathrooms: savedProperty?.bathrooms ?? 1,
-    };
-    setPropertyDraft({ name: savedProperty?.name ?? '', ...identity });
-    updateDetail('cleaning', {
-      ...identity,
-      accessMethod: savedProperty?.accessMethod ?? 'CUSTOMER_OPENS',
-      accessSecret: savedProperty?.accessCode ?? '',
-      accessInstructions: savedProperty?.accessInstructions ?? '',
-      parkingInstructions: savedProperty?.parkingInstructions ?? '',
-      customerPresent: savedProperty?.customerPresent ?? true,
-      hasPets: savedProperty?.hasPets ?? false,
-      pets: savedProperty?.pets ?? [],
-      petsSecured: savedProperty?.petsSecured ?? null,
-      petInstructions: savedProperty?.petInstructions ?? '',
-      delicateItems: savedProperty?.delicateItems ?? '',
-    });
-  }
 
   // Estado efectivo: lo que el usuario eligió, ya resuelto con los defectos.
   const effective = useMemo(
@@ -273,70 +233,25 @@ export default function BookingWizard() {
         // Todos los campos de configure tienen valores por defecto; siempre se puede avanzar.
         return true;
       case 'place': {
-        if (!effective.addressId) return false;
         if (effective.serviceType === 'CLEANING') {
-          const identityReady =
-            Boolean(propertyDraft.propertyType) &&
-            Number(propertyDraft.bedrooms) >= 0 &&
-            Number(propertyDraft.bathrooms) >= 0;
-          return identityReady && Boolean(propertyDraft.name.trim());
+          if (!effective.propertyId) return false;
+          const cl = effective.cleaning;
+          const hasAccess = cl.accessMethod !== undefined && cl.accessMethod !== null;
+          const hasPetsVal = cl.hasPets !== undefined && cl.hasPets !== null;
+          return hasAccess && hasPetsVal;
         }
-        return true;
+        return Boolean(effective.addressId);
       }
       case 'schedule':
         return Boolean(effective.scheduledDate) && Boolean(effective.windowCode);
       default:
         return true;
     }
-  }, [currentStep.id, effective, propertyDraft]);
+  }, [currentStep.id, effective]);
 
   async function handleSubmit() {
     const request = async () => {
-      // La identidad del espacio siempre sale del formulario del paso; al
-      // confirmar se persiste como lugar de la dirección (se crea o se
-      // reemplaza) y la orden la referencia, para que el orden en que se
-      // eligieron las direcciones no filtre datos de otra casa al snapshot.
-      const identity = {
-        propertyType: propertyDraft.propertyType,
-        bedrooms: Number(propertyDraft.bedrooms) || 0,
-        bathrooms: Number(propertyDraft.bathrooms) || 0,
-      };
-
-      // En limpieza el lugar siempre se persiste: se crea si la dirección no
-      // tiene inmueble o se reemplaza si ya tiene uno.
-      let propertyId = null;
-      if (effective.serviceType === 'CLEANING') {
-        const cleaning = effective.cleaning;
-        const propertyPayload = {
-          name: propertyDraft.name.trim(),
-          propertyType: propertyDraft.propertyType,
-          bedrooms: Number(propertyDraft.bedrooms) || 0,
-          bathrooms: Number(propertyDraft.bathrooms) || 0,
-          accessCode: cleaning.accessSecret || null,
-          accessMethod: cleaning.accessMethod,
-          accessInstructions: cleaning.accessInstructions || null,
-          parkingInstructions: cleaning.parkingInstructions || null,
-          customerPresent: cleaning.customerPresent,
-          hasPets: cleaning.hasPets,
-          pets: cleaning.hasPets ? cleaning.pets : [],
-          petsSecured: cleaning.hasPets ? cleaning.petsSecured : null,
-          petInstructions: cleaning.petInstructions || null,
-          delicateItems: cleaning.delicateItems || null,
-        };
-        if (savedProperty) {
-          const propertyRes = await api.patch(
-            `/customer/properties/${savedProperty.id}`,
-            propertyPayload,
-          );
-          propertyId = propertyRes.data.property.id;
-        } else {
-          const propertyRes = await api.post('/customer/properties', {
-            ...propertyPayload,
-            addressId: effective.addressId,
-          });
-          propertyId = propertyRes.data.property.id;
-        }
-      }
+      const propertyId = effective.propertyId || null;
 
       const payload = {
         planId: effective.planId,
@@ -355,7 +270,6 @@ export default function BookingWizard() {
           ...payload,
           cleaning: {
             ...rest,
-            ...identity,
             areaValue: areaValue === '' ? null : Number(areaValue),
             areaUnit,
             pets: rest.hasPets ? pets : [],
@@ -486,15 +400,21 @@ export default function BookingWizard() {
     service,
     catalog,
     addresses,
-    savedProperty,
-    propertyDraft,
-    setPropertyDraft,
     reloadAddresses: addressQuery.reload,
     money,
     weightUnit,
     areaUnit,
     timeWindows: windows,
+    registerOnNext,
   };
+
+  async function handleNext() {
+    if (onNextHandlerRef.current) {
+      const ok = await onNextHandlerRef.current();
+      if (!ok) return;
+    }
+    setStepIndex(stepIndex + 1);
+  }
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -556,7 +476,7 @@ export default function BookingWizard() {
 
       <div className="mt-6 flex justify-end">
         {stepIndex < STEPS.length - 1 ? (
-          <Button size="lg" disabled={!canContinue} onClick={() => setStepIndex(stepIndex + 1)}>
+          <Button size="lg" disabled={!canContinue} onClick={handleNext}>
             Continuar
             <ArrowRight className="size-4" aria-hidden="true" />
           </Button>
