@@ -192,6 +192,15 @@ function field(label) {
   return screen.getByLabelText(new RegExp(label, 'i'));
 }
 
+/**
+ * Ponerle nombre al lugar. Es obligatorio y ya no viene puesto como "Casa": una
+ * lista de direcciones llamadas todas igual no se puede usar cuando alguien
+ * tiene su departamento, la casa de sus padres y una oficina.
+ */
+function nombrar(nombre = 'Mi casa') {
+  fireEvent.change(field('¿Cómo llamas a este lugar'), { target: { value: nombre } });
+}
+
 /** jsdom no trae geolocalización: se añade solo para la prueba que la usa. */
 function withGeolocation(getCurrentPosition) {
   Object.defineProperty(window.navigator, 'geolocation', {
@@ -237,6 +246,7 @@ describe('Elegir la ubicación en el mapa', () => {
     // Y la coordenada queda guardada, que es el dato que importa de verdad.
     expect(screen.getByText(/-0\.29690, -78\.45470/)).toBeInTheDocument();
 
+    nombrar();
     fireEvent.click(screen.getByRole('button', { name: /guardar dirección/i }));
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -269,6 +279,7 @@ describe('Elegir la ubicación en el mapa', () => {
     await waitFor(() => expect(field('Calle y número')).toHaveValue('Av. Los Shyris 45'));
     expect(screen.getByText(/-0\.19000, -78\.48000/)).toBeInTheDocument();
 
+    nombrar();
     fireEvent.click(screen.getByRole('button', { name: /guardar dirección/i }));
     // La coordenada es la del punto tocado, no la que devolvió el proveedor.
     expect(onSubmit).toHaveBeenCalledWith(
@@ -313,6 +324,40 @@ describe('Elegir la ubicación en el mapa', () => {
     expect(await screen.findByText(/no pudimos obtener tu ubicación/i)).toBeInTheDocument();
     fireEvent.change(field('Calle y número'), { target: { value: 'Av. Ilaló' } });
     expect(field('Calle y número')).toHaveValue('Av. Ilaló');
+  });
+});
+
+/**
+ * El nombre del lugar.
+ *
+ * Es lo que la persona verá al reservar ("Mi departamento", "Casa de mis
+ * padres"), así que lo escribe ella. Antes venía puesto como "Casa" y quien
+ * tenía tres lugares acababa con tres "Casa" indistinguibles.
+ */
+describe('Ponerle nombre al lugar', () => {
+  it('no viene puesto ninguno, y hay sugerencias para no tener que pensarlo', async () => {
+    render(<AddressForm onSubmit={vi.fn()} />);
+    await mapReady();
+
+    expect(field('¿Cómo llamas a este lugar')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Casa de mis padres' }));
+    expect(field('¿Cómo llamas a este lugar')).toHaveValue('Casa de mis padres');
+  });
+
+  it('sin nombre no se guarda: no se inventa uno por la persona', async () => {
+    const onSubmit = vi.fn();
+    render(<AddressForm onSubmit={onSubmit} />);
+    await mapReady();
+
+    fireEvent.change(field('Calle y número'), { target: { value: 'Av. Ilaló' } });
+    fireEvent.change(field('Ciudad'), { target: { value: 'Quito' } });
+    fireEvent.click(screen.getByRole('button', { name: /guardar dirección/i }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    nombrar('Casa del Valle');
+    fireEvent.click(screen.getByRole('button', { name: /guardar dirección/i }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ label: 'Casa del Valle' }));
   });
 });
 
@@ -378,6 +423,7 @@ describe('Cuando el proveedor no está', () => {
 
     fireEvent.change(field('Calle y número'), { target: { value: 'Av. Ilaló y Los Cipreses' } });
     fireEvent.change(field('Ciudad'), { target: { value: 'Quito' } });
+    nombrar();
     fireEvent.click(screen.getByRole('button', { name: /guardar dirección/i }));
 
     expect(onSubmit).toHaveBeenCalledWith(
@@ -406,6 +452,7 @@ describe('Cuando el proveedor no está', () => {
     expect(field('Calle y número')).toHaveValue('Mi calle de siempre');
     expect(screen.getByText(/-0\.19000, -78\.48000/)).toBeInTheDocument();
 
+    nombrar();
     fireEvent.click(screen.getByRole('button', { name: /guardar dirección/i }));
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({

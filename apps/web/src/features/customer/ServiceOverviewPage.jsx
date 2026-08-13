@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CalendarPlus, Home, Info, Package } from 'lucide-react';
+import { ArrowRight, CalendarPlus, DoorOpen, Info, Package } from 'lucide-react';
 import { useApiQuery } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
 import {
@@ -128,24 +128,24 @@ export default function ServiceOverviewPage({ serviceType }) {
   );
 }
 
-/** Los datos del hogar viven en las direcciones; aquí solo se entra a ellos. */
+/** Los espacios son de limpieza: aquí se entra a ellos, no se explican otra vez. */
 function HomeShortcut() {
   return (
     <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
       <div className="flex min-w-0 items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-service-soft text-service-strong">
-          <Home className="size-5" aria-hidden="true" />
+          <DoorOpen className="size-5" aria-hidden="true" />
         </span>
         <div className="min-w-0">
-          <p className="font-semibold text-text">Los datos de tu casa</p>
+          <p className="font-semibold text-text">Mis espacios</p>
           <p className="mt-0.5 text-sm text-text-muted">
-            Habitaciones, baños, mascotas y cómo se entra. Se guardan en cada dirección y rellenan
-            tu próxima reserva.
+            Cada lugar que limpiamos, con sus habitaciones, baños, mascotas y cómo se entra. Tus
+            reservas lo reutilizan.
           </p>
         </div>
       </div>
-      <ButtonLink as={Link} to="/limpieza/hogar" variant="outline" size="sm">
-        Revisar
+      <ButtonLink as={Link} to="/limpieza/espacios" variant="outline" size="sm">
+        Ver mis espacios
       </ButtonLink>
     </Card>
   );

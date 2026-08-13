@@ -18,9 +18,10 @@ import {
   Divider,
 } from '@/shared/ui';
 import { StatusTimeline } from '@/shared/ui/StatusTimeline';
+import { MAX_VISIBLE_STEPS } from '@/shared/ui/timelineWindow';
 import { SERVICE_LABELS } from '@/shared/ui/ServiceCard';
 import WhatsAppButton from '@/shared/ui/WhatsAppButton';
-import { formatLongDate, formatTimeWindow } from '@/shared/format';
+import { counted, formatLongDate, formatTimeWindow } from '@/shared/format';
 
 /**
  * Detalle del servicio para el cliente.
@@ -33,6 +34,9 @@ export default function OrderDetailPage() {
 
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState('');
+  // El seguimiento muestra cinco estados; aquí se puede desplegar el recorrido
+  // completo, que es la pantalla donde alguien viene a mirarlo con detalle.
+  const [allSteps, setAllSteps] = useState(false);
 
   const orderQuery = useApiQuery(`/customer/orders/${id}`);
   const detail = orderQuery.data;
@@ -106,7 +110,21 @@ export default function OrderDetailPage() {
           }
         />
         <div className="p-5 sm:p-6">
-          <StatusTimeline steps={timeline} />
+          {/*
+            Se ven cinco estados: los suficientes para saber qué pasó, dónde está
+            y qué falta. El resto sigue estando, a un clic, para quien quiera el
+            recorrido completo.
+          */}
+          <StatusTimeline steps={timeline} maxVisible={allSteps ? null : undefined} />
+          {timeline.length > MAX_VISIBLE_STEPS && (
+            <button
+              type="button"
+              onClick={() => setAllSteps(!allSteps)}
+              className="mt-2 text-sm font-medium text-service-strong hover:underline"
+            >
+              {allSteps ? 'Ver solo lo cercano' : `Ver los ${timeline.length} estados`}
+            </button>
+          )}
         </div>
       </Card>
 
@@ -321,7 +339,8 @@ function ServiceDetails({ serviceType, details }) {
         <dl className="divide-y divide-border px-5 pb-3 sm:px-6">
           <DataRow label="Tipo">{CLEANING_TYPE_LABELS[details.cleaning_type]}</DataRow>
           <DataRow label="Espacio">
-            {details.bedrooms} habitaciones · {details.bathrooms} baños
+            {counted(details.bedrooms, 'habitación', 'habitaciones')} ·{' '}
+            {counted(details.bathrooms, 'baño', 'baños')}
           </DataRow>
           {details.area_value && (
             <DataRow label="Tamaño">
@@ -355,8 +374,9 @@ function ServiceDetails({ serviceType, details }) {
           {details.delicate_items && (
             <DataRow label="Objetos delicados">{details.delicate_items}</DataRow>
           )}
+          {/* Lo que valía para todas las visitas de ese lugar el día que reservaste. */}
           {details.special_instructions && (
-            <DataRow label="Instrucciones">{details.special_instructions}</DataRow>
+            <DataRow label="Del lugar">{details.special_instructions}</DataRow>
           )}
         </dl>
       </Card>

@@ -1,7 +1,9 @@
 import { Field, Input, Select, Checkbox, OptionCard, Divider, cx } from '@/shared/ui';
+import { homeProfileSummary } from '../cleaning/HomeProfileForm';
 
 /**
- * Paso 2: detalles del servicio.
+ * Detalles de esta reserva.
+ *
  * Cambia por completo entre limpieza y lavandería, porque son negocios
  * distintos: uno se mide en horas y habitaciones, el otro en kilos y
  * preferencias de lavado.
@@ -14,13 +16,6 @@ export default function StepConfigure(props) {
   );
 }
 
-const PROPERTY_TYPES = [
-  { value: 'APARTMENT', label: 'Departamento' },
-  { value: 'HOUSE', label: 'Casa' },
-  { value: 'SUITE', label: 'Suite' },
-  { value: 'OFFICE', label: 'Oficina' },
-];
-
 const PRIORITY_AREAS = ['Cocina', 'Baños', 'Dormitorios', 'Sala', 'Comedor', 'Balcón', 'Lavandería'];
 
 const DURATIONS = [
@@ -30,9 +25,15 @@ const DURATIONS = [
   { minutes: 360, label: '6 horas', hint: 'Limpieza a fondo' },
 ];
 
-function CleaningStep({ booking, update, updateDetail, service, money, areaUnit }) {
+/**
+ * Lo que cambia de una visita a otra: cuánto tiempo, qué priorizar hoy, qué
+ * productos. Cuántas habitaciones tiene el lugar ya lo dijo el espacio elegido
+ * en el paso anterior, y aparece arriba como recordatorio, no como pregunta.
+ */
+function CleaningStep({ booking, update, updateDetail, service, money, selectedAddress, areaUnit }) {
   const { cleaning } = booking;
   const extras = service?.extras ?? [];
+  const space = homeProfileSummary(selectedAddress?.cleaningProfile, areaUnit);
 
   const toggleArea = (area) => {
     const areas = cleaning.priorityAreas.includes(area)
@@ -51,63 +52,17 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-text">Cuéntanos del espacio</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">¿Cómo la quieres esta vez?</h2>
         <p className="mt-1 text-text-muted">
           Con esto calculamos cuánto tiempo hace falta y quién es la persona indicada.
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Tipo de propiedad">
-          <Select
-            value={cleaning.propertyType}
-            onChange={(event) => updateDetail('cleaning', { propertyType: event.target.value })}
-          >
-            {PROPERTY_TYPES.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
-        <Field label="Habitaciones">
-          <Input
-            type="number"
-            min="0"
-            max="20"
-            value={cleaning.bedrooms}
-            onChange={(event) =>
-              updateDetail('cleaning', { bedrooms: Number(event.target.value) || 0 })
-            }
-          />
-        </Field>
-
-        <Field label="Baños">
-          <Input
-            type="number"
-            min="0"
-            max="20"
-            value={cleaning.bathrooms}
-            onChange={(event) =>
-              updateDetail('cleaning', { bathrooms: Number(event.target.value) || 0 })
-            }
-          />
-        </Field>
-      </div>
-
-      <Field
-        label={`Tamaño aproximado (${areaUnit})`}
-        hint="Opcional. Nos ayuda a estimar mejor el tiempo."
-      >
-        <Input
-          type="number"
-          min="1"
-          value={cleaning.areaValue}
-          onChange={(event) => updateDetail('cleaning', { areaValue: event.target.value })}
-          placeholder="95"
-        />
-      </Field>
+      {space.length > 0 && (
+        <p className="rounded-xl bg-surface-sunken px-4 py-3 text-sm text-text-muted">
+          <span className="font-medium text-text">{selectedAddress.label}</span> · {space.join(' · ')}
+        </p>
+      )}
 
       <div>
         <p className="mb-2.5 text-sm font-medium text-text">¿Cuánto tiempo reservamos?</p>

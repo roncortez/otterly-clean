@@ -24,8 +24,16 @@ import { Alert, Button, Card, Checkbox, Field, Input } from '@/shared/ui';
 /** Campos que el mapa puede proponer. El resto es siempre del cliente. */
 const GEOCODED_FIELDS = ['streetLine1', 'neighborhood', 'city', 'administrativeArea', 'postalCode'];
 
+/**
+ * El nombre nace vacío a propósito.
+ *
+ * Antes venía puesto como "Casa", y el resultado era una lista de direcciones
+ * llamadas "Casa, Casa, Casa" en la que no se distinguía el departamento propio
+ * de la casa de los padres. Es el nombre con el que la persona reconocerá el
+ * lugar al reservar, así que lo escribe ella; hay sugerencias para que no cueste.
+ */
 const EMPTY = {
-  label: 'Casa',
+  label: '',
   streetLine1: '',
   streetLine2: '',
   neighborhood: '',
@@ -36,10 +44,13 @@ const EMPTY = {
   isDefault: false,
 };
 
+/** Nombres frecuentes, para no tener que pensarlo. Ninguno se aplica solo. */
+const LABEL_SUGGESTIONS = ['Mi casa', 'Mi departamento', 'Oficina', 'Casa de mis padres'];
+
 function addressToForm(address) {
   if (!address) return { ...EMPTY };
   return {
-    label: address.label ?? 'Casa',
+    label: address.label ?? '',
     streetLine1: address.street_line1 ?? '',
     streetLine2: address.street_line2 ?? '',
     neighborhood: address.neighborhood ?? '',
@@ -117,7 +128,7 @@ export default function AddressForm({
   function handleSubmit(event) {
     event.preventDefault();
     onSubmit({
-      label: form.label.trim() || 'Casa',
+      label: form.label.trim(),
       streetLine1: form.streetLine1.trim(),
       streetLine2: form.streetLine2.trim() || null,
       neighborhood: form.neighborhood.trim() || null,
@@ -188,9 +199,29 @@ export default function AddressForm({
       ) : null}
 
       <div className="space-y-4">
-        <Field label="Nombre" hint="Para reconocerla rápido." required>
-          <Input required value={form.label} onChange={update('label')} placeholder="Casa, Oficina…" />
-        </Field>
+        <div>
+          <Field label="¿Cómo llamas a este lugar?" hint="Así lo verás al reservar." required>
+            <Input
+              required
+              value={form.label}
+              onChange={update('label')}
+              placeholder="Mi departamento"
+              maxLength={60}
+            />
+          </Field>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {LABEL_SUGGESTIONS.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => setForm((current) => ({ ...current, label: suggestion }))}
+                className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-muted transition-colors hover:border-border-strong hover:text-text"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <Field label={addressLabel('street_address')} required={isAddressFieldRequired('street_address')}>
           <Input

@@ -1,13 +1,22 @@
 import { Spinner, Divider } from '@/shared/ui';
 import { useConfig } from '@/shared/config/ConfigContext';
 import { formatLongDate, formatTime } from '@/shared/format';
+import { homeProfileSummary } from '../cleaning/HomeProfileForm';
 
 /**
- * Paso 6: resumen.
+ * Resumen antes de confirmar.
  * El precio lo calcula el backend, no el navegador: es la misma cifra que se
  * guardará en la orden.
  */
-export default function StepSummary({ booking, service, addresses, pricing, money, timeWindows }) {
+export default function StepSummary({
+  booking,
+  service,
+  addresses,
+  pricing,
+  money,
+  timeWindows,
+  areaUnit,
+}) {
   const { taxLabel, freeCancellationHours } = useConfig();
 
   const plan = service?.plans.find((entry) => entry.id === booking.planId);
@@ -29,10 +38,15 @@ export default function StepSummary({ booking, service, addresses, pricing, mone
           value={window ? `${formatTime(window.startTime)} – ${formatTime(window.endTime)}` : '—'}
         />
         <Row
-          label={booking.serviceType === 'LAUNDRY' ? 'Recogemos en' : 'Dirección'}
+          label={booking.serviceType === 'LAUNDRY' ? 'Recogemos en' : 'Espacio'}
           value={
             address
-              ? [address.street_line1, address.neighborhood, address.city]
+              ? [
+                  booking.serviceType === 'CLEANING' ? address.label : null,
+                  address.street_line1,
+                  address.neighborhood,
+                  address.city,
+                ]
                   .filter(Boolean)
                   .join(' · ')
               : '—'
@@ -40,9 +54,10 @@ export default function StepSummary({ booking, service, addresses, pricing, mone
         />
         {booking.serviceType === 'CLEANING' && (
           <>
+            {/* Lo del lugar sale de su ficha, que es de donde saldrá al reservar. */}
             <Row
-              label="Espacio"
-              value={`${booking.cleaning.bedrooms} hab · ${booking.cleaning.bathrooms} baños`}
+              label="Lo que limpiamos"
+              value={homeProfileSummary(address?.cleaningProfile, areaUnit).join(' · ') || null}
             />
             <Row label="Duración" value={`${booking.durationMinutes / 60} horas`} />
             <Row

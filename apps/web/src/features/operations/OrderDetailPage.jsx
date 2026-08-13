@@ -187,11 +187,17 @@ export default function OrderDetailPage() {
             </div>
           </Card>
 
-          {/* Seguimiento */}
+          {/*
+            Seguimiento, entero.
+
+            Al cliente se le muestran cinco estados porque viene a saber si
+            alguien está en camino. Aquí se decide qué hacer con un servicio que
+            se torció, y para eso hace falta ver el recorrido completo.
+          */}
           <Card>
             <CardHeader title="Seguimiento" />
             <div className="p-5">
-              <StatusTimeline steps={timeline} />
+              <StatusTimeline steps={timeline} maxVisible={null} />
             </div>
           </Card>
 

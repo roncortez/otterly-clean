@@ -256,6 +256,17 @@
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 
+  /* Tiras que se desplazan con el dedo (el conmutador de servicio en móvil):
+     la barra de desplazamiento sobra donde el gesto ya lo dice. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

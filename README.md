@@ -214,10 +214,12 @@ de Quito. El backend valida contra las zonas de cobertura antes de aceptar una
 reserva. Esa misma coordenada es la que ve el trabajador para llegar: no se
 vuelve a buscar el texto en ningún mapa.
 
-**Datos del hogar**: cuántas habitaciones, cómo se entra, si hay mascotas. Van
-con la dirección —no en una lista de "inmuebles" aparte— y los rellena la propia
-reserva, así que la segunda vez llegan puestos. Se corrigen en
-`/limpieza/hogar`.
+**Espacios**: una dirección más lo que hay que saber para limpiarla —cuántas
+habitaciones, cuántos baños, cómo se entra, si hay mascotas—. Se describe una vez
+en `/limpieza/espacios`, con el nombre que le dé el cliente ("Mi departamento",
+"Casa de mis padres"), y **al reservar solo se elige**: la reserva pregunta lo que
+cambia ese día, no lo que ya sabemos del lugar. Las direcciones siguen siendo de
+la cuenta, porque lavandería usa las mismas.
 
 **Privacidad del trabajador y del cliente**: recibir una asignación no es
 aceptarla. El teléfono del cliente y el código de acceso al domicilio aparecen

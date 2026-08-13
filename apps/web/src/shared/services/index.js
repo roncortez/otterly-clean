@@ -1,23 +1,67 @@
 import { useMemo } from 'react';
-import { Sparkles, Shirt, Scissors, CalendarPlus, Home, Package, MapPin, ListChecks } from 'lucide-react';
+import {
+  Sparkles,
+  Shirt,
+  Scissors,
+  CalendarPlus,
+  Home,
+  Package,
+  MapPin,
+  ListChecks,
+  UserRound,
+  DoorOpen,
+} from 'lucide-react';
 import { useConfig } from '@/shared/config/ConfigContext';
 
 /**
- * Las tres experiencias del cliente.
+ * Dónde está el cliente y qué puede hacer ahí.
  *
- * Limpieza, lavandería y arreglos comparten sesión, direcciones, historial y
- * componentes: son una sola aplicación. Lo que cambia entre ellas es el
- * vocabulario, las acciones y el color, y todo eso vive aquí, en una tabla, en
- * lugar de repartido por las pantallas.
+ * La aplicación del cliente tiene cuatro contextos y solo cuatro: su cuenta y
+ * los tres servicios. Comparten sesión, direcciones, historial y componentes —no
+ * son tres aplicaciones—, pero cada uno tiene su vocabulario, sus acciones y su
+ * color, y todo eso vive aquí, en una tabla, en lugar de repartido por las
+ * pantallas.
  *
- * Los tipos son los mismos tres que declara el dominio (`serviceTypes.js` en el
- * backend). Esto no los inventa ni los amplía: les pone nombre de cara al
- * cliente y decide por dónde se entra.
+ * Esa distinción es también la de la navegación, y por eso se declara una sola
+ * vez:
+ *
+ *   **cuenta** → lo que no pertenece a ningún servicio: dónde vives, todo lo que
+ *   has pedido, quién eres.
+ *   **servicio** → lo que solo tiene sentido dentro de él: reservar una
+ *   limpieza, los espacios que limpiamos, tus pedidos de lavandería.
+ *
+ * Ninguna opción aparece en los dos niveles. Direcciones es de la cuenta porque
+ * una dirección sirve para limpiar, para recoger ropa y para lo que venga; los
+ * espacios son de limpieza porque solo limpieza necesita saber cuántos baños
+ * tiene un lugar.
+ *
+ * Los tipos de servicio son los mismos tres que declara el dominio
+ * (`serviceTypes.js` en el backend). Esto no los inventa ni los amplía: les pone
+ * nombre de cara al cliente y decide por dónde se entra.
  *
  * Lo que NO se decide aquí: si un servicio se puede reservar. Eso lo dice el
  * backend en `GET /api/catalog/config` (`implemented` + `active` → `bookable`),
  * y las pantallas lo consultan con `useServiceExperiences`.
  */
+
+/**
+ * La cuenta: el contexto al que se vuelve cuando no estás dentro de un servicio.
+ *
+ * `code: null` no es un hueco, es lo que significa: aquí no hay servicio, y por
+ * eso el acento vuelve al verde de la marca (ver `--service` en index.css).
+ */
+export const ACCOUNT_CONTEXT = Object.freeze({
+  code: null,
+  slug: 'cuenta',
+  path: '/inicio',
+  label: 'Mi cuenta',
+  icon: UserRound,
+  nav: [
+    { to: '/inicio', label: 'Inicio', icon: Home, end: true },
+    { to: '/direcciones', label: 'Direcciones', icon: MapPin },
+    { to: '/servicios', label: 'Mis servicios', icon: ListChecks },
+  ],
+});
 
 /** Rutas por servicio. El slug va en español porque es una URL que se lee. */
 export const SERVICE_EXPERIENCES = Object.freeze([
@@ -30,12 +74,16 @@ export const SERVICE_EXPERIENCES = Object.freeze([
     article: 'una limpieza',
     tagline: 'Tu casa al día, la sigas desde donde la sigas.',
     icon: Sparkles,
+    /**
+     * "Mis espacios" y no "Mi hogar": una persona tiene su departamento, la casa
+     * de sus padres y a veces una oficina, y el singular decía justo lo
+     * contrario. Direcciones no está aquí: es de la cuenta.
+     */
     nav: [
       { to: '/limpieza', label: 'Resumen', icon: Home, end: true },
       { to: '/limpieza/reservar', label: 'Reservar', icon: CalendarPlus },
       { to: '/limpieza/reservas', label: 'Mis reservas', icon: ListChecks },
-      { to: '/limpieza/hogar', label: 'Mi hogar', icon: Home },
-      { to: '/direcciones', label: 'Direcciones', icon: MapPin },
+      { to: '/limpieza/espacios', label: 'Mis espacios', icon: DoorOpen },
     ],
   },
   {
@@ -46,11 +94,15 @@ export const SERVICE_EXPERIENCES = Object.freeze([
     article: 'una recogida',
     tagline: 'Recogemos, lavamos y te la devolvemos doblada.',
     icon: Shirt,
+    /**
+     * Lavandería usa la dirección y nada más: recogemos donde vives. No
+     * pregunta cuántas habitaciones tiene la casa ni cómo se entra, porque no
+     * necesita entrar.
+     */
     nav: [
       { to: '/lavanderia', label: 'Resumen', icon: Home, end: true },
       { to: '/lavanderia/recogida', label: 'Pedir recogida', icon: CalendarPlus },
       { to: '/lavanderia/pedidos', label: 'Mis pedidos', icon: Package },
-      { to: '/direcciones', label: 'Direcciones', icon: MapPin },
     ],
   },
   {
@@ -78,9 +130,20 @@ export function serviceExperience(code) {
   return BY_CODE.get(code) ?? null;
 }
 
-/** Servicio al que pertenece una ruta, o null si es una pantalla común. */
+/** Servicio al que pertenece una ruta, o null si es una pantalla de la cuenta. */
 export function experienceForPath(pathname = '') {
   return BY_PATH.find((service) => pathname === service.path || pathname.startsWith(`${service.path}/`)) ?? null;
+}
+
+/**
+ * Contexto en el que estás: un servicio o tu cuenta.
+ *
+ * Siempre devuelve uno. Que "fuera de un servicio" tenga nombre y navegación
+ * propios —y no sea la ausencia de contexto— es lo que permite dibujar un solo
+ * sistema de navegación en lugar de dos barras que se pisan.
+ */
+export function navContextForPath(pathname = '') {
+  return experienceForPath(pathname) ?? ACCOUNT_CONTEXT;
 }
 
 /** Dónde se reserva cada servicio. Null si el flujo todavía no existe. */
@@ -137,4 +200,16 @@ export function useServiceExperiences() {
 export function useServiceExperience(code) {
   const experiences = useServiceExperiences();
   return experiences.find((experience) => experience.code === code) ?? null;
+}
+
+/**
+ * Los contextos de la aplicación, en el orden en que se presentan: primero la
+ * cuenta, después los servicios como los ordena Operaciones.
+ *
+ * Es la lista que dibuja el conmutador del encabezado. Vive aquí y no en el
+ * layout para que el layout no tenga que saber que existe algo llamado "cuenta".
+ */
+export function useNavContexts() {
+  const experiences = useServiceExperiences();
+  return useMemo(() => [ACCOUNT_CONTEXT, ...experiences], [experiences]);
 }

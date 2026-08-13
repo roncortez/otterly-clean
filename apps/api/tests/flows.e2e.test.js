@@ -214,7 +214,12 @@ describe('Flujo completo de limpieza', () => {
       .send({
         planId: created.cleaningPlanId,
         addressId: created.addressId,
-        scheduledDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
+        // Una fecha ya pasada: incumple la antelacion minima a cualquier hora.
+        // Con "hoy" la prueba dependia del reloj —de madrugada, la franja de la
+        // manana todavia queda a mas de las tres horas de antelacion y la
+        // reserva era legitima—, asi que fallaba sola entre medianoche y las
+        // cinco de la manana.
+        scheduledDate: futureDate(-1),
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 180 },
         cleaning: { bedrooms: 2, bathrooms: 1 },

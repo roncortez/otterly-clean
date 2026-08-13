@@ -123,6 +123,16 @@ export function inputToCents(value) {
   return Math.round(amount * 100);
 }
 
+/**
+ * Cantidad con su unidad, en singular o plural.
+ *
+ * "1 baños" delata que el texto lo escribió una plantilla y no una persona, y
+ * aparece justo donde el cliente lee lo que va a pagar.
+ */
+export function counted(value, singular, plural) {
+  return `${value} ${Number(value) === 1 ? singular : plural}`;
+}
+
 /** Dirección en una línea, para listados. */
 export function shortAddress(address) {
   if (!address) return '—';

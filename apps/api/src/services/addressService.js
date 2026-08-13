@@ -5,6 +5,11 @@ const addressRepo = require('../db/repositories/addressRepository');
 const catalogRepo = require('../db/repositories/catalogRepository');
 const { encrypt } = require('./crypto');
 const { locateZone, coverageEnvelope, isValidPoint } = require('../domain/shared/serviceArea');
+const {
+  ACCESS_SECRET,
+  homeFieldsToColumns,
+  projectHomeProfile,
+} = require('../domain/cleaning/homeProfile');
 const { NotFoundError, DomainError } = require('../domain/errors');
 
 /**
@@ -103,38 +108,20 @@ async function mapHints(regionCode, tx = db) {
 }
 
 /**
- * Datos del hogar que ve el cliente.
+ * Ficha de limpieza que ve el cliente.
  *
- * Se construye campo a campo en lugar de reenviar la fila: `access_secret_encrypted`
- * no puede salir de aqui ni por descuido, igual que en el detalle de una orden.
- * Lo que viaja es si hay algo guardado, no que es.
+ * La proyeccion la hace el dominio (`domain/cleaning/homeProfile`), que es donde
+ * esta escrito que campos forman la ficha de un espacio. Aqui solo se expone.
+ * Lo que nunca sale es `access_secret_encrypted`: viaja si existe, no que es.
  */
-function projectCleaningProfile(profile) {
-  if (!profile) return null;
-  return {
-    propertyType: profile.property_type,
-    bedrooms: profile.bedrooms,
-    bathrooms: profile.bathrooms,
-    areaValue: profile.area_value === null ? null : Number(profile.area_value),
-    areaUnit: profile.area_unit,
-    hasPets: profile.has_pets,
-    pets: profile.pets ?? [],
-    petInstructions: profile.pet_instructions,
-    accessMethod: profile.access_method,
-    accessInstructions: profile.access_instructions,
-    parkingInstructions: profile.parking_instructions,
-    notes: profile.notes,
-    hasAccessSecret: Boolean(profile.access_secret_encrypted),
-    updatedAt: profile.updated_at,
-  };
-}
+const projectCleaningProfile = projectHomeProfile;
 
 /**
- * Direcciones del cliente con los datos de hogar que tenga cada una.
+ * Direcciones del cliente con la ficha de limpieza que tenga cada una.
  *
- * Van juntos en una sola respuesta porque juntos se usan: el asistente de
- * limpieza necesita saber, al elegir la direccion, que ya sabemos de esa casa
- * para no volver a preguntarlo.
+ * Van juntas en una sola respuesta porque juntas se usan: al elegir el espacio,
+ * el asistente de limpieza necesita saber que sabemos ya de ese lugar para no
+ * volver a preguntarlo.
  */
 async function list(userId, tx = db) {
   const [addresses, profiles] = await Promise.all([
@@ -151,7 +138,11 @@ async function list(userId, tx = db) {
 }
 
 /**
- * Guarda los datos del hogar de una direccion propia.
+ * Guarda la ficha de limpieza de una direccion propia.
+ *
+ * Los campos que la forman los declara el dominio, los mismos que puede aportar
+ * una reserva: es una sola definicion de "que describe un espacio", escrita en
+ * un solo sitio.
  *
  * El codigo de acceso se cifra aqui, igual que al reservar, y solo se toca si
  * viene en la peticion: guardar el resto de la ficha no puede borrar en
@@ -162,23 +153,10 @@ async function saveCleaningProfile({ user, addressId, payload }) {
   const address = await addressRepo.findByIdForUser(addressId, user.id);
   if (!address) throw new NotFoundError('Direccion', addressId);
 
-  const fields = {
-    property_type: payload.propertyType,
-    bedrooms: payload.bedrooms,
-    bathrooms: payload.bathrooms,
-    area_value: payload.areaValue,
-    area_unit: payload.areaUnit,
-    has_pets: payload.hasPets,
-    pets: payload.pets,
-    pet_instructions: payload.petInstructions,
-    access_method: payload.accessMethod,
-    access_instructions: payload.accessInstructions,
-    parking_instructions: payload.parkingInstructions,
-    notes: payload.notes,
-  };
+  const fields = homeFieldsToColumns(payload);
 
   if (payload.accessSecret !== undefined) {
-    fields.access_secret_encrypted = payload.accessSecret ? encrypt(payload.accessSecret) : null;
+    fields[ACCESS_SECRET.column] = payload.accessSecret ? encrypt(payload.accessSecret) : null;
   }
 
   const profile = await addressRepo.upsertCleaningProfile(addressId, fields);

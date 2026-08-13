@@ -13,6 +13,12 @@ const notifications = require('../notifications');
 const { encrypt, decrypt } = require('./crypto');
 const { getRegion } = require('../config/regions');
 const { getStateMachine } = require('../domain/shared/serviceTypes');
+const {
+  ACCESS_SECRET,
+  needsAccessSecret,
+  homeFieldsToColumns,
+  resolveHomeFields,
+} = require('../domain/cleaning/homeProfile');
 const { calculatePrice } = require('../domain/pricing/pricing');
 const { buildTimeline } = require('../domain/shared/timeline');
 const {
@@ -106,9 +112,10 @@ async function createOrder({ serviceType, customer, payload, request }) {
     windowEnd: window.endTime,
   });
 
-  // Lo que ya sabemos de esa casa. Sirve para dos cosas: no obligar al cliente
-  // a reescribir el codigo de la puerta en cada reserva y no perderlo si esta
-  // vez no lo escribio.
+  // Lo que ya sabemos de ese espacio. Es la fuente de los datos del lugar
+  // —habitaciones, banos, como se entra, mascotas— cuando la reserva no los
+  // repite, que es el caso normal desde que el cliente puede describirlos una
+  // vez. Solo limpieza tiene ficha: lavanderia usa la direccion y nada mas.
   const homeProfile =
     serviceType === 'CLEANING' ? await addressRepo.findCleaningProfile(address.id) : null;
 
@@ -201,90 +208,78 @@ async function createOrder({ serviceType, customer, payload, request }) {
 }
 
 /**
- * Formas de entrar que necesitan un dato secreto. Con las demas —abre el
- * cliente, porteria— no hay nada que guardar ni que entregar despues.
- */
-const ACCESS_METHODS_WITH_SECRET = new Set(['KEY', 'DOOR_CODE', 'LOCKBOX']);
-
-/**
  * Detalle de limpieza de ESTA reserva.
  *
  * Es una foto del acuerdo, no una referencia: aunque el cliente cambie despues
- * los datos de su casa, la orden conserva lo que se pidio el dia que se pidio.
+ * los datos de su espacio, la orden conserva lo que se pidio el dia que se
+ * pidio.
+ *
+ * Los datos del lugar los resuelve el dominio (`homeProfile.resolveHomeFields`):
+ * lo que llega en la peticion manda, y lo que no llega sale de la ficha del
+ * espacio. Antes se rellenaban con ceros cuando la peticion no los mencionaba,
+ * de modo que "no repetir lo que ya dije" solo funcionaba si el navegador se
+ * acordaba de reenviarlo todo. Eso no era una reserva que reutiliza datos: era
+ * un formulario duplicado con los huecos ya escritos.
  */
 function insertCleaningDetail(orderId, payload, region, homeProfile, tx) {
   const d = payload.cleaning ?? {};
+  const home = homeProfile
+    ? resolveHomeFields({ payload: d, profile: homeProfile, areaUnit: region.units.area })
+    : resolveHomeFields({ payload: d, areaUnit: region.units.area });
+
   // El codigo guardado se hereda solo si esta reserva entra por una via que lo
-  // necesita: si el cliente dice que abre el, el trabajador no tiene por que
-  // llevarse la clave de la puerta.
-  const inheritedSecret = ACCESS_METHODS_WITH_SECRET.has(d.accessMethod)
+  // necesita, y se mira el metodo YA RESUELTO: quien no volvio a elegir como se
+  // entra sigue entrando como dijo la ultima vez.
+  const inheritedSecret = needsAccessSecret(home.accessMethod)
     ? (homeProfile?.access_secret_encrypted ?? null)
     : null;
+
   return orderRepo.insertCleaningDetails(
     {
       orderId,
+      ...home,
+      // Codigos y ubicacion de llaves se cifran antes de tocar la base. Si el
+      // cliente no escribio ninguno esta vez, se reutiliza el que ya tenia
+      // guardado para ese espacio: el texto cifrado se copia tal cual, sin
+      // descifrarlo por el camino.
+      accessSecretEncrypted: d.accessSecret ? encrypt(d.accessSecret) : inheritedSecret,
+      // De la visita: se pregunta cada vez y no se hereda de nada.
       cleaningType: d.cleaningType ?? 'STANDARD',
-      propertyType: d.propertyType ?? 'APARTMENT',
-      bedrooms: d.bedrooms ?? 0,
-      bathrooms: d.bathrooms ?? 0,
-      areaValue: d.areaValue ?? null,
-      areaUnit: d.areaUnit ?? region.units.area,
       sizeTier: d.sizeTier ?? null,
       priorityAreas: d.priorityAreas ?? [],
       suppliesProvidedBy: d.suppliesProvidedBy ?? 'COMPANY',
       productPreferences: d.productPreferences ?? [],
       fragrancePreference: d.fragrancePreference ?? null,
       customerPresent: d.customerPresent ?? true,
-      accessMethod: d.accessMethod ?? 'CUSTOMER_OPENS',
-      accessInstructions: d.accessInstructions ?? null,
-      // Codigos y ubicacion de llaves se cifran antes de tocar la base. Si el
-      // cliente no escribio ninguno esta vez, se reutiliza el que ya tenia
-      // guardado para esa direccion: el texto cifrado se copia tal cual, sin
-      // descifrarlo por el camino.
-      accessSecretEncrypted: d.accessSecret ? encrypt(d.accessSecret) : inheritedSecret,
-      parkingInstructions: d.parkingInstructions ?? null,
-      hasPets: d.hasPets ?? false,
-      pets: d.pets ?? [],
       petsSecured: d.petsSecured ?? null,
-      petInstructions: d.petInstructions ?? null,
       delicateItems: d.delicateItems ?? null,
-      specialInstructions: d.specialInstructions ?? null,
     },
     tx,
   );
 }
 
 /**
- * Los datos duraderos de la casa se quedan en la direccion.
+ * Lo que el cliente corrige al reservar se queda en la ficha del espacio.
  *
- * Es lo que evita el formulario duplicado: el cliente los escribe una vez, al
- * reservar, y la proxima reserva llega con ellos puestos. Solo se guarda lo que
- * describe la vivienda —cuantas habitaciones, como se entra, si hay mascotas—,
- * nunca lo que es propio de una visita concreta (tipo de limpieza, areas
- * prioritarias, notas del dia).
+ * Es la otra mitad de no tener formulario duplicado: si esta vez dijo que ya son
+ * tres banos, la proxima reserva sale de ahi. Solo se escriben los campos que
+ * VIENEN en la peticion: una reserva que no menciona las mascotas no puede
+ * borrar las que el cliente registro en su espacio.
  */
 function rememberHome(addressId, payload, region, tx) {
   const d = payload.cleaning ?? {};
+  const columns = homeFieldsToColumns(d);
 
-  return addressRepo.upsertCleaningProfile(
-    addressId,
-    {
-      property_type: d.propertyType,
-      bedrooms: d.bedrooms,
-      bathrooms: d.bathrooms,
-      area_value: d.areaValue ?? null,
-      area_unit: d.areaUnit ?? region.units.area,
-      has_pets: d.hasPets,
-      pets: d.pets ?? [],
-      pet_instructions: d.petInstructions ?? null,
-      access_method: d.accessMethod,
-      access_instructions: d.accessInstructions ?? null,
-      parking_instructions: d.parkingInstructions ?? null,
-      // Un codigo nuevo sustituye al anterior; no escribirlo no lo borra.
-      access_secret_encrypted: d.accessSecret ? encrypt(d.accessSecret) : undefined,
-    },
-    tx,
-  );
+  // Si trae medida sin unidad, la pone la region; sin medida no hay unidad que
+  // guardar.
+  if (columns.area_value !== undefined && columns.area_unit === undefined) {
+    columns.area_unit = d.areaUnit ?? region.units.area;
+  }
+
+  // Un codigo nuevo sustituye al anterior; no escribirlo no lo borra.
+  if (d.accessSecret) columns[ACCESS_SECRET.column] = encrypt(d.accessSecret);
+
+  return addressRepo.upsertCleaningProfile(addressId, columns, tx);
 }
 
 async function insertLaundryDetail(orderId, payload, region, window, tx) {

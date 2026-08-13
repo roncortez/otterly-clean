@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { I18nProvider } from '@/shared/i18n/I18nContext';
@@ -254,37 +254,79 @@ describe('Acceso por roles', () => {
 });
 
 /**
- * Tres experiencias, una sola aplicación.
+ * Cuatro contextos, una sola aplicación.
  *
- * Lo que se comprueba aquí es que cada servicio tenga su sitio y su navegación,
- * que lo común siga siendo común, y —lo más importante— que un servicio sin
- * flujo de reserva no ofrezca reservar.
+ * Lo que se comprueba aquí es la jerarquía de la navegación: en qué contexto
+ * estás, qué se puede hacer dentro de él, y que nada aparezca en dos niveles a
+ * la vez. Más lo más importante del catálogo: que un servicio sin flujo de
+ * reserva no ofrezca reservar.
  */
 describe('Experiencias por servicio', () => {
   it('cada servicio tiene su pantalla con su navegación', async () => {
     signedInAs(['CUSTOMER']);
     const limpieza = renderAt('/limpieza');
 
-    // Aparece en la barra de escritorio y en la de móvil: las dos son la misma
-    // lista, pintada donde el pulgar la alcanza.
-    expect((await screen.findAllByRole('link', { name: 'Mi hogar' })).length).toBeGreaterThan(0);
+    // Aparece en la banda de escritorio y en la barra de móvil: las dos son la
+    // misma lista, pintada donde el pulgar la alcanza.
+    expect((await screen.findAllByRole('link', { name: 'Mis espacios' })).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Reservar').length).toBeGreaterThan(0);
     limpieza.unmount();
 
     renderAt('/lavanderia');
     expect((await screen.findAllByRole('link', { name: 'Mis pedidos' })).length).toBeGreaterThan(0);
     // La navegación es la del servicio en el que estás, no una lista común.
-    expect(screen.queryAllByRole('link', { name: 'Mi hogar' })).toHaveLength(0);
+    expect(screen.queryAllByRole('link', { name: 'Mis espacios' })).toHaveLength(0);
   });
 
   it('se puede cambiar de servicio desde cualquier pantalla', async () => {
     signedInAs(['CUSTOMER']);
     renderAt('/limpieza');
 
-    // El conmutador lleva a los tres, estés donde estés.
-    for (const label of ['Limpieza', 'Lavandería', 'Arreglos']) {
+    // El conmutador lleva a los tres servicios y a la cuenta, estés donde estés.
+    for (const label of ['Mi cuenta', 'Limpieza', 'Lavandería', 'Arreglos']) {
       expect((await screen.findAllByRole('link', { name: label })).length).toBeGreaterThan(0);
     }
+  });
+
+  /**
+   * La jerarquía: el servicio en el que estás manda sobre sus opciones, y sus
+   * opciones cuelgan de él. Se mide por lo que la interfaz declara —qué está
+   * marcado como página actual y qué agrupa a qué—, no por clases de CSS.
+   */
+  it('el contexto está por encima de sus opciones, no al lado', async () => {
+    signedInAs(['CUSTOMER']);
+    renderAt('/limpieza/reservar');
+
+    // Uno solo de los cuatro contextos está marcado como el actual, y es Limpieza.
+    const switcher = (await screen.findAllByRole('navigation', { name: 'Servicios' }))[0];
+    const activo = within(switcher).getAllByRole('link', { current: 'page' });
+    expect(activo).toHaveLength(1);
+    expect(activo[0]).toHaveTextContent('Limpieza');
+
+    // Y las opciones de Limpieza van agrupadas bajo su nombre, en su propia
+    // navegación, no en un menú global suelto.
+    const sections = screen.getAllByRole('navigation', { name: 'Secciones de Limpieza' });
+    expect(sections.length).toBeGreaterThan(0);
+    expect(sections[0]).toHaveTextContent('Reservar');
+    // El conmutador y las secciones son dos niveles distintos, no la misma barra.
+    expect(sections[0]).not.toContainElement(switcher);
+  });
+
+  it('lo de la cuenta no se repite dentro de cada servicio', async () => {
+    signedInAs(['CUSTOMER']);
+    const limpieza = renderAt('/limpieza');
+
+    // Direcciones es de la cuenta: sirve para los tres servicios y no aparece
+    // en la navegación de ninguno.
+    const secciones = (await screen.findAllByRole('navigation', { name: 'Secciones de Limpieza' }))[0];
+    expect(secciones.textContent).not.toContain('Direcciones');
+    limpieza.unmount();
+
+    // Pero está a un clic desde cualquier sitio, en el contexto de la cuenta.
+    renderAt('/direcciones');
+    const cuenta = (await screen.findAllByRole('navigation', { name: 'Secciones de Mi cuenta' }))[0];
+    expect(cuenta.textContent).toContain('Direcciones');
+    expect(cuenta.textContent).toContain('Mis servicios');
   });
 
   it('arreglo de prendas se presenta, pero no ofrece reservar', async () => {
@@ -304,7 +346,16 @@ describe('Experiencias por servicio', () => {
     reservar.unmount();
 
     renderAt('/inmuebles');
-    expect((await screen.findAllByText('Mi hogar')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Mis espacios')).length).toBeGreaterThan(0);
+  });
+
+  it('la pantalla del hogar en singular ahora lleva a los espacios', async () => {
+    signedInAs(['CUSTOMER']);
+    renderAt('/limpieza/hogar');
+
+    // Una persona puede tener varias viviendas: el enlace guardado sigue
+    // funcionando, pero llega a la lista.
+    expect((await screen.findAllByText('Mis espacios')).length).toBeGreaterThan(0);
   });
 
   it('el inicio ofrece los tres servicios y solo deja reservar los que existen', async () => {

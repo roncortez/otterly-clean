@@ -1,12 +1,15 @@
-import { ShieldCheck, PawPrint } from 'lucide-react';
-import { Field, Input, Textarea, Select, Checkbox, OptionCard, Divider, Alert } from '@/shared/ui';
+import { ShieldCheck, PawPrint, KeyRound } from 'lucide-react';
+import { Field, Textarea, Checkbox, OptionCard, Divider, Button } from '@/shared/ui';
+import { accessMethodLabel } from '../cleaning/HomeProfileForm';
 
 /**
- * Paso 5: acceso, mascotas e instrucciones.
+ * Lo que hace falta saber de ESTE día.
  *
- * Es el paso más delicado del producto: aquí el cliente entrega la llave de su
- * casa. Se le dice explícitamente qué hacemos con ese dato en lugar de pedirlo
- * sin más.
+ * Cómo se entra, si hay mascotas y qué instrucciones fijas tiene el lugar son
+ * datos del espacio y ya están guardados: aquí se muestran para que la persona
+ * los reconozca, con un atajo para corregirlos donde viven. Lo que sí se
+ * pregunta es lo que cambia de una visita a otra: si estarás en casa, si hoy las
+ * mascotas quedan aparte, qué cuidar esta vez.
  */
 export default function StepInstructions(props) {
   return props.booking.serviceType === 'CLEANING' ? (
@@ -16,28 +19,16 @@ export default function StepInstructions(props) {
   );
 }
 
-const ACCESS_METHODS = [
-  { value: 'CUSTOMER_OPENS', label: 'Yo abro la puerta', needsSecret: false },
-  { value: 'CONCIERGE', label: 'Portería o recepción', needsSecret: false },
-  { value: 'DOOR_CODE', label: 'Código de puerta', needsSecret: true },
-  { value: 'KEY', label: 'Llave escondida', needsSecret: true },
-  { value: 'LOCKBOX', label: 'Caja de seguridad', needsSecret: true },
-  { value: 'OTHER', label: 'Otro', needsSecret: false },
-];
-
-function CleaningInstructions({ booking, update, updateDetail, selectedAddress }) {
+function CleaningInstructions({ booking, update, updateDetail, selectedAddress, goToStep }) {
   const { cleaning } = booking;
-  const method = ACCESS_METHODS.find((entry) => entry.value === cleaning.accessMethod);
-  // El backend nunca devuelve el código guardado, solo si existe. Dejarlo en
-  // blanco reutiliza el que ya está cifrado en la dirección.
-  const savedSecret = Boolean(selectedAddress?.cleaningProfile?.hasAccessSecret);
+  const profile = selectedAddress?.cleaningProfile ?? null;
 
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-text">Acceso y detalles</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">El día del servicio</h2>
         <p className="mt-1 text-text-muted">
-          Esto es lo que le llega al profesional el día del servicio.
+          Esto es lo último: lo que cambia de una visita a otra.
         </p>
       </div>
 
@@ -59,140 +50,61 @@ function CleaningInstructions({ booking, update, updateDetail, selectedAddress }
         </div>
       </div>
 
-      <Field label="¿Cómo entra el profesional?">
-        <Select
-          value={cleaning.accessMethod}
-          onChange={(event) => updateDetail('cleaning', { accessMethod: event.target.value })}
-        >
-          {ACCESS_METHODS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </Field>
-
-      {method?.needsSecret && (
-        <div className="space-y-3">
-          <Alert tone="info" title="Guardamos esto cifrado">
-            Solo lo ve el profesional que confirmó tu servicio, y queda registrado quién lo consultó
-            y cuándo.
-          </Alert>
-          <Field
-            label={cleaning.accessMethod === 'DOOR_CODE' ? 'Código' : 'Dónde está la llave'}
-            required={!savedSecret}
-            hint={
-              savedSecret
-                ? 'Ya tenemos uno guardado para esta dirección: escríbelo solo si cambió.'
-                : undefined
-            }
-          >
-            <Input
-              value={cleaning.accessSecret}
-              onChange={(event) => updateDetail('cleaning', { accessSecret: event.target.value })}
-              placeholder={cleaning.accessMethod === 'DOOR_CODE' ? '4821#' : 'Bajo la maceta…'}
-              autoComplete="off"
-            />
-          </Field>
+      {/* Del espacio, no de esta visita: se recuerda y se corrige donde vive. */}
+      {profile && (
+        <div className="rounded-xl border border-border bg-surface-sunken/60 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1 text-sm">
+              <p className="font-medium text-text">Cómo entra el profesional</p>
+              <p className="text-text-muted">
+                {accessMethodLabel(profile.accessMethod)}
+                {profile.hasAccessSecret && (
+                  <span className="ml-1.5 inline-flex items-center gap-1 text-warning">
+                    <KeyRound className="size-3.5" aria-hidden="true" />
+                    con la clave que guardaste
+                  </span>
+                )}
+              </p>
+              {profile.accessInstructions && (
+                <p className="text-text-subtle">{profile.accessInstructions}</p>
+              )}
+              {profile.hasPets && (
+                <p className="flex items-center gap-1.5 text-text-subtle">
+                  <PawPrint className="size-3.5" aria-hidden="true" />
+                  {profile.pets?.[0]?.type
+                    ? `${profile.pets[0].count} ${profile.pets[0].type}`
+                    : 'Con mascotas'}
+                </p>
+              )}
+            </div>
+            {goToStep && (
+              <Button size="sm" variant="ghost" onClick={() => goToStep('space')}>
+                Cambiar
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
-      <Field label="Instrucciones para llegar y entrar" hint="Piso, timbre, a quién preguntar.">
-        <Textarea
-          value={cleaning.accessInstructions}
-          onChange={(event) => updateDetail('cleaning', { accessInstructions: event.target.value })}
-          placeholder="Edificio Torre Azul, timbre 5B. Preguntar por Andrés en recepción."
-        />
-      </Field>
-
-      <Field label="Estacionamiento" hint="Opcional.">
-        <Input
-          value={cleaning.parkingInstructions}
-          onChange={(event) =>
-            updateDetail('cleaning', { parkingInstructions: event.target.value })
-          }
-          placeholder="Visitas en el subsuelo 1"
-        />
-      </Field>
-
-      <Divider />
-
-      <div className="space-y-4">
-        <p className="flex items-center gap-1.5 text-sm font-medium text-text">
-          <PawPrint className="size-4 text-text-subtle" aria-hidden="true" />
-          Mascotas
-        </p>
-
+      {profile?.hasPets && (
         <Checkbox
-          label="Hay mascotas en casa"
-          description="Así el profesional llega preparado."
-          checked={cleaning.hasPets}
-          onChange={(event) => updateDetail('cleaning', { hasPets: event.target.checked })}
+          label="Hoy estarán en un espacio aparte"
+          description="Solo para esta visita."
+          checked={cleaning.petsSecured === true}
+          onChange={(event) => updateDetail('cleaning', { petsSecured: event.target.checked })}
         />
-
-        {cleaning.hasPets && (
-          <div className="space-y-4 rounded-xl bg-surface-sunken p-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Tipo">
-                <Input
-                  value={cleaning.pets[0]?.type ?? ''}
-                  onChange={(event) =>
-                    updateDetail('cleaning', {
-                      pets: [{ ...(cleaning.pets[0] ?? { count: 1 }), type: event.target.value }],
-                    })
-                  }
-                  placeholder="Perro, gato…"
-                />
-              </Field>
-              <Field label="Cuántas">
-                <Input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={cleaning.pets[0]?.count ?? 1}
-                  onChange={(event) =>
-                    updateDetail('cleaning', {
-                      pets: [
-                        {
-                          ...(cleaning.pets[0] ?? { type: '' }),
-                          count: Number(event.target.value) || 1,
-                        },
-                      ],
-                    })
-                  }
-                />
-              </Field>
-            </div>
-
-            <Checkbox
-              label="Estarán en un espacio aparte durante el servicio"
-              checked={cleaning.petsSecured === true}
-              onChange={(event) => updateDetail('cleaning', { petsSecured: event.target.checked })}
-            />
-
-            <Field label="Algo que debamos saber" hint="Carácter, si no puede salir, dónde estará.">
-              <Input
-                value={cleaning.petInstructions}
-                onChange={(event) =>
-                  updateDetail('cleaning', { petInstructions: event.target.value })
-                }
-                placeholder="Rocky es amistoso pero no debe salir al pasillo."
-              />
-            </Field>
-          </div>
-        )}
-      </div>
+      )}
 
       <Divider />
 
       <Field
-        label="Objetos delicados"
-        hint="Cosas que preferirías que no se muevan o se traten con cuidado."
+        label="Algo delicado que cuidar esta vez"
+        hint="Lo que valga para todas las visitas va en los datos del espacio."
       >
         <Textarea
           value={cleaning.delicateItems}
           onChange={(event) => updateDetail('cleaning', { delicateItems: event.target.value })}
-          placeholder="Los cuadros de la sala y el jarrón del recibidor."
+          placeholder="Acabo de colgar un cuadro en la sala."
         />
       </Field>
 
@@ -200,7 +112,7 @@ function CleaningInstructions({ booking, update, updateDetail, selectedAddress }
         <Textarea
           value={booking.customerNotes}
           onChange={(event) => update({ customerNotes: event.target.value })}
-          placeholder="El timbre no funciona, mejor llamar por teléfono."
+          placeholder="Llego a las 10, mejor después de esa hora."
         />
       </Field>
     </div>

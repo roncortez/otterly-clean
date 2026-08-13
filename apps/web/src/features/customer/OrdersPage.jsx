@@ -54,12 +54,14 @@ export default function OrdersPage({ serviceType = null }) {
   return (
     <div>
       <PageHeader
-        eyebrow={experience?.label}
-        title={serviceType === 'LAUNDRY' ? 'Tus pedidos' : 'Tus reservas'}
+        eyebrow={experience?.label ?? 'Mi cuenta'}
+        title={
+          serviceType === 'LAUNDRY' ? 'Tus pedidos' : serviceType ? 'Tus reservas' : 'Tus servicios'
+        }
         description={
           serviceType
             ? `Todo lo que has pedido de ${experience?.label.toLowerCase()}.`
-            : 'Todo lo que has reservado, en un solo lugar.'
+            : 'Todo lo que has pedido, de los tres servicios, en un solo lugar.'
         }
       />
 

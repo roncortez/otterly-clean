@@ -308,13 +308,13 @@ describe('Reservar solo donde atendemos', () => {
 });
 
 /**
- * Los datos del hogar (lo que antes era un "inmueble") cuelgan de la direccion.
+ * La ficha de limpieza de un espacio (lo que antes era un "inmueble").
  *
- * Lo que se prueba aqui es la promesa de producto: se escriben una vez y la
- * siguiente reserva ya los trae. Y que el codigo de la puerta se comporta como
- * en el resto del sistema: se guarda cifrado y no vuelve a salir nunca.
+ * Lo que se prueba aqui es la promesa de producto: se escribe una vez y la
+ * reserva no la vuelve a pedir. Y que el codigo de la puerta se comporta como en
+ * el resto del sistema: se guarda cifrado y no vuelve a salir nunca.
  */
-describe('Datos del hogar de una direccion', () => {
+describe('Ficha de limpieza de un espacio', () => {
   it('se guardan en la direccion y se leen con ella', async () => {
     const res = await request(app)
       .patch(`/api/customer/addresses/${created.addressId}/cleaning-profile`)
@@ -450,6 +450,273 @@ describe('Datos del hogar de una direccion', () => {
       .set('Authorization', `Bearer ${auth.customer}`);
 
     expect(res.status).toBe(404);
+  });
+});
+
+/**
+ * Varias viviendas, cada una con su nombre y su ficha.
+ *
+ * Es el caso que el modelo tiene que soportar de verdad: alguien con su
+ * departamento, la casa de sus padres y una oficina reserva en el que toca sin
+ * que los datos de uno se mezclen con los del otro ni haya que reescribirlos.
+ */
+describe('Varios espacios de un mismo cliente', () => {
+  const espacios = {};
+
+  async function bookCleaning(addressId, extra = {}, days = 3) {
+    const plans = await request(app).get('/api/catalog/services/cleaning/plans');
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+
+    return request(app)
+      .post('/api/customer/orders/cleaning')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: plans.body.plans[0].id,
+        addressId,
+        scheduledDate: date.toISOString().slice(0, 10),
+        windowCode: 'MORNING',
+        pricingInput: { durationMinutes: 180 },
+        ...extra,
+      });
+  }
+
+  beforeAll(async () => {
+    // Dos lugares distintos del mismo cliente, con nombre propio cada uno.
+    const departamento = await createAddress(auth.customer, { label: 'Mi departamento' });
+    const valle = await createAddress(auth.customer, {
+      label: 'Casa del Valle',
+      streetLine1: 'Calle Los Arupos',
+      neighborhood: 'Conocoto',
+    });
+
+    espacios.departamento = departamento.body.address.id;
+    espacios.valle = valle.body.address.id;
+
+    await request(app)
+      .patch(`/api/customer/addresses/${espacios.departamento}/cleaning-profile`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({ propertyType: 'APARTMENT', bedrooms: 1, bathrooms: 1 });
+
+    await request(app)
+      .patch(`/api/customer/addresses/${espacios.valle}/cleaning-profile`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        propertyType: 'HOUSE',
+        bedrooms: 3,
+        bathrooms: 2,
+        hasPets: true,
+        pets: [{ type: 'perro', count: 1 }],
+        notes: 'El timbre no funciona, llamar al llegar',
+      });
+  }, 30000);
+
+  it('cada espacio conserva su nombre y su ficha, sin mezclarse', async () => {
+    const list = await request(app)
+      .get('/api/customer/addresses')
+      .set('Authorization', `Bearer ${auth.customer}`);
+
+    const byId = new Map(list.body.addresses.map((a) => [a.id, a]));
+    const departamento = byId.get(espacios.departamento);
+    const valle = byId.get(espacios.valle);
+
+    expect(departamento.label).toBe('Mi departamento');
+    expect(valle.label).toBe('Casa del Valle');
+    expect(departamento.cleaningProfile.bedrooms).toBe(1);
+    expect(valle.cleaningProfile.bedrooms).toBe(3);
+    expect(departamento.cleaningProfile.hasPets).toBe(false);
+    expect(valle.cleaningProfile.pets).toEqual([{ type: 'perro', count: 1 }]);
+    // Las dos fichas estan completas: se puede reservar sin preguntar nada mas.
+    expect(departamento.cleaningProfile.complete).toBe(true);
+    expect(valle.cleaningProfile.complete).toBe(true);
+  });
+
+  it('el nombre de un espacio se puede cambiar despues', async () => {
+    const res = await request(app)
+      .patch(`/api/customer/addresses/${espacios.valle}`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({ label: 'Casa de mis padres' });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.address.label).toBe('Casa de mis padres');
+    // Cambiar el nombre no toca la ficha ni la ubicacion.
+    expect(res.body.address.street_line1).toBe('Calle Los Arupos');
+
+    const profile = await db.one(
+      'SELECT bedrooms FROM address_cleaning_profiles WHERE address_id = $1',
+      [espacios.valle],
+    );
+    expect(profile.bedrooms).toBe(3);
+  });
+
+  /** El corazon del cambio: reservar no vuelve a preguntar lo del lugar. */
+  it('reservar sin repetir nada de la vivienda usa la ficha del espacio elegido', async () => {
+    const res = await bookCleaning(espacios.valle, {
+      // Solo lo de esta visita.
+      cleaning: { cleaningType: 'DEEP', priorityAreas: ['Cocina'], customerPresent: false },
+    });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    const detail = await db.one(
+      `SELECT bedrooms, bathrooms, property_type, has_pets, pets, special_instructions,
+              cleaning_type, priority_areas, customer_present
+         FROM cleaning_details WHERE order_id = $1`,
+      [res.body.order.id],
+    );
+
+    // Lo del lugar salio de la ficha, no de la peticion.
+    expect(detail.bedrooms).toBe(3);
+    expect(detail.bathrooms).toBe(2);
+    expect(detail.property_type).toBe('HOUSE');
+    expect(detail.has_pets).toBe(true);
+    expect(detail.pets).toEqual([{ type: 'perro', count: 1 }]);
+    expect(detail.special_instructions).toContain('El timbre no funciona');
+    // Y lo de la visita, de la peticion.
+    expect(detail.cleaning_type).toBe('DEEP');
+    expect(detail.priority_areas).toEqual(['Cocina']);
+    expect(detail.customer_present).toBe(false);
+  });
+
+  it('reservar en el otro espacio trae los datos del otro espacio', async () => {
+    const res = await bookCleaning(espacios.departamento, { cleaning: {} }, 4);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    const detail = await db.one(
+      'SELECT bedrooms, bathrooms, property_type FROM cleaning_details WHERE order_id = $1',
+      [res.body.order.id],
+    );
+    expect(detail.bedrooms).toBe(1);
+    expect(detail.bathrooms).toBe(1);
+    expect(detail.property_type).toBe('APARTMENT');
+  });
+
+  it('se puede reservar sin enviar bloque de limpieza: el espacio ya lo dice todo', async () => {
+    const res = await bookCleaning(espacios.valle, {}, 5);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    const detail = await db.one(
+      'SELECT bedrooms, bathrooms, cleaning_type FROM cleaning_details WHERE order_id = $1',
+      [res.body.order.id],
+    );
+    expect(detail.bedrooms).toBe(3);
+    expect(detail.bathrooms).toBe(2);
+    // Y lo de la visita cae en su valor por defecto.
+    expect(detail.cleaning_type).toBe('STANDARD');
+  });
+
+  it('una reserva que no menciona las mascotas no las borra del espacio', async () => {
+    await bookCleaning(espacios.valle, { cleaning: { cleaningType: 'STANDARD' } }, 6);
+
+    const profile = await db.one(
+      'SELECT has_pets, pets, notes FROM address_cleaning_profiles WHERE address_id = $1',
+      [espacios.valle],
+    );
+    expect(profile.has_pets).toBe(true);
+    expect(profile.pets).toEqual([{ type: 'perro', count: 1 }]);
+    expect(profile.notes).toContain('El timbre no funciona');
+  });
+
+  it('corregir el espacio despues no reescribe lo que ya se acordo', async () => {
+    const order = await bookCleaning(espacios.departamento, { cleaning: {} }, 7);
+    expect(order.status, JSON.stringify(order.body)).toBe(201);
+
+    // El cliente amplia: ahora son dos banos.
+    await request(app)
+      .patch(`/api/customer/addresses/${espacios.departamento}/cleaning-profile`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({ bathrooms: 2 });
+
+    const detail = await db.one(
+      'SELECT bathrooms FROM cleaning_details WHERE order_id = $1',
+      [order.body.order.id],
+    );
+    // La orden conserva la foto del dia que se pidio.
+    expect(detail.bathrooms).toBe(1);
+
+    // Y la proxima reserva si sale con el dato nuevo.
+    const siguiente = await bookCleaning(espacios.departamento, {}, 8);
+    const nuevo = await db.one('SELECT bathrooms FROM cleaning_details WHERE order_id = $1', [
+      siguiente.body.order.id,
+    ]);
+    expect(nuevo.bathrooms).toBe(2);
+  });
+
+  it('lo que la reserva si corrige queda guardado para la proxima', async () => {
+    await bookCleaning(espacios.departamento, { cleaning: { bedrooms: 2 } }, 9);
+
+    const profile = await db.one(
+      'SELECT bedrooms, bathrooms FROM address_cleaning_profiles WHERE address_id = $1',
+      [espacios.departamento],
+    );
+    expect(profile.bedrooms).toBe(2);
+    // Y no arrastro nada mas: los banos siguen como estaban.
+    expect(profile.bathrooms).toBe(2);
+  });
+});
+
+/**
+ * Lavanderia sigue siendo lavanderia.
+ *
+ * El modelo del espacio es de limpieza y no puede contaminar al resto: recoger
+ * ropa necesita una direccion y nada mas.
+ */
+describe('Lavanderia usa solo la direccion', () => {
+  it('un pedido de lavanderia no necesita ni crea ficha de limpieza', async () => {
+    const direccion = await createAddress(auth.customer, { label: 'Solo para lavanderia' });
+    const addressId = direccion.body.address.id;
+
+    const plans = await request(app).get('/api/catalog/services/LAUNDRY/plans');
+    const date = new Date();
+    date.setDate(date.getDate() + 3);
+
+    const res = await request(app)
+      .post('/api/customer/orders/laundry')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: plans.body.plans[0].id,
+        addressId,
+        scheduledDate: date.toISOString().slice(0, 10),
+        windowCode: 'MORNING',
+        pricingInput: { estimatedWeight: 6 },
+        laundry: { estimatedBags: 2, estimatedWeight: 6 },
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    // Ni una fila: pedir lavanderia no describe la vivienda de nadie.
+    const profile = await db.oneOrNone(
+      'SELECT address_id FROM address_cleaning_profiles WHERE address_id = $1',
+      [addressId],
+    );
+    expect(profile).toBeNull();
+  });
+
+  it('el detalle de lavanderia no admite datos de la vivienda', async () => {
+    const plans = await request(app).get('/api/catalog/services/LAUNDRY/plans');
+    const date = new Date();
+    date.setDate(date.getDate() + 3);
+
+    const res = await request(app)
+      .post('/api/customer/orders/laundry')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: plans.body.plans[0].id,
+        addressId: created.addressId,
+        scheduledDate: date.toISOString().slice(0, 10),
+        windowCode: 'MORNING',
+        pricingInput: { estimatedWeight: 6 },
+        laundry: { estimatedBags: 1, bedrooms: 3, bathrooms: 2 },
+      });
+
+    // El esquema de lavanderia no tiene esos campos y no los acepta en silencio.
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const detail = await db.one(
+      'SELECT * FROM laundry_details WHERE order_id = $1',
+      [res.body.order.id],
+    );
+    expect(detail.bedrooms).toBeUndefined();
+    expect(detail.bathrooms).toBeUndefined();
   });
 });
 

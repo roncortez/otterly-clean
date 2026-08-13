@@ -132,46 +132,66 @@ const petSchema = z.object({
   behavior: z.string().trim().max(200).optional(),
 });
 
+/**
+ * Detalle de limpieza de una reserva.
+ *
+ * Dos mitades con reglas distintas, y la frontera la define el dominio
+ * (`domain/cleaning/homeProfile.js`), no este archivo:
+ *
+ *   * **Lo de la visita** (tipo de limpieza, areas prioritarias, si estaras en
+ *     casa) se pregunta cada vez y por eso conserva sus valores por defecto.
+ *   * **Lo del espacio** (habitaciones, banos, acceso, mascotas) es opcional
+ *     *a proposito*: si el cliente ya lo dijo, la reserva no lo repite y el
+ *     backend lo toma de la ficha del espacio. Un `default(0)` aqui volveria a
+ *     escribir "cero habitaciones" en cada reserva que no lo mencione, que es
+ *     exactamente el fallo que se viene a arreglar.
+ *
+ * Enviarlos sigue siendo valido: lo que llega manda sobre lo guardado, y ademas
+ * actualiza la ficha para la proxima vez.
+ */
 const cleaningDetailSchema = z.object({
+  // --- De esta visita -----------------------------------------------------
   cleaningType: z.enum(['STANDARD', 'DEEP', 'MOVE_IN_OUT', 'POST_CONSTRUCTION']).default('STANDARD'),
-  propertyType: z.enum(['HOUSE', 'APARTMENT', 'SUITE', 'OFFICE']).default('APARTMENT'),
-  bedrooms: z.number().int().min(0).max(20).default(0),
-  bathrooms: z.number().int().min(0).max(20).default(0),
-  areaValue: z.number().positive().max(100000).optional().nullable(),
-  areaUnit: z.enum(['m2', 'sqft']).optional().nullable(),
   sizeTier: z.string().trim().max(40).optional().nullable(),
   priorityAreas: z.array(z.string().trim().max(60)).max(20).default([]),
-
   suppliesProvidedBy: z.enum(['COMPANY', 'CUSTOMER']).default('COMPANY'),
   productPreferences: z.array(z.string().trim().max(60)).max(20).default([]),
   fragrancePreference: z.string().trim().max(60).optional().nullable(),
-
   customerPresent: z.boolean().default(true),
+  // Si las mascotas estaran encerradas ESE dia; que existan es del espacio.
+  petsSecured: z.boolean().optional().nullable(),
+  delicateItems: z.string().trim().max(1000).optional().nullable(),
+
+  // --- Del espacio: se heredan de su ficha si no vienen --------------------
+  propertyType: z.enum(['HOUSE', 'APARTMENT', 'SUITE', 'OFFICE']).optional(),
+  bedrooms: z.number().int().min(0).max(20).optional(),
+  bathrooms: z.number().int().min(0).max(20).optional(),
+  areaValue: z.number().positive().max(100000).optional().nullable(),
+  areaUnit: z.enum(['m2', 'sqft']).optional().nullable(),
   accessMethod: z
     .enum(['CUSTOMER_OPENS', 'KEY', 'DOOR_CODE', 'CONCIERGE', 'LOCKBOX', 'OTHER'])
-    .default('CUSTOMER_OPENS'),
+    .optional(),
   accessInstructions: z.string().trim().max(1000).optional().nullable(),
   // Se cifra antes de guardarse. Ver services/crypto.js
   accessSecret: z.string().trim().max(500).optional().nullable(),
   parkingInstructions: z.string().trim().max(500).optional().nullable(),
-
-  hasPets: z.boolean().default(false),
-  pets: z.array(petSchema).max(10).default([]),
-  petsSecured: z.boolean().optional().nullable(),
+  hasPets: z.boolean().optional(),
+  pets: z.array(petSchema).max(10).optional(),
   petInstructions: z.string().trim().max(1000).optional().nullable(),
-
-  delicateItems: z.string().trim().max(1000).optional().nullable(),
+  // Instrucciones fijas del lugar. En la ficha del espacio se llama `notes`.
   specialInstructions: z.string().trim().max(2000).optional().nullable(),
 });
 
 /**
- * Datos del hogar de una direccion: lo que antes se registraba como "inmueble".
+ * Ficha de limpieza de un espacio: lo que antes se registraba como "inmueble".
  *
- * Es el subconjunto duradero del detalle de limpieza —lo que describe la casa,
- * no la visita— y por eso repite sus enums en lugar de inventar otros.
+ * Es exactamente el subconjunto duradero del detalle de limpieza —lo que
+ * describe el lugar, no la visita— y por eso repite sus enums en lugar de
+ * inventar otros. La correspondencia entre los dos la declara
+ * `domain/cleaning/homeProfile.js`.
  *
  * Todo es opcional porque la ficha se completa a trozos: parte la escribe el
- * asistente de reserva y parte la pantalla de "Mi hogar", y enviar solo lo que
+ * asistente de reserva y parte la pantalla "Mis espacios", y enviar solo lo que
  * cambia no puede borrar el resto. `accessSecret` distingue "no lo menciono"
  * (ausente) de "quitalo" (cadena vacia).
  */
@@ -251,7 +271,9 @@ const createOrderBase = {
 
 const createCleaningOrderSchema = z.object({
   ...createOrderBase,
-  cleaning: cleaningDetailSchema,
+  // Reservar en un espacio ya descrito no necesita bloque de detalle: los datos
+  // del lugar salen de su ficha y el resto tiene valores por defecto.
+  cleaning: cleaningDetailSchema.default({}),
 });
 
 const createLaundryOrderSchema = z.object({

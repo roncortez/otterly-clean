@@ -11,49 +11,45 @@ import StepService from './StepService';
 import StepConfigure from './StepConfigure';
 import StepSchedule from './StepSchedule';
 import StepAddress from './StepAddress';
+import StepSpace from './StepSpace';
 import StepInstructions from './StepInstructions';
 import StepSummary from './StepSummary';
 
 /**
  * Asistente de reserva.
  *
- * Se pide una cosa por pantalla en lugar de un formulario largo: la reserva de
- * limpieza necesita más de veinte datos y presentarlos juntos hace abandonar.
+ * Se pide una cosa por pantalla en lugar de un formulario largo, y sobre todo:
+ * **solo se pide lo que cambia**. Los datos del lugar —habitaciones, baños, cómo
+ * se entra, mascotas— pertenecen al espacio y ya están guardados; aquí se elige
+ * cuál es y el backend los toma de su ficha. Lo que este asistente pregunta es
+ * de esta visita: qué tipo, cuánto tiempo, qué día, qué priorizar.
+ *
  * El paso de resumen muestra el precio calculado por el backend antes de
  * confirmar, para que nadie reserve sin saber cuánto va a pagar.
  *
- * El mismo asistente sirve a los dos servicios que tienen flujo. Cuando se
- * abre desde la experiencia de un servicio (`serviceType`), ese servicio viene
- * dado y el primer paso solo elige el tipo dentro de él.
- *
- * La dirección se pregunta pronto, antes que los detalles, porque de ella
- * cuelga lo que ya sabemos de esa casa: preguntándola primero, el paso de
- * detalles llega relleno en lugar de vacío.
+ * El mismo asistente sirve a los dos servicios que tienen flujo. Cuando se abre
+ * desde la experiencia de un servicio (`serviceType`), ese servicio viene dado y
+ * el primer paso solo elige el tipo dentro de él. Limpieza pregunta por un
+ * espacio y lavandería solo por una dirección, porque lavandería no entra en la
+ * casa.
  */
 
 /** Tipos que el asistente sabe configurar. Los define el dominio, no la UI. */
 const KNOWN_SERVICE_TYPES = ['CLEANING', 'LAUNDRY'];
 
+/**
+ * Lo que se pregunta en cada reserva de limpieza. Nada de esto describe el
+ * lugar: eso vive en la ficha del espacio (ver `cleaning/HomeProfileForm`) y el
+ * backend lo hereda de ahí (`domain/cleaning/homeProfile.js`).
+ */
 const INITIAL_CLEANING = {
   cleaningType: 'STANDARD',
-  propertyType: 'APARTMENT',
-  bedrooms: 2,
-  bathrooms: 1,
-  areaValue: '',
   priorityAreas: [],
   suppliesProvidedBy: 'COMPANY',
   fragrancePreference: '',
   customerPresent: true,
-  accessMethod: 'CUSTOMER_OPENS',
-  accessInstructions: '',
-  accessSecret: '',
-  parkingInstructions: '',
-  hasPets: false,
-  pets: [],
   petsSecured: null,
-  petInstructions: '',
   delicateItems: '',
-  specialInstructions: '',
 };
 
 const INITIAL_LAUNDRY = {
@@ -73,33 +69,6 @@ const INITIAL_LAUNDRY = {
   pickupInstructions: '',
   specialInstructions: '',
 };
-
-/**
- * Lo que ya sabemos de esa casa, traducido al formulario.
- *
- * Es la mitad del trabajo que hace desaparecer el formulario duplicado: los
- * datos que el cliente escribió la última vez llegan puestos, y solo tiene que
- * corregir lo que cambió. El código de la puerta no viaja de vuelta —el backend
- * nunca lo devuelve—, así que se deja en blanco: si no escribe otro, se
- * reutiliza el guardado.
- */
-function homeDefaults(address) {
-  const profile = address?.cleaningProfile;
-  if (!profile) return {};
-
-  return {
-    propertyType: profile.propertyType ?? INITIAL_CLEANING.propertyType,
-    bedrooms: profile.bedrooms ?? INITIAL_CLEANING.bedrooms,
-    bathrooms: profile.bathrooms ?? INITIAL_CLEANING.bathrooms,
-    areaValue: profile.areaValue ?? '',
-    accessMethod: profile.accessMethod ?? INITIAL_CLEANING.accessMethod,
-    accessInstructions: profile.accessInstructions ?? '',
-    parkingInstructions: profile.parkingInstructions ?? '',
-    hasPets: profile.hasPets ?? false,
-    pets: profile.pets ?? [],
-    petInstructions: profile.petInstructions ?? '',
-  };
-}
 
 export default function BookingWizard({ serviceType: fixedServiceType = null }) {
   const navigate = useNavigate();
@@ -143,18 +112,6 @@ export default function BookingWizard({ serviceType: fixedServiceType = null }) 
     laundry: {},
   }));
 
-  const steps = useMemo(
-    () => [
-      { id: 'service', label: fixedServiceType ? 'Tipo' : 'Servicio' },
-      { id: 'address', label: 'Dirección' },
-      { id: 'configure', label: 'Detalles' },
-      { id: 'schedule', label: 'Fecha' },
-      { id: 'instructions', label: 'Instrucciones' },
-      { id: 'summary', label: 'Resumen' },
-    ],
-    [fixedServiceType],
-  );
-
   const update = (patch) => setBooking((current) => ({ ...current, ...patch }));
   const updateDetail = (key, patch) =>
     setBooking((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
@@ -165,6 +122,34 @@ export default function BookingWizard({ serviceType: fixedServiceType = null }) 
     if (!catalog?.length) return undefined;
     return catalog.find((entry) => entry.code === booking.serviceType) ?? catalog[0];
   }, [catalog, booking.serviceType]);
+
+  // El servicio que realmente se va a reservar, no el que se pidió: los pasos
+  // salen de este, así que un servicio desactivado no deja el asistente
+  // preguntando por cosas de otro.
+  const isCleaning = (service?.code ?? booking.serviceType) === 'CLEANING';
+
+  /**
+   * El lugar se pregunta antes que los detalles y no después: de él cuelga todo
+   * lo que ya sabemos, así que elegirlo primero es lo que permite no volver a
+   * preguntarlo. Limpieza elige un espacio (dirección + su ficha); lavandería,
+   * solo la dirección donde recoge.
+   */
+  const steps = useMemo(
+    () => [
+      { id: 'service', label: fixedServiceType ? 'Tipo' : 'Servicio' },
+      isCleaning ? { id: 'space', label: 'Espacio' } : { id: 'address', label: 'Dirección' },
+      { id: 'configure', label: 'Detalles' },
+      { id: 'schedule', label: 'Fecha' },
+      { id: 'instructions', label: 'El día' },
+      { id: 'summary', label: 'Resumen' },
+    ],
+    [fixedServiceType, isCleaning],
+  );
+
+  const goToStep = (id) => {
+    const index = steps.findIndex((step) => step.id === id);
+    if (index >= 0) setStepIndex(index);
+  };
 
   /**
    * Los valores por defecto se derivan durante el render en lugar de
@@ -190,8 +175,8 @@ export default function BookingWizard({ serviceType: fixedServiceType = null }) 
     return addresses.find((address) => address.is_default) ?? addresses[0] ?? null;
   }, [booking.addressId, addresses]);
 
-  // Estado efectivo: lo que el usuario eligió, ya resuelto con los defectos y
-  // con lo que ya sabíamos de su casa.
+  // Estado efectivo: lo que el usuario eligió, ya resuelto con los defectos.
+  // Los datos del espacio no se copian aquí a propósito: no son de la reserva.
   const effective = useMemo(
     () => ({
       ...booking,
@@ -199,7 +184,7 @@ export default function BookingWizard({ serviceType: fixedServiceType = null }) 
       planId: selectedPlanId,
       windowCode: selectedWindowCode,
       addressId: selectedAddress?.id ?? null,
-      cleaning: { ...INITIAL_CLEANING, ...homeDefaults(selectedAddress), ...booking.cleaning },
+      cleaning: { ...INITIAL_CLEANING, ...booking.cleaning },
       laundry: { ...INITIAL_LAUNDRY, ...booking.laundry },
     }),
     [booking, service, selectedPlanId, selectedWindowCode, selectedAddress],
@@ -257,10 +242,14 @@ export default function BookingWizard({ serviceType: fixedServiceType = null }) 
         return Boolean(effective.scheduledDate && effective.windowCode);
       case 'address':
         return Boolean(effective.addressId);
+      case 'space':
+        // No basta con elegir el lugar: hay que saber qué se limpia ahí. Es lo
+        // único que el asistente exige del espacio, y se completa en el paso.
+        return Boolean(selectedAddress?.cleaningProfile?.complete);
       default:
         return true;
     }
-  }, [currentStep.id, effective]);
+  }, [currentStep.id, effective, selectedAddress]);
 
   async function handleSubmit() {
     const payload = {
@@ -275,16 +264,18 @@ export default function BookingWizard({ serviceType: fixedServiceType = null }) 
 
     const request = () => {
       if (effective.serviceType === 'CLEANING') {
-        const { areaValue, pets, petsSecured, ...rest } = effective.cleaning;
+        /**
+         * Solo lo de esta visita. Lo del lugar —habitaciones, baños, acceso,
+         * mascotas— no viaja: el backend lo toma de la ficha del espacio, que es
+         * donde vive. Reenviarlo desde aquí era lo que obligaba a preguntarlo
+         * otra vez para tener algo que enviar.
+         */
+        const { petsSecured, ...visit } = effective.cleaning;
+        const hasPets = Boolean(selectedAddress?.cleaningProfile?.hasPets);
+
         return api.post('/customer/orders/cleaning', {
           ...payload,
-          cleaning: {
-            ...rest,
-            areaValue: areaValue === '' || areaValue === null ? null : Number(areaValue),
-            areaUnit,
-            pets: rest.hasPets ? pets : [],
-            petsSecured: rest.hasPets ? petsSecured : null,
-          },
+          cleaning: { ...visit, petsSecured: hasPets ? petsSecured : null },
         });
       }
       return api.post('/customer/orders/laundry', {
@@ -300,28 +291,21 @@ export default function BookingWizard({ serviceType: fixedServiceType = null }) 
 
   if (loading) return <Spinner label="Preparando tu reserva" />;
 
-  if (addresses.length === 0) {
-    return (
-      <Card className="p-8 text-center">
-        <h1 className="text-xl font-bold tracking-tight text-text">Primero, ¿a dónde vamos?</h1>
-        <p className="mx-auto mt-2 max-w-md text-text-muted">
-          Necesitamos una dirección para poder asignar un profesional de tu zona.
-        </p>
-        <ButtonLink as={Link} to="/direcciones" variant="accent" className="mt-6">
-          Agregar mi dirección
-        </ButtonLink>
-      </Card>
-    );
-  }
-
+  /**
+   * Sin direcciones no hay pantalla de "vuelve cuando tengas una": el propio
+   * paso del lugar la da de alta aquí mismo. Salir del asistente para volver a
+   * entrar era fricción que no aportaba nada.
+   */
   const stepProps = {
     booking: effective,
     update,
     updateDetail,
+    goToStep,
     service,
     catalog,
     addresses,
     selectedAddress,
+    reloadAddresses: addressQuery.reload,
     money,
     weightUnit,
     areaUnit,
@@ -367,6 +351,7 @@ export default function BookingWizard({ serviceType: fixedServiceType = null }) 
 
       <Card className="p-5 sm:p-7">
         {currentStep.id === 'service' && <StepService {...stepProps} />}
+        {currentStep.id === 'space' && <StepSpace {...stepProps} />}
         {currentStep.id === 'address' && <StepAddress {...stepProps} />}
         {currentStep.id === 'configure' && <StepConfigure {...stepProps} />}
         {currentStep.id === 'schedule' && <StepSchedule {...stepProps} />}

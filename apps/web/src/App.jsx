@@ -17,7 +17,7 @@ import BookingWizard from '@/features/customer/booking/BookingWizard';
 import CustomerOrderDetail from '@/features/customer/OrderDetailPage';
 import CustomerOrders from '@/features/customer/OrdersPage';
 import AddressesPage from '@/features/customer/AddressesPage';
-import HomeProfilePage from '@/features/customer/cleaning/HomeProfilePage';
+import SpacesPage from '@/features/customer/cleaning/SpacesPage';
 
 import OperationsLayout from '@/features/operations/OperationsLayout';
 import OperationsDashboard from '@/features/operations/DashboardPage';
@@ -150,7 +150,7 @@ function AppRoutes({ location }) {
         <Route path="/limpieza" element={<ServiceOverviewPage serviceType="CLEANING" />} />
         <Route path="/limpieza/reservar" element={<BookingWizard serviceType="CLEANING" />} />
         <Route path="/limpieza/reservas" element={<CustomerOrders serviceType="CLEANING" />} />
-        <Route path="/limpieza/hogar" element={<HomeProfilePage />} />
+        <Route path="/limpieza/espacios" element={<SpacesPage />} />
 
         {/* Lavandería */}
         <Route path="/lavanderia" element={<ServiceOverviewPage serviceType="LAUNDRY" />} />
@@ -176,7 +176,8 @@ function AppRoutes({ location }) {
           Enlaces guardados, correos ya enviados y la portada no se rompen.
         */}
         <Route path="/reservar" element={<BookingRedirect />} />
-        <Route path="/inmuebles" element={<Navigate to="/limpieza/hogar" replace />} />
+        <Route path="/inmuebles" element={<Navigate to="/limpieza/espacios" replace />} />
+        <Route path="/limpieza/hogar" element={<Navigate to="/limpieza/espacios" replace />} />
       </Route>
 
       {/* Operaciones */}
