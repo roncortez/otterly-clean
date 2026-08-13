@@ -63,7 +63,11 @@ async function run() {
   const pending = files.filter((file) => !applied.has(file));
 
   if (pending.length === 0) {
-    console.log(`Base de datos al dia (${applied.size} migracion(es) aplicadas).`);
+    // Se cuentan los ARCHIVOS, no las filas de schema_migrations: esa tabla
+    // puede conservar nombres de migraciones que se renumeraron (paso por el
+    // que la integracion movio las de `feat/maplibre-geoapify` a 010 y 011), y
+    // decir "17 aplicadas" cuando hay 15 archivos confunde mas que ayuda.
+    console.log(`Base de datos al dia (${files.length} migracion(es)).`);
     return;
   }
 
