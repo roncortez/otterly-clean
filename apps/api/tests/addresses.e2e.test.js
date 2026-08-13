@@ -131,12 +131,18 @@ describe('Cobertura (dominio, sin base de datos)', () => {
 
 describe('Guardar la ubicacion', () => {
   it('guarda coordenadas junto al texto y resuelve la zona sola', async () => {
-    const res = await createAddress(auth.customer, { googlePlaceId: 'ChIJ_ejemplo_quito' });
+    const res = await createAddress(auth.customer, {
+      providerPlaceId: '51a0f1e1e2ejemplo',
+      geocodingProvider: 'geoapify',
+    });
 
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(Number(res.body.address.latitude)).toBeCloseTo(QUITO_CENTRO_NORTE.latitude, 4);
     expect(Number(res.body.address.longitude)).toBeCloseTo(QUITO_CENTRO_NORTE.longitude, 4);
-    expect(res.body.address.google_place_id).toBe('ChIJ_ejemplo_quito');
+    // El identificador se guarda con la marca de quien lo emitio: el de un
+    // proveedor no significa nada en otro.
+    expect(res.body.address.provider_place_id).toBe('51a0f1e1e2ejemplo');
+    expect(res.body.address.geocoding_provider).toBe('GEOAPIFY');
     // El texto que escribio el cliente se respeta tal cual.
     expect(res.body.address.street_line2).toContain('Los Jardines');
     expect(res.body.address.reference).toContain('portón verde');
@@ -302,15 +308,19 @@ describe('Reservar solo donde atendemos', () => {
 });
 
 describe('Sin proveedor de mapas', () => {
-  it('una direccion guardada sigue intacta y editable sin datos de Google', async () => {
-    // Simula lo que queda si Google no responde: sin place_id y sin punto.
+  it('una direccion guardada sigue intacta y editable sin datos del proveedor', async () => {
+    // Simula lo que queda si el geocodificador no responde: sin referencia del
+    // lugar. La direccion tiene que seguir siendo utilizable igualmente.
     const res = await request(app)
       .patch(`/api/customer/addresses/${created.addressId}`)
       .set('Authorization', `Bearer ${auth.customer}`)
-      .send({ googlePlaceId: null, streetLine1: 'Av. Ilaló y Los Cipreses' });
+      .send({ providerPlaceId: null, streetLine1: 'Av. Ilaló y Los Cipreses' });
 
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.address.google_place_id).toBeNull();
+    expect(res.body.address.provider_place_id).toBeNull();
+    // Y el proveedor se va con el identificador: sin id que atribuir, la marca
+    // de quien lo emitio seria una atribucion falsa.
+    expect(res.body.address.geocoding_provider).toBeNull();
     // Lo importante: la direccion sigue completa y con su punto.
     expect(res.body.address.street_line1).toBe('Av. Ilaló y Los Cipreses');
     expect(res.body.address.latitude).not.toBeNull();

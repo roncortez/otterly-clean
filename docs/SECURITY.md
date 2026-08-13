@@ -282,32 +282,45 @@ Solo `ADMIN`, y solo para imágenes que ya son públicas. Los controles:
 Las credenciales de Cloudinary son **configuración técnica**: viven en variables
 de entorno y no se pueden ver ni editar desde ninguna pantalla.
 
-### La clave de Google Maps
+### La clave del mapa
 
-`VITE_GOOGLE_MAPS_API_KEY` la usa el navegador, así que **no es un secreto**:
-viaja en cada petición del mapa y cualquiera puede leerla. Tratarla como si lo
-fuera —esconderla tras el backend— no protegería nada y rompería el mapa.
+`VITE_GEOAPIFY_API_KEY` la usa el navegador —el mapa de MapLibre pide sus teselas
+y el buscador consulta Geoapify desde el cliente—, así que **no es un secreto**:
+viaja en cada petición y cualquiera puede leerla. Tratarla como si lo fuera
+—esconderla tras el backend— no protegería nada, añadiría un proxy que mantener
+y rompería el mapa.
 
-Lo que sí la protege son sus restricciones, y hay que configurarlas en la consola
-de Google antes de publicar:
+Lo que sí la protege son sus restricciones, y hay que configurarlas en el panel
+de Geoapify antes de publicar:
 
-- **Restricción de aplicación**: referrers HTTP, solo los dominios de la
-  aplicación.
-- **Restricción de API**: Maps JavaScript API, Places API (New) y Geocoding API.
-  Nada más.
+- **Allowed origins/referrers**: solo los dominios de la aplicación. Es lo que
+  impide que la clave se use desde otro sitio y agote la cuota.
+- **Una clave por entorno**: desarrollo y producción separadas, para poder
+  revocar una sin apagar la otra.
+- **Alertas de consumo** en el plan gratuito: un pico anómalo es la señal de que
+  la clave se está usando fuera de la aplicación.
 
-Aun así no se escribe en el código: llega por variable de entorno, como el resto.
-Si falta, la pantalla de direcciones sigue funcionando escribiendo a mano.
+Aun así no se escribe en el código: llega por variable de entorno, como el resto,
+y está encapsulada en `shared/maps/config.js`. Si falta, la pantalla de
+direcciones sigue funcionando escribiendo a mano.
 
-Las claves que sí son secretas (Cloudinary, JWT, cifrado) siguen viviendo solo en
-el backend.
+Ninguna credencial del backend viaja en variables `VITE_*`: todo lo que empieza
+por `VITE_` acaba dentro del paquete que se descarga el navegador. Las claves que
+sí son secretas (Cloudinary, JWT, cifrado) siguen viviendo solo en el backend.
+
+El consumo también se cuida por diseño, porque la cuota es finita: el buscador
+espera a que la escritura se detenga, ignora textos de menos de tres caracteres,
+cancela la petición anterior al escribir otra y **no geocodifica durante el
+arrastre del pin**, solo al soltarlo.
 
 ### Ubicación de las direcciones
 
-La coordenada que elige el cliente es un dato del negocio, no de Google: se
-guarda en `addresses.latitude/longitude` junto al texto que él escribe.
-`google_place_id` se conserva como referencia, pero **la dirección tiene que
-seguir siendo utilizable sin Google**, y las pruebas lo comprueban.
+La coordenada que elige el cliente es un dato del negocio, no del proveedor de
+mapas: se guarda en `addresses.latitude/longitude` junto al texto que él escribe.
+`provider_place_id` y `geocoding_provider` se conservan como referencia, pero
+**la dirección tiene que seguir siendo utilizable sin el proveedor**, y las
+pruebas lo comprueban. Mostrar una dirección ya guardada no llama a nadie de
+fuera.
 
 Que una ubicación sea válida no significa que se atienda. La comprobación contra
 las zonas activas ocurre **en el backend**, tanto al guardar la dirección como al

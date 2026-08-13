@@ -75,18 +75,22 @@ degradan a un campo de URL. Las fotos de perfil usan la misma configuración.
 
 ### Mapa para elegir la dirección (opcional)
 
-El cliente marca en un mapa dónde está su casa y corrige después la dirección
-escrita. Para habilitarlo, en `apps/web/.env`:
+El cliente busca su ubicación, marca el punto exacto en el mapa y corrige
+manualmente la dirección resultante.
+
+La interfaz usa **MapLibre GL JS** para el mapa y **Geoapify** para la búsqueda,
+las teselas y la geocodificación inversa. Para habilitarlo, en `apps/web/.env`:
 
 ```bash
-VITE_GOOGLE_MAPS_API_KEY=...
-VITE_GOOGLE_MAPS_MAP_ID=DEMO_MAP_ID   # o uno propio, con el estilo de la marca
+VITE_GEOAPIFY_API_KEY=...
+VITE_GEOAPIFY_MAP_STYLE=osm-bright-smooth   # opcional, es el valor por defecto
 ```
 
 Esa clave la usa el navegador, así que **no es un secreto**: lo que la protege
-son sus restricciones de dominio y de API en la consola de Google
-([detalles](docs/SECURITY.md#la-clave-de-google-maps)). Sin clave, la dirección
-se escribe a mano y todo lo demás sigue igual.
+son las restricciones de dominio del panel de Geoapify
+([detalles](docs/SECURITY.md#la-clave-del-mapa)). Sin esta variable, la dirección
+se sigue introduciendo a mano y todo lo demás funciona igual: el mapa es una
+ayuda, no un requisito.
 
 ### Invitaciones
 
@@ -145,7 +149,7 @@ apps/api/
 apps/web/
   src/
     shared/              cliente API, sesión, configuración regional, UI, formato
-    shared/maps/         carga de Google Maps y selector de ubicación
+    shared/maps/         mapa (MapLibre), buscador y geocodificación (Geoapify)
     features/
       auth/              panel de acceso: entrar, crear cuenta y activar invitación
       onboarding/        completar el perfil, con los pasos que decide el backend
@@ -188,8 +192,9 @@ escribe datos personales en nombre de otro y no circula ninguna contraseña por
 correo.
 
 **Direcciones**: el cliente marca en el mapa dónde está su casa y corrige la
-dirección escrita encima, porque Google no conoce las urbanizaciones de Quito. El
-backend valida contra las zonas de cobertura antes de aceptar una reserva.
+dirección escrita encima, porque ningún geocodificador conoce las urbanizaciones
+de Quito. El backend valida contra las zonas de cobertura antes de aceptar una
+reserva.
 
 ### Preparado pero no implementado
 

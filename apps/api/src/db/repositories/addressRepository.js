@@ -11,13 +11,17 @@ const { db } = require('../index');
 
 /**
  * La coordenada y el texto viajan siempre juntos pero son datos distintos:
- * `latitude`/`longitude`/`google_place_id` dicen donde esta el domicilio;
- * el resto, como lo describe el cliente. Ninguno sustituye al otro.
+ * `latitude`/`longitude` dicen donde esta el domicilio; el resto, como lo
+ * describe el cliente. Ninguno sustituye al otro.
+ *
+ * `provider_place_id` y `geocoding_provider` son solo la referencia de quien
+ * geocodifico el punto. No se llaman como el proveedor de turno a proposito
+ * (ver migracion 005) y la direccion tiene que servir aunque vengan vacios.
  */
 const FIELDS = `
   id, user_id, label, region_code, street_line1, street_line2, neighborhood,
   city, administrative_area, postal_code, reference, latitude, longitude,
-  google_place_id, zone_id, is_default, created_at
+  provider_place_id, geocoding_provider, zone_id, is_default, created_at
 `;
 
 async function listByUser(userId, tx = db) {
@@ -55,11 +59,11 @@ async function create(address, tx = db) {
     `INSERT INTO addresses (
        user_id, label, region_code, street_line1, street_line2, neighborhood,
        city, administrative_area, postal_code, reference, latitude, longitude,
-       google_place_id, zone_id, is_default
+       provider_place_id, geocoding_provider, zone_id, is_default
      ) VALUES (
        $[userId], $[label], $[regionCode], $[streetLine1], $[streetLine2], $[neighborhood],
        $[city], $[administrativeArea], $[postalCode], $[reference], $[latitude], $[longitude],
-       $[googlePlaceId], $[zoneId], $[isDefault]
+       $[providerPlaceId], $[geocodingProvider], $[zoneId], $[isDefault]
      ) RETURNING ${FIELDS}`,
     address,
   );
@@ -84,7 +88,8 @@ async function update(id, userId, fields, tx = db) {
     'reference',
     'latitude',
     'longitude',
-    'google_place_id',
+    'provider_place_id',
+    'geocoding_provider',
     'zone_id',
     'is_default',
   ];

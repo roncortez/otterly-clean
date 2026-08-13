@@ -9,7 +9,7 @@ import { Alert, Button, Card, Checkbox, Field, Input } from '@/shared/ui';
  *
  * Las dos mitades hacen falta y ninguna sustituye a la otra. El mapa da la
  * coordenada con la que el profesional encuentra la casa; el texto da lo que
- * Google no sabe: "Urbanización Los Jardines, casa 18, junto al parque".
+ * ningún mapa sabe: "Urbanización Los Jardines, casa 18, junto al parque".
  *
  * De ahí la regla de este formulario: **el mapa propone, la persona dispone.**
  * Una sugerencia solo entra cuando hay una acción explícita —elegir un
@@ -21,7 +21,7 @@ import { Alert, Button, Card, Checkbox, Field, Input } from '@/shared/ui';
  * Ecuador, "State" en Estados Unidos. Aquí no hay ningún nombre de país escrito.
  */
 
-/** Campos que Google puede proponer. El resto es siempre del cliente. */
+/** Campos que el mapa puede proponer. El resto es siempre del cliente. */
 const GEOCODED_FIELDS = ['streetLine1', 'neighborhood', 'city', 'administrativeArea', 'postalCode'];
 
 const EMPTY = {
@@ -62,10 +62,13 @@ export default function AddressForm({
   const { config, region, addressLabel, isAddressFieldRequired } = useConfig();
 
   const [form, setForm] = useState(() => addressToForm(address));
+  // La referencia del lugar acompaña a la coordenada, pero no la sustituye: si
+  // el proveedor no la da, la dirección se guarda igual.
   const [location, setLocation] = useState(() => ({
     latitude: address?.latitude ? Number(address.latitude) : null,
     longitude: address?.longitude ? Number(address.longitude) : null,
-    googlePlaceId: address?.google_place_id ?? null,
+    providerPlaceId: address?.provider_place_id ?? null,
+    geocodingProvider: address?.geocoding_provider ?? null,
   }));
   // Lo que la persona escribió a mano. Es lo único que protege sus
   // correcciones de la siguiente sugerencia del mapa.
@@ -96,11 +99,12 @@ export default function AddressForm({
     });
   }
 
-  function handleSelect({ coordinates, placeId, fields, source }) {
+  function handleSelect({ coordinates, placeId, provider, fields, source }) {
     setLocation({
       latitude: coordinates.latitude,
       longitude: coordinates.longitude,
-      googlePlaceId: placeId ?? null,
+      providerPlaceId: placeId ?? null,
+      geocodingProvider: placeId ? (provider ?? null) : null,
     });
     setSuggestion(fields);
 
@@ -123,7 +127,8 @@ export default function AddressForm({
       reference: form.reference.trim() || null,
       latitude: location.latitude,
       longitude: location.longitude,
-      googlePlaceId: location.googlePlaceId,
+      providerPlaceId: location.providerPlaceId,
+      geocodingProvider: location.geocodingProvider,
       isDefault: form.isDefault,
     });
   }
@@ -198,7 +203,7 @@ export default function AddressForm({
 
         <Field
           label="Edificio, conjunto o departamento"
-          hint="Lo que Google no sabe: número de casa, torre, piso."
+          hint="Lo que el mapa no sabe: número de casa, torre, piso."
         >
           <Input
             value={form.streetLine2}

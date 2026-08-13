@@ -161,6 +161,12 @@ export default function JobDetailPage() {
             {order.address.reference && (
               <p className="mt-1 text-sm text-text-subtle">{order.address.reference}</p>
             )}
+            {/*
+              Enlace universal para abrir la dirección en la aplicación de mapas
+              del teléfono. No es Google Maps Platform: no lleva clave, no
+              consume cuota y funciona en cualquier dispositivo, así que se
+              queda tal cual tras la migración a MapLibre.
+            */}
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
                 [order.address.streetLine1, order.address.neighborhood, order.address.city]

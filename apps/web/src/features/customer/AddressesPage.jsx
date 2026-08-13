@@ -11,7 +11,7 @@ import AddressForm from './AddressForm';
  *
  * Cada dirección son dos cosas: un punto en el mapa y un texto que el cliente
  * escribe y corrige (ver `AddressForm`). El punto es lo que permite encontrar
- * la casa; el texto, lo que Google no sabe de las urbanizaciones de Quito.
+ * la casa; el texto, lo que ningún mapa sabe de las urbanizaciones de Quito.
  *
  * Si la ubicación cae fuera de las zonas donde trabajamos, la dirección se
  * guarda igual —puede ser la casa de un familiar— pero se avisa: reservar sobre

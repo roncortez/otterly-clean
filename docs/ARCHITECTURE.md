@@ -448,17 +448,63 @@ Una dirección son dos datos complementarios que **no se sustituyen**:
 
 | Mitad                  | Qué responde                | Quién manda |
 | ---------------------- | --------------------------- | ----------- |
-| `latitude`, `longitude`, `google_place_id` | Dónde está la casa | El mapa |
+| `latitude`, `longitude`, `provider_place_id`, `geocoding_provider` | Dónde está la casa | El mapa |
 | `street_line1/2`, `neighborhood`, `city`, `administrative_area`, `reference` | Cómo se describe | El cliente |
 
-Google acierta con la ciudad y la provincia, y falla con urbanizaciones,
-conjuntos y numeraciones de Quito. Por eso el formulario **no desaparece** tras
-elegir el punto: una sugerencia solo se aplica cuando hay una acción explícita
-(elegir un resultado, mover el pin, pedir la ubicación actual o pulsar "usar la
-dirección del mapa"), y mover el pin no pisa lo que ya se corrigió a mano.
+Los geocodificadores aciertan con la ciudad y la provincia, y fallan con
+urbanizaciones, conjuntos y numeraciones de Quito. Por eso el formulario **no
+desaparece** tras elegir el punto: una sugerencia solo se aplica cuando hay una
+acción explícita (elegir un resultado, mover el pin, pedir la ubicación actual o
+pulsar "usar la dirección del mapa"), y mover el pin no pisa lo que ya se
+corrigió a mano.
 
 No se añadieron columnas de número, edificio o departamento: `street_line1` y
 `street_line2` ya lo cubren, y duplicarlas obligaría a decidir cuál manda.
+
+### El proveedor no da nombre a las columnas
+
+`google_place_id` se renombró a `provider_place_id` y se le añadió
+`geocoding_provider` (migración 005) al cambiar el mapa a MapLibre y la
+geocodificación a Geoapify. Un nombre de columna que menciona al proveedor de
+turno obliga a migrar la base cada vez que ese proveedor cambia, y mezclar
+identificadores de dos proveedores en la misma columna sin decir cuál es cuál
+los vuelve inservibles: un `place_id` de Google no significa nada en Geoapify.
+
+Los identificadores que ya existían se conservan, etiquetados como `GOOGLE`.
+Nada de esto es imprescindible: lo que permite encontrar la casa son las
+coordenadas y el texto, y la aplicación funciona con esos campos vacíos.
+
+### Mapa y geocodificación
+
+| Pieza | Quién | Dónde vive |
+| ----- | ----- | ---------- |
+| Render del mapa, pin arrastrable | MapLibre GL JS | `shared/maps/MapCanvas.jsx` |
+| Autocompletado, geocodificación inversa, teselas | Geoapify | `shared/maps/geoapify.js`, `config.js` |
+
+Se pasó de Google Maps Platform a esta combinación por coste: el flujo entero
+—buscar, marcar, arrastrar, corregir— cabe en un plan gratuito. La frontera está
+en `shared/maps/`: `MapCanvas` es el único archivo que importa MapLibre,
+`geoapify.js` el único que conoce la forma de sus respuestas, y `config.js` el
+único con URLs y claves. `AddressForm` no sabe nada de ninguno de los dos: recibe
+`{ coordinates, placeId, provider, fields, source }` y decide qué hacer con eso.
+
+Un detalle que no se ve venir: MapLibre parsea las teselas en un **web worker
+que carga por su cuenta**, construyendo su ruta en tiempo de ejecución. El
+empaquetador no puede verla, así que el worker no llega a emitirse y la petición
+acaba en 404. El síntoma engaña —mapa gris con sus controles y su atribución,
+sin pin y sin ningún error visible, porque el evento `load` no se emite nunca—,
+así que la URL se le da explícitamente en `shared/maps/worker.js`.
+
+La cuota se cuida donde se gasta: el buscador espera a que la escritura se
+detenga (350 ms), ignora textos de menos de tres caracteres, cancela la petición
+anterior, reutiliza los campos que ya trae el resultado elegido en lugar de
+volver a preguntar, y la geocodificación inversa se dispara al **soltar** el pin,
+nunca durante el arrastre.
+
+Ninguna de las tres piezas es imprescindible: sin clave configurada el selector
+se retira entero, si el mapa no carga queda el buscador, y si la geocodificación
+inversa falla se conserva la coordenada marcada. En los tres casos la dirección
+se escribe a mano.
 
 ### Cobertura sin PostGIS
 

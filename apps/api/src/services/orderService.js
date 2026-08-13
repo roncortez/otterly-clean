@@ -71,7 +71,7 @@ async function createOrder({ serviceType, customer, payload, request }) {
   const address = await addressRepo.findByIdForUser(payload.addressId, customer.id);
   if (!address) throw new NotFoundError('Direccion', payload.addressId);
 
-  // Que Google devuelva un punto valido no significa que lo atendamos. Se
+  // Que el mapa devuelva un punto valido no significa que lo atendamos. Se
   // comprueba aqui, en el servidor, y no solo al guardar la direccion: la
   // cobertura pudo cambiar entre que se registro la casa y se reserva.
   const serviceArea = await addressService.assertServiceable(address);

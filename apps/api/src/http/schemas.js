@@ -66,8 +66,9 @@ const acceptInvitationSchema = z.object({ password });
  * Direccion del cliente.
  *
  * Dos bloques que no se confunden: la ubicacion (coordenada y referencia del
- * lugar de Google) y la direccion escrita, que el cliente corrige a mano porque
- * Google no conoce urbanizaciones, conjuntos ni "junto al parque".
+ * lugar que devolvio el geocodificador) y la direccion escrita, que el cliente
+ * corrige a mano porque ningun proveedor conoce urbanizaciones, conjuntos ni
+ * "junto al parque".
  */
 const addressSchema = z.object({
   label: z.string().trim().min(1).max(60).default('Casa'),
@@ -81,9 +82,12 @@ const addressSchema = z.object({
   reference: z.string().trim().max(500).optional().nullable(),
   latitude: z.number().min(-90).max(90).optional().nullable(),
   longitude: z.number().min(-180).max(180).optional().nullable(),
-  // Identificador del lugar elegido en el mapa. Se conserva como referencia,
-  // pero la direccion tiene que seguir sirviendo sin el.
-  googlePlaceId: z.string().trim().max(255).optional().nullable(),
+  // Identificador del lugar elegido en el mapa y quien lo emitio. Se conservan
+  // como referencia, pero la direccion tiene que seguir sirviendo sin ellos, y
+  // por eso ninguno es obligatorio. El nombre no menciona al proveedor de turno:
+  // cambiarlo no puede obligar a migrar la base (ver migracion 005).
+  providerPlaceId: z.string().trim().max(255).optional().nullable(),
+  geocodingProvider: z.string().trim().max(40).toUpperCase().optional().nullable(),
   zoneId: id.optional().nullable(),
   isDefault: z.boolean().default(false),
 });
@@ -106,7 +110,8 @@ const updateAddressSchema = z
     reference: z.string().trim().max(500).optional().nullable(),
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),
-    googlePlaceId: z.string().trim().max(255).optional().nullable(),
+    providerPlaceId: z.string().trim().max(255).optional().nullable(),
+    geocodingProvider: z.string().trim().max(40).toUpperCase().optional().nullable(),
     zoneId: id.optional().nullable(),
     isDefault: z.boolean().optional(),
   })
