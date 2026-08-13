@@ -6,6 +6,7 @@ const serviceCatalog = require('../../services/serviceCatalogService');
 const availabilityService = require('../../services/availabilityService');
 const companyService = require('../../services/companyService');
 const settingsService = require('../../services/settingsService');
+const productService = require('../../services/productService');
 const addressService = require('../../services/addressService');
 const { getRegion, listRegions } = require('../../config/regions');
 const { optionalAuth } = require('../middleware/auth');
@@ -149,6 +150,44 @@ router.get(
         to: req.validatedQuery.to,
       }),
     );
+  }),
+);
+
+/**
+ * GET /api/catalog/fragrances
+ *
+ * Las fragancias que se ofrecen hoy. Es publico y no exige sesion: el asistente
+ * de reserva puede rellenarse sin cuenta (la sesion se pide al confirmar), y
+ * saber a que puede oler la casa no es informacion reservada.
+ */
+router.get(
+  '/fragrances',
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const regionCode = resolveRegionCode(req);
+    const serviceType = req.query.serviceType ? String(req.query.serviceType).toUpperCase() : null;
+
+    res.json({
+      regionCode,
+      fragrances: await serviceCatalog.listOptions({
+        kind: serviceCatalog.OPTION_KINDS.FRAGRANCE,
+        regionCode,
+        serviceType,
+      }),
+    });
+  }),
+);
+
+/**
+ * GET /api/catalog/products — catalogo de productos.
+ *
+ * Publico por el mismo motivo que el resto de este router: es un escaparate.
+ */
+router.get(
+  '/products',
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    res.json(await productService.listForCustomer(resolveRegionCode(req)));
   }),
 );
 

@@ -157,16 +157,16 @@ export default function AddressesPage() {
 
                     {/*
                       Una dirección dice dónde. Lo que hay que saber para limpiar
-                      ahí —habitaciones, baños, cómo se entra— es de Limpieza y
-                      se edita en su pantalla: esto es la puerta, no un segundo
+                      ahí —habitaciones, baños, cómo se entra— es el lugar, y se
+                      edita en su pestaña: esto es la puerta, no un segundo
                       formulario aquí.
                     */}
                     <Link
-                      to={`/limpieza/espacios?espacio=${address.id}`}
+                      to={`/mi-perfil/lugares?direccion=${address.id}`}
                       className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-forest-700 hover:underline"
                     >
                       <DoorOpen className="size-3.5" aria-hidden="true" />
-                      {address.cleaningProfile?.complete
+                      {address.property
                         ? 'Ver qué limpiamos aquí'
                         : 'Añadir qué limpiamos aquí'}
                     </Link>

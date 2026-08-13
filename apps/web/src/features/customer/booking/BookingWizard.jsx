@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Sparkles, Shirt, Package } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Check, LogIn, RotateCcw, Sparkles, Shirt } from 'lucide-react';
 import { api, errorMessage } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
+import { useAuth } from '@/shared/auth/AuthContext';
 import { useConfig } from '@/shared/config/ConfigContext';
+import ServicePicker from '@/shared/services/ServicePicker';
+import { clearDraft, loadDraft, saveDraft } from '@/shared/booking/draft';
 import { Alert, Button, Card, Modal, Spinner, cx } from '@/shared/ui';
-import { toDateInput, addDays } from '@/shared/format';
+import { toDateInput, addDays, formatRelative } from '@/shared/format';
 
 import StepService from './StepService';
 import StepConfigure from './StepConfigure';
@@ -43,7 +46,8 @@ const INITIAL_CLEANING = {
   areaValue: '',
   priorityAreas: [],
   suppliesProvidedBy: 'COMPANY',
-  fragrancePreference: '',
+  // Código del catálogo de fragancias; null = sin preferencia.
+  fragrancePreference: null,
   customerPresent: true,
   accessMethod: 'CUSTOMER_OPENS',
   accessInstructions: '',
@@ -64,6 +68,8 @@ const INITIAL_LAUNDRY = {
   billingMode: 'PER_WEIGHT',
   washTemperature: 'COLD',
   detergentPreference: 'STANDARD',
+  // Código del catálogo de fragancias; null = sin preferencia.
+  fragranceCode: null,
   useFabricSoftener: true,
   useBleach: false,
   separateColors: true,
@@ -81,10 +87,28 @@ const INITIAL_KITS = {
   specialInstructions: '',
 };
 
+function emptyBooking(serviceType) {
+  return {
+    serviceType,
+    planId: null,
+    extraCodes: [],
+    scheduledDate: toDateInput(addDays(2)),
+    windowCode: '',
+    addressId: null,
+    durationMinutes: 180,
+    customerNotes: '',
+    cleaning: INITIAL_CLEANING,
+    laundry: INITIAL_LAUNDRY,
+    kits: INITIAL_KITS,
+  };
+}
+
 export default function BookingWizard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { money, timeWindows, weightUnit, areaUnit } = useConfig();
+  const { isAuthenticated } = useAuth();
 
   const [stepIndex, setStepIndex] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -96,7 +120,9 @@ export default function BookingWizard() {
   }, []);
 
   const catalogQuery = useApiQuery('/catalog/services');
-  const addressQuery = useApiQuery('/customer/addresses');
+  // Sin sesión no hay direcciones que pedir, y pedirlas devolvería 401. El
+  // visitante crea la suya dentro del asistente (ver StepPlace).
+  const addressQuery = useApiQuery(isAuthenticated ? '/customer/addresses' : null);
 
   const catalog = catalogQuery.data?.services ?? null;
   // Referencia estable: si no, cada render crearía un array nuevo y las
@@ -107,28 +133,50 @@ export default function BookingWizard() {
   const { busy: submitting, error: actionError, setError, execute } = useApiAction();
   const error = catalogQuery.error ?? addressQuery.error ?? actionError;
 
+  /**
+   * El servicio pedido por la URL. Es lo que distingue "vengo a reservar una
+   * limpieza" de "vengo a seguir con lo que estaba", y por eso manda sobre el
+   * borrador: pulsar Lavandería en el selector no puede devolverte una limpieza
+   * a medias.
+   */
+  const requestedService = useMemo(() => {
+    const raw = searchParams.get('servicio') || searchParams.get('service');
+    const upper = raw ? raw.toUpperCase() : null;
+    return upper && KNOWN_SERVICE_TYPES.includes(upper) ? upper : null;
+  }, [searchParams]);
+
+  // Se lee una sola vez, al montar: si se releyera en cada render, guardar el
+  // borrador provocaría recargarlo y el formulario se pelearía consigo mismo.
+  const [savedDraft] = useState(() => loadDraft());
+
   const [booking, setBooking] = useState(() => {
-    const rawParam = searchParams.get('servicio') || searchParams.get('service');
-    const paramUpper = rawParam ? rawParam.toUpperCase() : null;
-    const serviceType = paramUpper && KNOWN_SERVICE_TYPES.includes(paramUpper)
-      ? paramUpper
-      : null;
-    return {
-      serviceType,
-      planId: null,
-      extraCodes: [],
-      scheduledDate: toDateInput(addDays(2)),
-      windowCode: '',
-      addressId: null,
-      durationMinutes: 180,
-      customerNotes: '',
-      cleaning: INITIAL_CLEANING,
-      laundry: INITIAL_LAUNDRY,
-      kits: INITIAL_KITS,
-    };
+    const draft = loadDraft();
+    // Solo se restaura solo cuando no contradice lo que se acaba de pedir. Si
+    // hay conflicto se pregunta (ver el aviso de más abajo).
+    if (draft && (!requestedService || draft.booking.serviceType === requestedService)) {
+      return { ...emptyBooking(draft.booking.serviceType), ...draft.booking };
+    }
+    return emptyBooking(requestedService);
   });
 
-  const [showServiceModal, setShowServiceModal] = useState(false);
+  // Abierto de entrada: llegar a /reservar sin servicio es justamente venir a
+  // elegirlo.
+  const [showServiceModal, setShowServiceModal] = useState(true);
+  const [draftNotice, setDraftNotice] = useState(() => {
+    const draft = loadDraft();
+    return Boolean(draft && (!requestedService || draft.booking.serviceType === requestedService));
+  });
+
+  /**
+   * El borrador se guarda solo, en cuanto hay servicio elegido.
+   *
+   * Cubre los dos casos: el visitante que va a iniciar sesión antes de
+   * confirmar, y el cliente que recarga, navega a otra pantalla o vuelve al día
+   * siguiente. Los secretos de acceso no entran; de eso se encarga `saveDraft`.
+   */
+  useEffect(() => {
+    if (booking.serviceType) saveDraft(booking);
+  }, [booking]);
 
   const update = (patch) => setBooking((current) => ({ ...current, ...patch }));
   const updateDetail = (key, patch) =>
@@ -249,6 +297,37 @@ export default function BookingWizard() {
     }
   }, [currentStep.id, effective]);
 
+  /**
+   * Empezar de cero.
+   *
+   * Existe porque un borrador guardado no puede ser una condena: si el cliente
+   * viene a pedir otra cosa, seguir con lo de la semana pasada sería la
+   * aplicación decidiendo por él. Borra también lo guardado, no solo la
+   * pantalla, para que no reaparezca al recargar.
+   */
+  function discardDraft() {
+    clearDraft();
+    setBooking(emptyBooking(requestedService ?? booking.serviceType));
+    setStepIndex(0);
+    setDraftNotice(false);
+    setPricing(null);
+  }
+
+  /**
+   * Ir a iniciar sesión sin salir de la reserva.
+   *
+   * `background` mantiene el asistente detrás del panel de acceso, y
+   * `redirectTo` trae de vuelta aquí al entrar en lugar de al inicio. El
+   * borrador ya está guardado por el efecto de arriba, así que al volver el
+   * formulario se recompone solo.
+   */
+  function goToLogin() {
+    saveDraft(booking);
+    navigate('/entrar', {
+      state: { background: location, redirectTo: `${location.pathname}${location.search}` },
+    });
+  }
+
   async function handleSubmit() {
     const request = async () => {
       const propertyId = effective.propertyId || null;
@@ -292,104 +371,34 @@ export default function BookingWizard() {
     };
 
     await execute(request, {
-      onSuccess: (response) =>
-        navigate(`/servicios/${response.data.order.id}`, { replace: true }),
+      onSuccess: (response) => {
+        // La reserva ya existe en el servidor: el borrador ha cumplido y
+        // conservarlo solo serviría para reaparecer sobre la siguiente.
+        clearDraft();
+        navigate(`/servicios/${response.data.order.id}`, { replace: true });
+      },
     });
   }
 
   if (loading) return <Spinner label="Preparando tu reserva" />;
 
+  /**
+   * Sin servicio elegido no hay asistente que mostrar, solo la pregunta.
+   *
+   * Antes esto era una pantalla intermedia con un titular y un botón
+   * «Comenzar reserva» cuyo único efecto era abrir este mismo modal. El paso
+   * sobraba: ahora el selector se abre directamente y, si se cierra sin elegir,
+   * se vuelve de donde se vino.
+   */
   if (!booking.serviceType) {
     return (
-      <div className="mx-auto max-w-xl text-center py-16 px-4">
-        <div className="mb-6 flex justify-center">
-          <span className="flex size-16 items-center justify-center rounded-2xl bg-forest-50 text-forest-600 shadow-md">
-            <Sparkles className="size-8 animate-pulse text-forest-600" />
-          </span>
-        </div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-text">
-          ¿Qué necesitas hoy?
-        </h1>
-        <p className="mt-3 text-base text-text-muted max-w-md mx-auto">
-          Comienza tu reserva seleccionando uno de nuestros servicios profesionales a domicilio.
-        </p>
-
-        <div className="mt-8">
-          <Button
-            size="lg"
-            variant="accent"
-            className="px-8 py-4 text-base font-bold shadow-lg transition-transform hover:scale-105"
-            onClick={() => setShowServiceModal(true)}
-          >
-            Comenzar reserva
-          </Button>
-        </div>
-
-        {/* Modal de Selección de Servicio */}
-        <Modal
-          open={showServiceModal}
-          onClose={() => setShowServiceModal(false)}
-          title="Selecciona un servicio"
-          description="Elige el servicio que deseas solicitar hoy."
-          size="lg"
-        >
-          <div className="grid gap-4 py-4 sm:grid-cols-3">
-            <button
-              type="button"
-              className="flex flex-col items-center p-6 rounded-xl border border-border bg-surface hover:bg-surface-sunken hover:border-forest-400 transition-all text-center gap-3 cursor-pointer"
-              onClick={() => {
-                update({ serviceType: 'CLEANING', planId: null, extraCodes: [] });
-                setShowServiceModal(false);
-                setStepIndex(0);
-              }}
-            >
-              <span className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
-                <Sparkles className="size-6" />
-              </span>
-              <div>
-                <span className="block font-bold text-text">Limpieza</span>
-                <span className="mt-1 block text-xs text-text-muted">Residencial completa</span>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              className="flex flex-col items-center p-6 rounded-xl border border-border bg-surface hover:bg-surface-sunken hover:border-forest-400 transition-all text-center gap-3 cursor-pointer"
-              onClick={() => {
-                update({ serviceType: 'LAUNDRY', planId: null, extraCodes: [] });
-                setShowServiceModal(false);
-                setStepIndex(0);
-              }}
-            >
-              <span className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
-                <Shirt className="size-6" />
-              </span>
-              <div>
-                <span className="block font-bold text-text">Lavandería</span>
-                <span className="mt-1 block text-xs text-text-muted">Ropa impecable</span>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              className="flex flex-col items-center p-6 rounded-xl border border-border bg-surface hover:bg-surface-sunken hover:border-forest-400 transition-all text-center gap-3 cursor-pointer"
-              onClick={() => {
-                update({ serviceType: 'KITS', planId: null, extraCodes: [] });
-                setShowServiceModal(false);
-                setStepIndex(0);
-              }}
-            >
-              <span className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
-                <Package className="size-6" />
-              </span>
-              <div>
-                <span className="block font-bold text-text">Kits</span>
-                <span className="mt-1 block text-xs text-text-muted">Insumos de limpieza</span>
-              </div>
-            </button>
-          </div>
-        </Modal>
-      </div>
+      <ServicePicker
+        open={showServiceModal}
+        onClose={() => {
+          setShowServiceModal(false);
+          navigate(isAuthenticated ? '/inicio' : '/');
+        }}
+      />
     );
   }
 
@@ -452,12 +461,41 @@ export default function BookingWizard() {
         </div>
       )}
 
+      {/*
+        Se ha recuperado una reserva a medias. Se avisa en lugar de restaurarla
+        en silencio: encontrarse el formulario relleno sin saber por qué es
+        desconcertante, y quien venía a pedir otra cosa necesita una salida.
+      */}
+      {draftNotice && (
+        <div className="mb-5">
+          <Alert tone="info" title="Retomamos donde lo dejaste">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Guardamos lo que habías empezado
+                {savedDraft?.savedAt ? ` ${formatRelative(savedDraft.savedAt)}` : ''}. Por
+                seguridad no guardamos los códigos de acceso: tendrás que escribirlos otra vez.
+              </span>
+              <span className="flex gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setDraftNotice(false)}>
+                  Continuar
+                </Button>
+                <Button size="sm" variant="outline" onClick={discardDraft}>
+                  <RotateCcw className="size-3.5" aria-hidden="true" />
+                  Empezar de nuevo
+                </Button>
+              </span>
+            </div>
+          </Alert>
+        </div>
+      )}
+
       <div className="mb-4">
         <Button
           variant="ghost"
           onClick={() => {
             if (stepIndex === 0) {
               update({ serviceType: null });
+              setShowServiceModal(true);
             } else {
               setStepIndex(stepIndex - 1);
             }
@@ -488,6 +526,15 @@ export default function BookingWizard() {
         )}
       </div>
 
+      {/*
+        El único punto del flujo donde hace falta una sesión.
+
+        Hasta aquí un visitante ha podido elegir servicio, describir su casa y
+        escoger fecha sin registrarse. Ahora sí: crear la orden exige saber de
+        quién es, y el backend lo exige igualmente (`RequireRole` no protege
+        esta pantalla, pero `POST /customer/orders/*` sí). No se crea ninguna
+        orden anónima que luego haya que reclamar.
+      */}
       <Modal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
@@ -499,16 +546,32 @@ export default function BookingWizard() {
             <Button type="button" variant="ghost" onClick={() => setConfirmOpen(false)}>
               Atrás
             </Button>
-            <Button variant="accent" loading={submitting} onClick={handleSubmit}>
-              <Check className="size-4" aria-hidden="true" />
-              Confirmar reserva
-            </Button>
+            {isAuthenticated ? (
+              <Button variant="accent" loading={submitting} onClick={handleSubmit}>
+                <Check className="size-4" aria-hidden="true" />
+                Confirmar reserva
+              </Button>
+            ) : (
+              <Button variant="accent" onClick={goToLogin}>
+                <LogIn className="size-4" aria-hidden="true" />
+                Inicia sesión para reservar
+              </Button>
+            )}
           </>
         }
       >
         {actionError && (
           <div className="mb-4">
             <Alert tone="danger">{actionError}</Alert>
+          </div>
+        )}
+
+        {!isAuthenticated && (
+          <div className="mb-4">
+            <Alert tone="info" title="Solo falta identificarte">
+              Tus datos no se perderán: al entrar volvemos justo a esta pantalla con todo lo que
+              has rellenado. Por seguridad no guardamos los códigos de acceso.
+            </Alert>
           </div>
         )}
         <StepSummary {...stepProps} pricing={pricing} compact />

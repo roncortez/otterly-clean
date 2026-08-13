@@ -1,23 +1,24 @@
-import { Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth, homePathForRoles, landingPathFor } from '@/shared/auth/AuthContext';
-import { bookingPath } from '@/shared/services';
 import { Spinner } from '@/shared/ui';
 
 import LoginPage from '@/features/auth/LoginPage';
 import RegisterPage from '@/features/auth/RegisterPage';
 import ActivateAccountPage from '@/features/auth/ActivateAccountPage';
 import OnboardingPage from '@/features/onboarding/OnboardingPage';
-import ProfilePage from '@/features/profile/ProfilePage';
 import HomePage from '@/features/home/HomePage';
 
 import CustomerLayout from '@/features/customer/CustomerLayout';
 import CustomerDashboard from '@/features/customer/DashboardPage';
-import ServiceOverviewPage from '@/features/customer/ServiceOverviewPage';
 import BookingWizard from '@/features/customer/booking/BookingWizard';
 import CustomerOrderDetail from '@/features/customer/OrderDetailPage';
 import CustomerOrders from '@/features/customer/OrdersPage';
+import ProductsPage from '@/features/customer/products/ProductsPage';
+
+import ProfileLayout from '@/features/profile/ProfileLayout';
+import ProfilePage from '@/features/profile/ProfilePage';
 import AddressesPage from '@/features/customer/AddressesPage';
-import SpacesPage from '@/features/customer/cleaning/SpacesPage';
+import PropertyManager from '@/features/customer/properties/PropertyManager';
 
 import OperationsLayout from '@/features/operations/OperationsLayout';
 import OperationsDashboard from '@/features/operations/DashboardPage';
@@ -78,21 +79,6 @@ function RequireSession({ children }) {
   return children;
 }
 
-/**
- * `/reservar` era la única puerta al asistente cuando todos los servicios
- * compartían pantalla. Ahora cada uno reserva en la suya, así que esta ruta
- * traduce: con servicio indicado lleva a su asistente, y sin él, al inicio,
- * donde se elige. Los enlaces antiguos —incluidos los `?service=` de la
- * portada— siguen funcionando.
- */
-function BookingRedirect() {
-  const [searchParams] = useSearchParams();
-  const requested = (searchParams.get('servicio') ?? searchParams.get('service') ?? '').toUpperCase();
-  const target = bookingPath(requested);
-
-  return <Navigate to={target ?? '/inicio'} replace />;
-}
-
 function RootRedirect() {
   const { user, isAuthenticated, isLoading } = useAuth();
 
@@ -117,26 +103,24 @@ function AppRoutes({ location }) {
         }
       />
 
-      {/* Perfil propio: mismo sitio para clienta, trabajadora o administradora. */}
-      <Route
-        path="/mi-perfil"
-        element={
-          <RequireRole>
-            <div className="min-h-dvh bg-surface px-5 py-8">
-              <ProfilePage />
-            </div>
-          </RequireRole>
-        }
-      />
-
       {/*
-        Cliente: una sola aplicación con tres experiencias dentro.
+        Reservar y ver el catálogo NO exigen sesión.
 
-        Cada servicio tiene su rama de rutas y su color; lo común —direcciones,
-        historial completo, perfil— vive fuera de ellas y se comparte. El
-        enrutado por audiencia no cambia: todo esto sigue exigiendo CUSTOMER y
-        el backend revalida cada petición.
+        Un visitante que llega de la portada puede elegir servicio y rellenar la
+        reserva entera; la sesión se pide en el último paso, justo antes de
+        confirmar, que es cuando de verdad hace falta saber de quién es el
+        pedido. El backend sigue exigiendo CUSTOMER autenticado para crear la
+        orden: esto abre el formulario, no la API.
+
+        Comparten el mismo marco que el resto del cliente (`CustomerLayout`), que
+        se adapta a si hay sesión o no.
       */}
+      <Route element={<CustomerLayout />}>
+        <Route path="/reservar" element={<BookingWizard />} />
+        <Route path="/productos" element={<ProductsPage />} />
+      </Route>
+
+      {/* Cliente */}
       <Route
         element={
           <RequireRole role="CUSTOMER">
@@ -145,39 +129,29 @@ function AppRoutes({ location }) {
         }
       >
         <Route path="/inicio" element={<CustomerDashboard />} />
-
-        {/* Limpieza */}
-        <Route path="/limpieza" element={<ServiceOverviewPage serviceType="CLEANING" />} />
-        <Route path="/limpieza/reservar" element={<BookingWizard serviceType="CLEANING" />} />
-        <Route path="/limpieza/reservas" element={<CustomerOrders serviceType="CLEANING" />} />
-        <Route path="/limpieza/espacios" element={<SpacesPage />} />
-
-        {/* Lavandería */}
-        <Route path="/lavanderia" element={<ServiceOverviewPage serviceType="LAUNDRY" />} />
-        <Route path="/lavanderia/recogida" element={<BookingWizard serviceType="LAUNDRY" />} />
-        <Route path="/lavanderia/pedidos" element={<CustomerOrders serviceType="LAUNDRY" />} />
-
-        {/*
-          Arreglo de prendas: existe la experiencia, no el flujo de reserva. No
-          se declara `/arreglos/reservar` porque el dominio no sabe crear esa
-          orden todavía, y una pantalla que promete lo que la API rechaza es
-          peor que no tenerla.
-        */}
-        <Route path="/arreglos" element={<ServiceOverviewPage serviceType="ALTERATION" />} />
-
-        {/* Común a los tres */}
         <Route path="/servicios" element={<CustomerOrders />} />
         <Route path="/servicios/:id" element={<CustomerOrderDetail />} />
-        <Route path="/direcciones" element={<AddressesPage />} />
+      </Route>
 
-        {/*
-          Compatibilidad: las rutas que existían antes de separar las
-          experiencias siguen llevando a donde ahora viven esos contenidos.
-          Enlaces guardados, correos ya enviados y la portada no se rompen.
-        */}
-        <Route path="/reservar" element={<BookingRedirect />} />
-        <Route path="/inmuebles" element={<Navigate to="/limpieza/espacios" replace />} />
-        <Route path="/limpieza/hogar" element={<Navigate to="/limpieza/espacios" replace />} />
+      {/*
+        Perfil propio: mismo sitio para clienta, trabajadora o administradora.
+
+        Direcciones y Lugares viven aquí dentro y no en la navegación principal:
+        son configuración de la cuenta, no sitios donde se trabaja a diario. El
+        orden de las pestañas es el orden en que se usan —primero existe la
+        dirección, después el lugar que hay en ella—.
+      */}
+      <Route
+        path="/mi-perfil"
+        element={
+          <RequireRole>
+            <ProfileLayout />
+          </RequireRole>
+        }
+      >
+        <Route index element={<ProfilePage />} />
+        <Route path="direcciones" element={<AddressesPage />} />
+        <Route path="lugares" element={<PropertyManager />} />
       </Route>
 
       {/* Operaciones */}
@@ -218,6 +192,21 @@ function AppRoutes({ location }) {
         <Route path="/trabajo" element={<StaffJobsPage />} />
         <Route path="/trabajo/:id" element={<StaffJobDetail />} />
       </Route>
+
+      {/*
+        Compatibilidad. Direcciones y Lugares tenían ruta propia en la
+        navegación principal, y `feat/maplibre-geoapify` llegó a separar las
+        experiencias por servicio. Los enlaces guardados y los correos ya
+        enviados siguen llevando a donde ahora vive cada cosa.
+      */}
+      <Route path="/direcciones" element={<Navigate to="/mi-perfil/direcciones" replace />} />
+      <Route path="/inmuebles" element={<Navigate to="/mi-perfil/lugares" replace />} />
+      <Route path="/limpieza/espacios" element={<Navigate to="/mi-perfil/lugares" replace />} />
+      <Route path="/limpieza/hogar" element={<Navigate to="/mi-perfil/lugares" replace />} />
+      <Route path="/limpieza/reservar" element={<Navigate to="/reservar?servicio=CLEANING" replace />} />
+      <Route path="/lavanderia/recogida" element={<Navigate to="/reservar?servicio=LAUNDRY" replace />} />
+      <Route path="/limpieza/reservas" element={<Navigate to="/servicios" replace />} />
+      <Route path="/lavanderia/pedidos" element={<Navigate to="/servicios" replace />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

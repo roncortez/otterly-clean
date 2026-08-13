@@ -79,6 +79,56 @@ async function findExtrasByCodes(codes, regionCode, tx = db) {
   );
 }
 
+/**
+ * Opciones de una lista configurable (fragancias, y las que vengan).
+ *
+ * `kind` discrimina la lista; ver migracion 014. Se devuelven solo las activas:
+ * una opcion retirada deja de ofrecerse, pero las ordenes que ya la citan
+ * siguen leyendose porque guardan el codigo, no una referencia.
+ */
+async function listOptions({ kind, regionCode, serviceType = null }, tx = db) {
+  const conditions = ['kind = $1', 'region_code = $2', 'active = TRUE'];
+  const values = [kind, regionCode];
+
+  // NULL en `service_type` significa "sirve para cualquiera", asi que una
+  // consulta por servicio tiene que traerlas tambien.
+  if (serviceType) {
+    values.push(serviceType);
+    conditions.push(`(service_type IS NULL OR service_type = $${values.length})`);
+  }
+
+  return tx.any(
+    `SELECT id, kind, code, label, description, service_type, display_order
+       FROM catalog_options
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY display_order, label`,
+    values,
+  );
+}
+
+/** Comprueba que un codigo de opcion existe y sigue activo en la region. */
+async function findOptionByCode({ kind, code, regionCode }, tx = db) {
+  return tx.oneOrNone(
+    `SELECT id, kind, code, label FROM catalog_options
+      WHERE kind = $1 AND code = $2 AND region_code = $3 AND active = TRUE`,
+    [kind, code, regionCode],
+  );
+}
+
+/** Catalogo de productos de la region. Ver migracion 013. */
+async function listProducts({ regionCode, includeInactive = false }, tx = db) {
+  const conditions = ['region_code = $1'];
+  if (!includeInactive) conditions.push('active = TRUE');
+
+  return tx.any(
+    `SELECT id, code, name, description, amount, currency, image_url, category, display_order
+       FROM products
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY display_order, name`,
+    [regionCode],
+  );
+}
+
 async function listZones({ regionCode, includeInactive = false }, tx = db) {
   const conditions = ['region_code = $1'];
   if (!includeInactive) conditions.push('active = TRUE');
@@ -133,6 +183,9 @@ module.exports = {
   updatePlan,
   listExtras,
   findExtrasByCodes,
+  listOptions,
+  findOptionByCode,
+  listProducts,
   listZones,
   findZoneById,
   createZone,

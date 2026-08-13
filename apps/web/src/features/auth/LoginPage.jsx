@@ -21,8 +21,18 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
+  /**
+   * A dónde se vuelve al entrar.
+   *
+   * Normalmente al panel que corresponde al rol. Pero quien llega aquí desde una
+   * reserva a medias tiene que volver a ESA pantalla y no al inicio: perder el
+   * formulario justo después de pedirle que se identifique sería la peor forma
+   * de cobrar la sesión. Lo pide quien navega (ver `BookingWizard.goToLogin`).
+   */
+  const redirectTo = location.state?.redirectTo ?? null;
+
   if (!isLoading && isAuthenticated) {
-    return <Navigate to={landingPathFor(user)} replace />;
+    return <Navigate to={redirectTo ?? landingPathFor(user)} replace />;
   }
 
   async function handleSubmit(event) {
@@ -32,7 +42,7 @@ export default function LoginPage() {
 
     try {
       const signedIn = await login(form);
-      navigate(landingPathFor(signedIn), { replace: true });
+      navigate(redirectTo ?? landingPathFor(signedIn), { replace: true });
     } catch (requestError) {
       setError(errorMessage(requestError, 'No pudimos iniciar tu sesión.'));
     } finally {

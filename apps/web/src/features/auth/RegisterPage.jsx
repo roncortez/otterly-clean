@@ -43,7 +43,16 @@ export default function RegisterPage() {
       const created = await register({ ...form, phone: normalizedPhone });
       // Lo que falte del perfil se pide después, en un paso corto: aquí solo se
       // pide lo imprescindible para tener cuenta.
-      navigate(landingPathFor(created), { replace: true });
+      //
+      // `redirectTo` llega desde la reserva a medias (`BookingWizard.goToLogin`,
+      // y desde ahí al enlace «Crear una cuenta», que reenvía el state): quien
+      // se registra en mitad de una reserva vuelve a ella, no al inicio. El
+      // onboarding pendiente manda igualmente, por eso se comprueba antes.
+      const pendingOnboarding = created?.onboarding?.pending;
+      const redirectTo = location.state?.redirectTo ?? null;
+      navigate(!pendingOnboarding && redirectTo ? redirectTo : landingPathFor(created), {
+        replace: true,
+      });
     } catch (requestError) {
       setError(errorMessage(requestError, 'No pudimos crear tu cuenta.'));
     } finally {

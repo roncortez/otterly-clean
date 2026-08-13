@@ -231,7 +231,16 @@ const cleaningDetailSchema = z.object({
   priorityAreas: z.array(z.string().trim().max(60)).max(20).default([]),
   suppliesProvidedBy: z.enum(['COMPANY', 'CUSTOMER']).default('COMPANY'),
   productPreferences: z.array(z.string().trim().max(60)).max(20).default([]),
-  fragrancePreference: z.string().trim().max(60).optional().nullable(),
+  /**
+   * Codigo del catalogo de fragancias (`catalog_options`, kind FRAGRANCE).
+   *
+   * Era texto libre de 60 caracteres, y por eso "lavanda", "Lavanda" y "el que
+   * huela rico" eran tres preferencias distintas para quien tiene que elegir el
+   * producto. No es un enum de Zod porque la lista la administra Operaciones
+   * desde la base: el servicio la valida contra el catalogo, que es quien la
+   * tiene. Ver migracion 014.
+   */
+  fragrancePreference: z.string().trim().max(40).optional().nullable(),
   customerPresent: z.boolean().default(true),
   // Si las mascotas estaran encerradas ESE dia; que existan es del espacio.
   petsSecured: z.boolean().optional().nullable(),

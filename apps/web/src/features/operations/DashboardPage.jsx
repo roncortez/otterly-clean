@@ -2,7 +2,17 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { UserPlus, AlertTriangle, CheckCircle2, Users, ArrowRight } from 'lucide-react';
 import { useApiQuery } from '@/shared/api/useApiQuery';
-import { Alert, Card, CardHeader, EmptyState, PageHeader, Spinner, StatusBadge, cx } from '@/shared/ui';
+import {
+  Alert,
+  Card,
+  CardHeader,
+  EmptyState,
+  Input,
+  PageHeader,
+  Spinner,
+  StatusBadge,
+  cx,
+} from '@/shared/ui';
 import { SERVICE_LABELS } from '@/shared/ui/ServiceCard';
 import { formatTimeWindow, toDateInput, formatRelative } from '@/shared/format';
 
@@ -36,11 +46,11 @@ export default function DashboardPage() {
         eyebrow="Operaciones"
         description="Lo que hay que resolver ahora mismo."
         action={
-          <input
+          <Input
             type="date"
             value={date}
             onChange={(event) => setDate(event.target.value)}
-            className="h-10 rounded-xl border border-border bg-surface-raised px-3 text-sm text-text focus:border-forest-500 focus:outline-none"
+            className="w-auto"
           />
         }
       />

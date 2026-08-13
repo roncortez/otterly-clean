@@ -222,6 +222,47 @@
     border-radius: 4px;
   }
 
+  /*
+     Lo que se pulsa se comporta como algo que se pulsa.
+
+     Tailwind v4 dejó de poner `cursor: pointer` en los botones (sigue a la
+     especificación, donde `button` es `cursor: default`), así que cada
+     componente tenía que acordarse de añadirlo. Unos lo hacían y otros no, y la
+     diferencia solo se notaba usando la aplicación.
+
+     Se arregla aquí, una vez, en lugar de en cada componente: la regla cubre los
+     botones, los enlaces, los controles de formulario que se despliegan o se
+     marcan, y los elementos que se comportan como botón sin serlo
+     (`role="button"`, `role="tab"`...). Si aparece uno nuevo, ya está resuelto.
+
+     `:disabled` y `aria-disabled` van después y ganan: un control apagado no
+     puede insinuar que responde. */
+  button,
+  summary,
+  label:has(> input[type='checkbox']),
+  label:has(> input[type='radio']),
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='file'],
+  input[type='range'],
+  select,
+  a[href],
+  [role='button'],
+  [role='tab'],
+  [role='option'],
+  [role='menuitem'],
+  [role='switch'],
+  [tabindex]:not([tabindex='-1']):not(input):not(textarea) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
   ::selection {
     background-color: var(--accent-200);
     color: var(--forest-900);

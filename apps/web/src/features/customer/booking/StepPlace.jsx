@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MapPin, Plus, Building, Edit2, ShieldCheck, PawPrint } from 'lucide-react';
 import api, { errorMessage } from '@/shared/api/client';
 import { useApiQuery } from '@/shared/api/useApiQuery';
+import { useAuth } from '@/shared/auth/AuthContext';
 import { Alert, Field, Input, Modal, Select, Button, Card, cx, Spinner, Checkbox, OptionCard, Textarea, Divider } from '@/shared/ui';
 import AddressForm from '../AddressForm';
 import StepInstructions from './StepInstructions';
@@ -172,7 +173,10 @@ function CleaningPlaceSection({
   registerOnNext,
   reloadAddresses,
 }) {
-  const { data, loading, reload } = useApiQuery('/customer/properties');
+  const { isAuthenticated } = useAuth();
+  // Un visitante todavía no tiene lugares guardados y pedirlos devolvería 401.
+  // Describe su casa aquí y se guarda al confirmar, cuando ya hay cuenta.
+  const { data, loading, reload } = useApiQuery(isAuthenticated ? '/customer/properties' : null);
   const properties = data?.properties ?? [];
 
   const [propertyModalOpen, setPropertyModalOpen] = useState(false);
@@ -183,24 +187,16 @@ function CleaningPlaceSection({
   const [submitting, setSubmitting] = useState(false);
   const [savePermanently, setSavePermanently] = useState(true);
 
-  /*
-   * IMPORTANTE:
-   * Adapta esta condición al nombre real del campo que utilice tu backend.
+  /**
+   * El lugar predeterminado del cliente.
    *
-   * Soporto varias formas temporalmente para que sea fácil conectarlo:
-   * - property.isDefault
-   * - property.is_default
-   * - address.isDefault
-   * - address.is_default
+   * Es suyo y no se deriva del de la dirección: alguien puede recibir la ropa en
+   * la oficina —dirección predeterminada— y querer que la limpieza empiece
+   * siempre en su casa. El backend garantiza que hay exactamente uno mientras
+   * exista algún lugar (migración 012 y propertyService), así que aquí basta con
+   * leerlo.
    */
-  const defaultProperty =
-    properties.find(
-      (prop) =>
-        prop.isDefault === true ||
-        prop.is_default === true ||
-        prop.address?.isDefault === true ||
-        prop.address?.is_default === true,
-    ) ?? null;
+  const defaultProperty = properties.find((prop) => prop.isDefault === true) ?? null;
 
   const selectedProp =
     properties.find((prop) => prop.id === booking.propertyId) ?? null;

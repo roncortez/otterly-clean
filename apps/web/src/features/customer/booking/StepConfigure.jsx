@@ -1,4 +1,5 @@
-import { Field, Input, Select, Checkbox, OptionCard, Divider, cx } from '@/shared/ui';
+import { useApiQuery } from '@/shared/api/useApiQuery';
+import { Field, Input, Select, Textarea, Checkbox, OptionCard, Divider, cx } from '@/shared/ui';
 
 /**
  * Paso 2 (configuración del servicio): define los detalles del trabajo.
@@ -17,6 +18,47 @@ export default function StepConfigure(props) {
   if (booking.serviceType === 'LAUNDRY') return <LaundryStep {...props} />;
   if (booking.serviceType === 'KITS') return <KitsStep    {...props} />;
   return <CleaningStep {...props} />;
+}
+
+/**
+ * A qué quieres que huela.
+ *
+ * Las opciones vienen del catálogo (`GET /api/catalog/fragrances`), no de un
+ * array aquí: era un campo de texto libre, y "lavanda", "Lavanda" y "el que
+ * huela rico" eran tres preferencias distintas para quien tiene que elegir el
+ * producto. Ahora se guarda un código, y Operaciones puede añadir o retirar
+ * fragancias sin desplegar.
+ *
+ * Se usa igual en limpieza y en lavandería: es la misma lista porque el cliente
+ * no entiende por qué su casa puede oler a lavanda y su ropa no.
+ *
+ * Si el catálogo no responde, el campo no se pinta en lugar de ofrecer un
+ * desplegable vacío: la fragancia es opcional y la reserva puede seguir.
+ */
+function FragranceField({ value, onChange, className }) {
+  const { data, loading } = useApiQuery('/catalog/fragrances');
+  const fragrances = data?.fragrances ?? [];
+
+  if (loading || fragrances.length === 0) return null;
+
+  const selected = fragrances.find((option) => option.code === value) ?? null;
+
+  return (
+    <Field
+      label="Preferencia de fragancia"
+      className={className}
+      hint={selected?.description ?? 'Opcional.'}
+    >
+      <Select value={value ?? ''} onChange={(event) => onChange(event.target.value || null)}>
+        <option value="">Sin preferencia</option>
+        {fragrances.map((option) => (
+          <option key={option.code} value={option.code}>
+            {option.label}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
 }
 
 // =============================================================================
@@ -165,27 +207,24 @@ function CleaningStep({ booking, update, updateDetail, service, money }) {
             description="Prefieres tus propios productos."
           />
         </div>
-        <Field label="Preferencia de fragancia" className="mt-4" hint="Opcional.">
-          <Input
-            value={cleaning.fragrancePreference}
-            onChange={(event) =>
-              updateDetail('cleaning', { fragrancePreference: event.target.value })
-            }
-            placeholder="Sin fragancia, cítrico, lavanda…"
-          />
-        </Field>
+        <FragranceField
+          className="mt-4"
+          value={cleaning.fragrancePreference}
+          onChange={(code) => updateDetail('cleaning', { fragrancePreference: code })}
+        />
       </div>
 
       <Divider />
 
-      <div className="mt-4">
-        <label className="block text-sm font-medium text-text">Instrucciones especiales</label>
-        <input
+      <Field label="Instrucciones especiales" className="mt-4" hint="Opcional.">
+        <Textarea
           value={cleaning.specialInstructions || ''}
-          onChange={(e) => updateDetail('cleaning', { specialInstructions: e.target.value })}
+          onChange={(event) =>
+            updateDetail('cleaning', { specialInstructions: event.target.value })
+          }
           placeholder="Ej: Limpiar el horno, lavar ventanas, etc."
-          className="mt-1 block w-full rounded-lg border border-border px-3 py-2 text-sm text-text focus:border-forest-500 focus:outline-none" />
-      </div>
+        />
+      </Field>
     </div>
   );
 }
@@ -298,6 +337,17 @@ function LaundryStep({ booking, update, updateDetail, service, money, weightUnit
           ))}
         </Select>
       </Field>
+
+      {/*
+        Detergente y fragancia responden a cosas distintas y antes se
+        contestaban con el mismo campo: que un detergente sea 'FRAGRANCE_FREE'
+        es una propiedad del producto; a qué quiere que huela su ropa es una
+        elección del cliente.
+      */}
+      <FragranceField
+        value={laundry.fragranceCode}
+        onChange={(code) => updateDetail('laundry', { fragranceCode: code })}
+      />
 
       <div className="space-y-3">
         <Checkbox

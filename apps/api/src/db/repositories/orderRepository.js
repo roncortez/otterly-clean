@@ -71,7 +71,7 @@ async function insertLaundryDetails(details, tx = db) {
        pickup_date, pickup_window_code, pickup_window_start, pickup_window_end, pickup_instructions,
        delivery_date, delivery_window_code, delivery_window_start, delivery_window_end, delivery_instructions,
        estimated_bags, estimated_weight, weight_unit, billing_mode,
-       wash_temperature, detergent_preference, use_fabric_softener, use_bleach,
+       wash_temperature, detergent_preference, fragrance_code, use_fabric_softener, use_bleach,
        separate_colors, drying_preference, folding_preference,
        hang_dry_items, delicate_items, do_not_process_items, special_instructions
      ) VALUES (
@@ -79,7 +79,7 @@ async function insertLaundryDetails(details, tx = db) {
        $[pickupDate], $[pickupWindowCode], $[pickupWindowStart], $[pickupWindowEnd], $[pickupInstructions],
        $[deliveryDate], $[deliveryWindowCode], $[deliveryWindowStart], $[deliveryWindowEnd], $[deliveryInstructions],
        $[estimatedBags], $[estimatedWeight], $[weightUnit], $[billingMode],
-       $[washTemperature], $[detergentPreference], $[useFabricSoftener], $[useBleach],
+       $[washTemperature], $[detergentPreference], $[fragranceCode], $[useFabricSoftener], $[useBleach],
        $[separateColors], $[dryingPreference], $[foldingPreference],
        $[hangDryItems], $[delicateItems], $[doNotProcessItems], $[specialInstructions]
      ) RETURNING *`,

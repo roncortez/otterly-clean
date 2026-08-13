@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Loader2, MapPin, RotateCw, Search } from 'lucide-react';
-import { cx } from '@/shared/ui';
+import { cx, CONTROL_CLASS, CONTROL_HEIGHT } from '@/shared/ui';
 import { useDebounced } from '@/shared/hooks/useDebounced';
 import { SEARCH } from './config';
 import { autocomplete } from './geoapify';
@@ -158,7 +158,9 @@ export default function AddressAutocomplete({ bias, countryCode, onSelect, class
           onKeyDown={handleKeyDown}
           onFocus={() => results.length > 0 && setOpen(true)}
           placeholder="Conocoto, San Luis Shopping, Av. Ilaló…"
-          className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-text outline-none transition-colors placeholder:text-text-subtle focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20"
+          // Mismo aspecto que cualquier otro campo, sin poder ser un `<Input>`:
+          // este lleva su propio `role="combobox"` y su panel de resultados.
+          className={cx(CONTROL_CLASS, CONTROL_HEIGHT, 'pr-9')}
         />
         {status === 'loading' && (
           <Loader2

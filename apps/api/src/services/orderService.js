@@ -235,9 +235,18 @@ async function createOrder({ serviceType, customer, payload, request }) {
  * reenviarlo todo. Eso no era una reserva que reutiliza datos: era un formulario
  * duplicado con los huecos ya escritos.
  */
-function insertCleaningDetail(orderId, payload, region, place, tx) {
+async function insertCleaningDetail(orderId, payload, region, place, tx) {
   const d = payload.cleaning ?? {};
   const stable = resolvePlaceFields({ payload: d, place, areaUnit: region.units.area });
+
+  // Misma lista que en lavandería: el cliente no entiende por qué su casa puede
+  // oler a lavanda y su ropa no. `fragrancePreference` era texto libre; ahora
+  // recibe un código del catálogo (ver migracion 014).
+  const fragranceCode = await serviceCatalog.resolveOptionCode({
+    kind: serviceCatalog.OPTION_KINDS.FRAGRANCE,
+    code: d.fragrancePreference,
+    regionCode: region.code,
+  });
 
   // El codigo guardado se hereda solo si esta reserva entra por una via que lo
   // necesita, y se mira el metodo YA RESUELTO: quien no volvio a elegir como se
@@ -259,7 +268,7 @@ function insertCleaningDetail(orderId, payload, region, place, tx) {
       priorityAreas: d.priorityAreas ?? [],
       suppliesProvidedBy: d.suppliesProvidedBy ?? 'COMPANY',
       productPreferences: d.productPreferences ?? [],
-      fragrancePreference: d.fragrancePreference ?? null,
+      fragrancePreference: fragranceCode,
       customerPresent: d.customerPresent ?? true,
       petsSecured: d.petsSecured ?? null,
     },
@@ -284,6 +293,15 @@ async function insertLaundryDetail(orderId, payload, region, window, tx) {
     ? resolveTimeWindow({ windowCode: d.deliveryWindowCode, region })
     : null;
 
+  // La fragancia se guarda por codigo del catalogo, no por el texto que el
+  // cliente vio: si Operaciones renombra "Fresco", esta orden sigue diciendo lo
+  // mismo. Se valida contra el catalogo porque la lista es dato, no un enum.
+  const fragranceCode = await serviceCatalog.resolveOptionCode({
+    kind: serviceCatalog.OPTION_KINDS.FRAGRANCE,
+    code: d.fragranceCode,
+    regionCode: region.code,
+  });
+
   return orderRepo.insertLaundryDetails(
     {
       orderId,
@@ -304,6 +322,7 @@ async function insertLaundryDetail(orderId, payload, region, window, tx) {
       billingMode: d.billingMode ?? 'PER_WEIGHT',
       washTemperature: d.washTemperature ?? null,
       detergentPreference: d.detergentPreference ?? null,
+      fragranceCode,
       useFabricSoftener: d.useFabricSoftener ?? true,
       useBleach: d.useBleach ?? false,
       separateColors: d.separateColors ?? true,

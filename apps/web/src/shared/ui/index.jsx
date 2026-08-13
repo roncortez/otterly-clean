@@ -371,14 +371,28 @@ export function Field({ label, hint, error, required, children, className }) {
   );
 }
 
-const CONTROL_CLASS =
+/**
+ * El aspecto de un control de formulario, en un solo sitio.
+ *
+ * Se exporta porque hay controles que no pueden ser un `<Input>` —el buscador
+ * del mapa lleva su propio `role="combobox"` y su panel de resultados— y antes
+ * se copiaban las clases a ojo. Cada copia se desviaba un poco: otro fondo, otra
+ * altura, otro anillo de foco, y la diferencia solo se veía usando la
+ * aplicación. Importar la constante es lo que mantiene esos casos alineados sin
+ * obligarles a usar el componente.
+ *
+ * La altura va aparte (`CONTROL_HEIGHT`) porque los textarea no la llevan.
+ */
+export const CONTROL_CLASS =
   'w-full rounded-xl border border-border bg-surface-raised px-3.5 text-sm text-text ' +
   'transition-colors placeholder:text-text-subtle ' +
   'focus:border-forest-500 focus:outline-none focus:ring-2 focus:ring-forest-500/15 ' +
-  'disabled:bg-surface-sunken disabled:text-text-subtle';
+  'disabled:bg-surface-sunken disabled:text-text-subtle disabled:cursor-not-allowed';
+
+export const CONTROL_HEIGHT = 'h-11';
 
 export function Input({ className, ...props }) {
-  return <input className={cx(CONTROL_CLASS, 'h-11', className)} {...props} />;
+  return <input className={cx(CONTROL_CLASS, CONTROL_HEIGHT, className)} {...props} />;
 }
 
 export function Textarea({ className, rows = 3, ...props }) {

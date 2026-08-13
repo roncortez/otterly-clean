@@ -292,10 +292,58 @@ async function updatePlan({ serviceType, planId, payload, actor, request }) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Opciones configurables (fragancias, y las que vengan)
+// ---------------------------------------------------------------------------
+
+/** Listas de opciones que hoy se sirven al cliente. Ver migracion 014. */
+const OPTION_KINDS = Object.freeze({ FRAGRANCE: 'FRAGRANCE' });
+
+/**
+ * Opciones de una lista, para pintar un desplegable.
+ *
+ * Existe para que la fragancia deje de ser un campo de texto libre sin que eso
+ * signifique un enum en el codigo: anadir "Vainilla" es una fila, no un
+ * despliegue.
+ */
+async function listOptions({ kind, regionCode, serviceType = null }) {
+  const options = await catalogRepo.listOptions({ kind, regionCode, serviceType });
+  return options.map((option) => ({
+    code: option.code,
+    label: option.label,
+    description: option.description,
+  }));
+}
+
+/**
+ * Valida un codigo de opcion contra el catalogo y devuelve el que se guardara.
+ *
+ * Que el codigo exista lo comprueba el catalogo y no un enum de Zod, porque la
+ * lista es dato y no codigo. Vacio o ausente es valido -no elegir es una
+ * respuesta-; lo que se rechaza es un codigo inventado, que acabaria en la
+ * orden como una preferencia que nadie sabe servir.
+ */
+async function resolveOptionCode({ kind, code, regionCode }) {
+  if (code === undefined || code === null || code === '') return null;
+
+  const option = await catalogRepo.findOptionByCode({ kind, code, regionCode });
+  if (!option) {
+    throw new ValidationError('La opción seleccionada ya no está disponible.', {
+      kind,
+      code,
+    });
+  }
+
+  return option.code;
+}
+
 module.exports = {
+  OPTION_KINDS,
   listAll,
   listBookable,
   listForOperations,
+  listOptions,
+  resolveOptionCode,
   assertBookable,
   updateSettings,
   updatePlan,
