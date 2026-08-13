@@ -25,9 +25,12 @@ const ACCESS_METHODS = [
   { value: 'OTHER', label: 'Otro', needsSecret: false },
 ];
 
-function CleaningInstructions({ booking, update, updateDetail }) {
+function CleaningInstructions({ booking, update, updateDetail, selectedAddress }) {
   const { cleaning } = booking;
   const method = ACCESS_METHODS.find((entry) => entry.value === cleaning.accessMethod);
+  // El backend nunca devuelve el código guardado, solo si existe. Dejarlo en
+  // blanco reutiliza el que ya está cifrado en la dirección.
+  const savedSecret = Boolean(selectedAddress?.cleaningProfile?.hasAccessSecret);
 
   return (
     <div className="space-y-7">
@@ -72,12 +75,17 @@ function CleaningInstructions({ booking, update, updateDetail }) {
       {method?.needsSecret && (
         <div className="space-y-3">
           <Alert tone="info" title="Guardamos esto cifrado">
-            Solo el profesional asignado puede verlo, únicamente el día del servicio, y queda
-            registrado quién lo consultó y cuándo.
+            Solo lo ve el profesional que confirmó tu servicio, y queda registrado quién lo consultó
+            y cuándo.
           </Alert>
           <Field
             label={cleaning.accessMethod === 'DOOR_CODE' ? 'Código' : 'Dónde está la llave'}
-            required
+            required={!savedSecret}
+            hint={
+              savedSecret
+                ? 'Ya tenemos uno guardado para esta dirección: escríbelo solo si cambió.'
+                : undefined
+            }
           >
             <Input
               value={cleaning.accessSecret}

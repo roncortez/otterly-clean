@@ -140,7 +140,7 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
                 className={cx(
                   'rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
                   selected
-                    ? 'border-forest-500 bg-forest-600 text-white'
+                    ? 'border-service bg-service text-white'
                     : 'border-border bg-surface-raised text-text-muted hover:border-border-strong',
                 )}
               >
@@ -161,7 +161,7 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
                 className={cx(
                   'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors',
                   booking.extraCodes.includes(extra.code)
-                    ? 'border-forest-500 bg-forest-50'
+                    ? 'border-service bg-service-soft'
                     : 'border-border hover:bg-surface-sunken',
                 )}
               >
@@ -170,11 +170,11 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
                     type="checkbox"
                     checked={booking.extraCodes.includes(extra.code)}
                     onChange={() => toggleExtra(extra.code)}
-                    className="size-4.5 rounded border-border-strong text-forest-600 focus:ring-forest-500/25"
+                    className="size-4.5 rounded border-border-strong text-service focus:ring-service/25"
                   />
                   <span className="text-sm font-medium text-text">{extra.name}</span>
                 </span>
-                <span className="text-sm font-semibold text-forest-700 tnum">
+                <span className="text-sm font-semibold text-service-strong tnum">
                   +{money(extra.amount)}
                 </span>
               </label>
@@ -376,7 +376,7 @@ function LaundryStep({ booking, update, updateDetail, service, money, weightUnit
                 className={cx(
                   'flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors',
                   booking.extraCodes.includes(extra.code)
-                    ? 'border-forest-500 bg-forest-50'
+                    ? 'border-service bg-service-soft'
                     : 'border-border hover:bg-surface-sunken',
                 )}
               >
@@ -385,11 +385,11 @@ function LaundryStep({ booking, update, updateDetail, service, money, weightUnit
                     type="checkbox"
                     checked={booking.extraCodes.includes(extra.code)}
                     onChange={() => toggleExtra(extra.code)}
-                    className="size-4.5 rounded border-border-strong text-forest-600 focus:ring-forest-500/25"
+                    className="size-4.5 rounded border-border-strong text-service focus:ring-service/25"
                   />
                   <span className="text-sm font-medium text-text">{extra.name}</span>
                 </span>
-                <span className="text-sm font-semibold text-forest-700 tnum">
+                <span className="text-sm font-semibold text-service-strong tnum">
                   +{money(extra.amount)}
                 </span>
               </label>

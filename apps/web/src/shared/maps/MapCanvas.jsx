@@ -30,6 +30,12 @@ export default function MapCanvas({
   className,
   height = 'h-64 sm:h-72',
   label = 'Mapa para elegir la ubicación',
+  /**
+   * Elegir se hace en el formulario de direcciones; en el resto de pantallas el
+   * mapa solo muestra dónde está la casa. Un pin que se puede arrastrar sin que
+   * eso guarde nada invita a mover una ubicación que ya estaba bien.
+   */
+  draggable = true,
 }) {
   const nodeRef = useRef(null);
   const mapRef = useRef(null);
@@ -100,6 +106,10 @@ export default function MapCanvas({
     mapRef.current = map;
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
 
+    // Sin `onPick` el mapa es de solo lectura: no tiene sentido responder a un
+    // clic que no lleva a ninguna parte.
+    const interactive = Boolean(onPickRef.current);
+
     let loaded = false;
     map.on('load', () => {
       loaded = true;
@@ -111,7 +121,7 @@ export default function MapCanvas({
       if (!loaded) onUnavailableRef.current?.();
     });
 
-    map.on('click', (event) => emit(event.lngLat));
+    if (interactive) map.on('click', (event) => emit(event.lngLat));
 
     return () => {
       markerRef.current = null;
@@ -145,12 +155,13 @@ export default function MapCanvas({
     const lngLat = [longitude, latitude];
 
     if (!markerRef.current) {
-      const marker = new Marker({ draggable: true, color: '#166534' })
+      const canDrag = draggable && Boolean(onPickRef.current);
+      const marker = new Marker({ draggable: canDrag, color: '#166534' })
         .setLngLat(lngLat)
         .addTo(map);
       // Solo al soltar: geocodificar durante el arrastre sería una petición por
       // cada píxel recorrido.
-      marker.on('dragend', () => emit(marker.getLngLat()));
+      if (canDrag) marker.on('dragend', () => emit(marker.getLngLat()));
       markerRef.current = marker;
     } else {
       markerRef.current.setLngLat(lngLat);
@@ -164,7 +175,7 @@ export default function MapCanvas({
     if (!isOwnMove) {
       map.easeTo({ center: lngLat, zoom: Math.max(map.getZoom(), MAP_ZOOM.focused) });
     }
-  }, [ready, latitude, longitude]);
+  }, [ready, latitude, longitude, draggable]);
 
   return (
     <div

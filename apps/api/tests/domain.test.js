@@ -69,6 +69,26 @@ describe('Maquina de estados de limpieza', () => {
     expect(() => cleaningStateMachine.assertTransition('ON_THE_WAY', 'CANCELLED', ROLES.ADMIN)).not.toThrow();
   });
 
+  /**
+   * La politica de cancelacion del cliente, enumerada de una vez: la frontera
+   * es el momento en que alguien se pone en marcha. Se comprueba el conjunto
+   * completo y no un par de casos sueltos, porque anadir un estado nuevo al
+   * flujo no debe abrir una puerta sin que nadie se entere.
+   */
+  it('la frontera de la cancelacion del cliente es que el profesional salga', () => {
+    const canCancel = (from, role) =>
+      cleaningStateMachine.allowedTransitions(from, role).some((t) => t.to === 'CANCELLED');
+
+    for (const state of ['REQUESTED', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'CONFIRMED']) {
+      expect(canCancel(state, ROLES.CUSTOMER), state).toBe(true);
+    }
+    for (const state of ['ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS', 'NO_ACCESS', 'INCIDENT_REPORTED']) {
+      expect(canCancel(state, ROLES.CUSTOMER), state).toBe(false);
+      // Operaciones sigue pudiendo gestionar la excepcion en todos ellos.
+      expect(canCancel(state, ROLES.ADMIN), state).toBe(true);
+    }
+  });
+
   it('trata los estados finales como inmutables', () => {
     expect(cleaningStateMachine.isTerminal('COMPLETED')).toBe(true);
     expect(cleaningStateMachine.isTerminal('CANCELLED')).toBe(true);

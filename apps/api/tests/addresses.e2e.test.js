@@ -307,6 +307,152 @@ describe('Reservar solo donde atendemos', () => {
   });
 });
 
+/**
+ * Los datos del hogar (lo que antes era un "inmueble") cuelgan de la direccion.
+ *
+ * Lo que se prueba aqui es la promesa de producto: se escriben una vez y la
+ * siguiente reserva ya los trae. Y que el codigo de la puerta se comporta como
+ * en el resto del sistema: se guarda cifrado y no vuelve a salir nunca.
+ */
+describe('Datos del hogar de una direccion', () => {
+  it('se guardan en la direccion y se leen con ella', async () => {
+    const res = await request(app)
+      .patch(`/api/customer/addresses/${created.addressId}/cleaning-profile`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        propertyType: 'HOUSE',
+        bedrooms: 3,
+        bathrooms: 2,
+        hasPets: true,
+        pets: [{ type: 'gato', count: 2 }],
+        accessMethod: 'DOOR_CODE',
+        accessSecret: '9137*',
+        parkingInstructions: 'Visitas en el subsuelo 1',
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.cleaningProfile.bedrooms).toBe(3);
+    // El secreto nunca vuelve: solo si existe.
+    expect(res.body.cleaningProfile.hasAccessSecret).toBe(true);
+    expect(JSON.stringify(res.body)).not.toContain('9137');
+
+    const list = await request(app)
+      .get('/api/customer/addresses')
+      .set('Authorization', `Bearer ${auth.customer}`);
+    const address = list.body.addresses.find((a) => a.id === created.addressId);
+    expect(address.cleaningProfile.propertyType).toBe('HOUSE');
+    expect(address.cleaningProfile.pets).toEqual([{ type: 'gato', count: 2 }]);
+    expect(address.cleaningProfile.hasAccessSecret).toBe(true);
+    expect(JSON.stringify(list.body)).not.toContain('9137');
+  });
+
+  it('el codigo de la puerta queda cifrado, igual que en una orden', async () => {
+    const row = await db.one(
+      'SELECT access_secret_encrypted FROM address_cleaning_profiles WHERE address_id = $1',
+      [created.addressId],
+    );
+    expect(row.access_secret_encrypted).toMatch(/^v1:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
+    expect(row.access_secret_encrypted).not.toContain('9137');
+  });
+
+  it('la reserva hereda el codigo guardado sin que el cliente lo reescriba', async () => {
+    const plans = await request(app).get('/api/catalog/services/cleaning/plans');
+    const date = new Date();
+    date.setDate(date.getDate() + 3);
+
+    const res = await request(app)
+      .post('/api/customer/orders/cleaning')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: plans.body.plans[0].id,
+        addressId: created.addressId,
+        scheduledDate: date.toISOString().slice(0, 10),
+        windowCode: 'MORNING',
+        pricingInput: { durationMinutes: 180 },
+        // Sin accessSecret: el cliente ya lo dio una vez.
+        cleaning: { bedrooms: 3, bathrooms: 2, accessMethod: 'DOOR_CODE' },
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    const detail = await request(app)
+      .get(`/api/customer/orders/${res.body.order.id}`)
+      .set('Authorization', `Bearer ${auth.customer}`);
+    expect(detail.body.details.hasAccessSecret).toBe(true);
+  });
+
+  it('no hereda el codigo si esta vez abre el cliente', async () => {
+    const plans = await request(app).get('/api/catalog/services/cleaning/plans');
+    const date = new Date();
+    date.setDate(date.getDate() + 5);
+
+    const res = await request(app)
+      .post('/api/customer/orders/cleaning')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: plans.body.plans[0].id,
+        addressId: created.addressId,
+        scheduledDate: date.toISOString().slice(0, 10),
+        windowCode: 'MORNING',
+        pricingInput: { durationMinutes: 180 },
+        cleaning: { bedrooms: 3, bathrooms: 2, accessMethod: 'CUSTOMER_OPENS' },
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    // La clave sigue guardada en la casa, pero no viaja a un servicio en el que
+    // el cliente abre la puerta: no hay nada que el trabajador deba consultar.
+    const detail = await request(app)
+      .get(`/api/customer/orders/${res.body.order.id}`)
+      .set('Authorization', `Bearer ${auth.customer}`);
+    expect(detail.body.details.hasAccessSecret).toBe(false);
+  });
+
+  it('reservar actualiza los datos del hogar para la proxima vez', async () => {
+    const plans = await request(app).get('/api/catalog/services/cleaning/plans');
+    const date = new Date();
+    date.setDate(date.getDate() + 4);
+
+    await request(app)
+      .post('/api/customer/orders/cleaning')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: plans.body.plans[0].id,
+        addressId: created.addressId,
+        scheduledDate: date.toISOString().slice(0, 10),
+        windowCode: 'MORNING',
+        pricingInput: { durationMinutes: 180 },
+        cleaning: { bedrooms: 4, bathrooms: 3, propertyType: 'APARTMENT' },
+      });
+
+    const list = await request(app)
+      .get('/api/customer/addresses')
+      .set('Authorization', `Bearer ${auth.customer}`);
+    const address = list.body.addresses.find((a) => a.id === created.addressId);
+    expect(address.cleaningProfile.bedrooms).toBe(4);
+    expect(address.cleaningProfile.propertyType).toBe('APARTMENT');
+    // Y no se perdio el codigo que nunca se volvio a escribir.
+    expect(address.cleaningProfile.hasAccessSecret).toBe(true);
+  });
+
+  it('no se pueden tocar los datos del hogar de otra persona', async () => {
+    const res = await request(app)
+      .patch(`/api/customer/addresses/${created.addressId}/cleaning-profile`)
+      .set('Authorization', `Bearer ${auth.otherCustomer}`)
+      .send({ bedrooms: 1 });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('la lista de inmuebles paralela ya no existe', async () => {
+    const res = await request(app)
+      .get('/api/customer/properties')
+      .set('Authorization', `Bearer ${auth.customer}`);
+
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('Sin proveedor de mapas', () => {
   it('una direccion guardada sigue intacta y editable sin datos del proveedor', async () => {
     // Simula lo que queda si el geocodificador no responde: sin referencia del

@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Package, ShieldCheck, XCircle } from 'lucide-react';
+import { ArrowLeft, Headset, MapPin, Package, ShieldCheck, XCircle } from 'lucide-react';
 import { api } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
@@ -9,12 +10,16 @@ import {
   Card,
   CardHeader,
   DataRow,
+  Field,
+  Modal,
   Spinner,
   StatusBadge,
+  Textarea,
   Divider,
 } from '@/shared/ui';
 import { StatusTimeline } from '@/shared/ui/StatusTimeline';
 import { SERVICE_LABELS } from '@/shared/ui/ServiceCard';
+import WhatsAppButton from '@/shared/ui/WhatsAppButton';
 import { formatLongDate, formatTimeWindow } from '@/shared/format';
 
 /**
@@ -25,6 +30,9 @@ export default function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { money, taxLabel, freeCancellationHours } = useConfig();
+
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [reason, setReason] = useState('');
 
   const orderQuery = useApiQuery(`/customer/orders/${id}`);
   const detail = orderQuery.data;
@@ -39,11 +47,12 @@ export default function OrderDetailPage() {
   const error = orderQuery.error ?? actionError;
 
   async function handleCancel() {
-    const reason = window.prompt('¿Por qué cancelas el servicio? (opcional)');
-    if (reason === null) return;
-
     await execute(() => api.post(`/customer/orders/${id}/cancel`, { reason: reason || null }), {
-      onSuccess: orderQuery.reload,
+      onSuccess: () => {
+        setCancelOpen(false);
+        setReason('');
+        orderQuery.reload();
+      },
     });
   }
 
@@ -52,11 +61,17 @@ export default function OrderDetailPage() {
   if (!detail) return null;
 
   const { order, details, timeline, statusLabel, assignedStaff, availableTransitions } = detail;
+  /**
+   * Quién puede cancelar y cuándo lo decide la máquina de estados del backend,
+   * que responde con las transiciones permitidas para este rol y este estado.
+   * Aquí no se replica esa regla: solo se dibuja lo que el servidor permite.
+   */
   const canCancel = availableTransitions?.some((transition) => transition.to === 'CANCELLED');
+  const isClosed = ['COMPLETED', 'CANCELLED', 'DELIVERED'].includes(order.status);
   const staff = assignedStaff?.[0];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6" data-service={order.serviceType}>
       <button
         type="button"
         onClick={() => navigate(-1)}
@@ -71,7 +86,7 @@ export default function OrderDetailPage() {
       {/* Cabecera */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
+          <p className="text-xs font-semibold tracking-[0.14em] text-service-strong uppercase">
             {SERVICE_LABELS[order.serviceType]}
           </p>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-text">{order.planName}</h1>
@@ -100,7 +115,7 @@ export default function OrderDetailPage() {
         <Card>
           <CardHeader title="Quién atiende tu servicio" />
           <div className="flex items-center gap-4 p-5 sm:p-6">
-            <span className="flex size-14 items-center justify-center rounded-full bg-forest-100 text-lg font-semibold text-forest-700">
+            <span className="flex size-14 items-center justify-center rounded-full bg-service-soft text-lg font-semibold text-service-strong">
               {staff.displayName?.[0]}
             </span>
             <div className="min-w-0">
@@ -217,13 +232,67 @@ export default function OrderDetailPage() {
             <p className="text-sm text-text-muted">
               Puedes cancelar sin costo hasta {freeCancellationHours} horas antes.
             </p>
-            <Button variant="danger" loading={cancelling} onClick={handleCancel}>
+            <Button variant="danger" onClick={() => setCancelOpen(true)}>
               <XCircle className="size-4" aria-hidden="true" />
               Cancelar servicio
             </Button>
           </div>
         </>
       )}
+
+      {/*
+        Pasado el punto de no retorno, el cliente no se queda sin salida: se le
+        dice a dónde acudir. Cancelar deja de ser un botón porque ya hay alguien
+        en camino, y eso lo gestiona Operaciones —que además puede reagendar en
+        lugar de perder el servicio—.
+      */}
+      {!canCancel && !isClosed && (
+        <>
+          <Divider />
+          <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 font-semibold text-text">
+                <Headset className="size-4 text-text-subtle" aria-hidden="true" />
+                ¿Necesitas cambiar algo?
+              </p>
+              <p className="mt-1 text-sm text-text-muted">
+                Tu servicio ya está en marcha, así que la cancelación o el cambio de fecha los
+                gestiona nuestro equipo. Escríbenos y lo resolvemos contigo.
+              </p>
+            </div>
+            <WhatsAppButton
+              size="sm"
+              label="Hablar con el equipo"
+              message={`Hola, necesito ayuda con mi servicio ${order.reference}.`}
+            />
+          </Card>
+        </>
+      )}
+
+      <Modal
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        title="¿Cancelar este servicio?"
+        description={`Si faltan menos de ${freeCancellationHours} horas, la cancelación se marca como tardía.`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCancelOpen(false)}>
+              Mejor no
+            </Button>
+            <Button variant="danger" loading={cancelling} onClick={handleCancel}>
+              Sí, cancelar
+            </Button>
+          </>
+        }
+      >
+        <Field label="¿Por qué lo cancelas?" hint="Opcional, pero nos ayuda a mejorar.">
+          <Textarea
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Cambio de planes."
+          />
+        </Field>
+      </Modal>
     </div>
   );
 }

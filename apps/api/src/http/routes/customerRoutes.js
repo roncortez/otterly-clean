@@ -65,6 +65,29 @@ router.delete(
   }),
 );
 
+/**
+ * PATCH /api/customer/addresses/:id/cleaning-profile
+ *
+ * Datos del hogar para limpieza: cuantas habitaciones, como se entra, si hay
+ * mascotas. Cuelgan de la direccion —la unica entidad que comparten todos los
+ * servicios— en lugar de vivir en una lista de "inmuebles" aparte que nadie
+ * miraba al reservar. Los mantiene la propia reserva y se pueden corregir
+ * desde la pantalla del servicio de limpieza.
+ */
+router.patch(
+  '/addresses/:id/cleaning-profile',
+  validate({ params: schemas.idParamSchema, body: schemas.cleaningProfileSchema }),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await addressService.saveCleaningProfile({
+        user: req.user,
+        addressId: req.validatedParams.id,
+        payload: req.body,
+      }),
+    );
+  }),
+);
+
 // ---------------------------------------------------------------------------
 // Cotizacion
 // ---------------------------------------------------------------------------
@@ -196,38 +219,10 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// Propiedades e Inmuebles
-// ---------------------------------------------------------------------------
-
-const propertyService = require('../../services/propertyService');
-const couponService = require('../../services/couponService');
-
-router.get(
-  '/properties',
-  asyncHandler(async (req, res) => {
-    res.json({ properties: await propertyService.listProperties(req.user.id) });
-  }),
-);
-
-router.post(
-  '/properties',
-  asyncHandler(async (req, res) => {
-    const property = await propertyService.createProperty(req.user.id, req.body);
-    res.status(201).json({ property });
-  }),
-);
-
-router.delete(
-  '/properties/:id',
-  asyncHandler(async (req, res) => {
-    await propertyService.deleteProperty(Number(req.params.id), req.user.id);
-    res.status(204).send();
-  }),
-);
-
-// ---------------------------------------------------------------------------
 // Cupones (Validacion por el cliente)
 // ---------------------------------------------------------------------------
+
+const couponService = require('../../services/couponService');
 
 router.post(
   '/coupons/validate',

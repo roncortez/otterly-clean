@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles,
-  Shirt,
-  Scissors,
   CalendarCheck,
   ShieldCheck,
   Clock,
@@ -24,11 +21,20 @@ import api from '@/shared/api/client';
 import Header from '@/features/home/components/Header';
 import { useTranslation } from '@/shared/i18n/I18nContext';
 import { useConfig } from '@/shared/config/ConfigContext';
+import { useServiceExperiences } from '@/shared/services';
 import { ButtonLink, Card, SectionHeading, cx } from '@/shared/ui';
+
+/** Etiqueta corta de cada servicio en la portada; el resto viene del backend. */
+const BADGE_KEYS = {
+  CLEANING: 'services.badgeCleaning',
+  LAUNDRY: 'services.badgeLaundry',
+  ALTERATION: 'services.badgeRepair',
+};
 
 export default function HomePage() {
   const { t } = useTranslation();
   const { company } = useConfig();
+  const experiences = useServiceExperiences();
   const [banner, setBanner] = useState(null);
   const [showOverlay, setShowOverlay] = useState(true);
   const [openFaq, setOpenFaq] = useState(null);
@@ -49,34 +55,23 @@ export default function HomePage() {
     setOpenFaq(openFaq === index ? null : index);
   };
 
-  // El asistente de reserva vive en /reservar; /customer/booking no es una ruta
-  // real y caía en el comodín que devuelve a la portada.
-  const CATEGORIES = [
-    {
-      key: 'cleaning',
-      label: t('services.cleaningTitle'),
-      icon: Sparkles,
-      badge: t('services.badgeCleaning'),
-      description: t('services.cleaningDesc'),
-      link: '/reservar?service=CLEANING',
-    },
-    {
-      key: 'laundry',
-      label: t('services.laundryTitle'),
-      icon: Shirt,
-      badge: t('services.badgeLaundry'),
-      description: t('services.laundryDesc'),
-      link: '/reservar?service=LAUNDRY',
-    },
-    {
-      key: 'repair',
-      label: t('services.repairTitle'),
-      icon: Scissors,
-      badge: t('services.badgeRepair'),
-      description: t('services.repairDesc'),
-      link: '/reservar?service=ALTERATION',
-    },
-  ];
+  /**
+   * Los tres servicios, con su puerta de entrada.
+   *
+   * El texto de cada uno lo edita Operaciones y llega por
+   * `GET /api/catalog/config`; el enlace lo decide `shared/services`. Un
+   * servicio que todavía no se puede reservar entra igual a su pantalla, pero
+   * no promete una reserva que el dominio no sabe crear.
+   */
+  const CATEGORIES = experiences.map((experience) => ({
+    key: experience.code,
+    label: experience.label,
+    icon: experience.icon,
+    badge: BADGE_KEYS[experience.code] ? t(BADGE_KEYS[experience.code]) : null,
+    description: experience.description,
+    link: experience.path,
+    bookable: experience.bookable,
+  }));
 
   const STEPS = [
     { n: '01', title: t('howItWorks.step1Title'), desc: t('howItWorks.step1Desc') },
@@ -227,16 +222,19 @@ export default function HomePage() {
               return (
                 <div
                   key={cat.key}
-                  className="flex flex-col justify-between rounded-2xl border border-border bg-surface p-8 transition-all hover:border-forest-300 hover:bg-surface-raised hover:shadow-[var(--shadow-raised)]"
+                  data-service={cat.key}
+                  className="flex flex-col justify-between rounded-2xl border border-border bg-surface p-8 transition-all hover:border-service/40 hover:bg-surface-raised hover:shadow-[var(--shadow-raised)]"
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <div className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
+                      <div className="flex size-12 items-center justify-center rounded-xl bg-service-soft text-service-strong">
                         <Icon className="size-6" aria-hidden="true" />
                       </div>
-                      <span className="rounded-full bg-surface-sunken px-3 py-1 text-[11px] font-medium text-text-muted">
-                        {cat.badge}
-                      </span>
+                      {cat.badge && (
+                        <span className="rounded-full bg-surface-sunken px-3 py-1 text-[11px] font-medium text-text-muted">
+                          {cat.badge}
+                        </span>
+                      )}
                     </div>
                     <h3 className="mt-6 text-xl font-bold tracking-tight text-text">{cat.label}</h3>
                     <p className="mt-3 text-xs leading-relaxed text-text-muted">{cat.description}</p>
@@ -244,10 +242,10 @@ export default function HomePage() {
                   <div className="mt-8 border-t border-border pt-4">
                     <Link
                       to={cat.link}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest-700 transition-colors hover:text-forest-900"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-service-strong transition-colors hover:opacity-80"
                     >
                       <span>
-                        {t('services.bookAction')}
+                        {cat.bookable ? t('services.bookAction') : 'Conocer '}
                         {cat.label.toLowerCase()}
                       </span>
                       <ArrowRight className="size-3.5" aria-hidden="true" />

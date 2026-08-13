@@ -1,5 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, tokenStore, setSessionExpiredHandler } from '@/shared/api/client';
+import {
+  api,
+  tokenStore,
+  refreshSession,
+  setSessionExpiredHandler,
+  isSessionRejected,
+} from '@/shared/api/client';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +14,13 @@ const AuthContext = createContext(null);
  *
  * Al arrancar intenta recuperar la sesión con el refresh token guardado, para
  * que recargar la página no obligue a iniciar sesión otra vez.
+ *
+ * El refresco pasa por `refreshSession` del cliente HTTP y no por una llamada
+ * propia: esa función deduplica las peticiones en vuelo. Importa porque el
+ * token rota en cada uso, y este efecto se ejecuta dos veces en modo estricto
+ * de React —una vez por montaje, otra por el remontaje de desarrollo—. Con dos
+ * llamadas, la segunda presentaba un token ya rotado, recibía 401 y cerraba la
+ * sesión: recargar la página parecía cerrar sesión.
  */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -37,18 +50,21 @@ export function AuthProvider({ children }) {
     let cancelled = false;
 
     async function restore() {
-      const refreshToken = tokenStore.getRefresh();
-      if (!refreshToken) {
+      if (!tokenStore.getRefresh()) {
         setStatus('anonymous');
         return;
       }
 
       try {
-        const { data } = await api.post('/auth/refresh', { refreshToken });
+        const session = await refreshSession();
+        if (!cancelled) applySession(session);
+      } catch (error) {
         if (cancelled) return;
-        applySession(data);
-      } catch {
-        if (!cancelled) clearSession();
+        // Una sesión revocada o caducada se cierra del todo. Un fallo de red
+        // deja al usuario fuera de las pantallas privadas, pero conserva el
+        // token: al volver la conexión, recargar basta para entrar.
+        if (isSessionRejected(error)) clearSession();
+        else setStatus('anonymous');
       }
     }
 

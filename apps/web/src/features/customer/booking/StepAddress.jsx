@@ -25,14 +25,14 @@ export default function StepAddress({ booking, update, addresses }) {
               className={cx(
                 'flex w-full items-start gap-3.5 rounded-xl border p-4 text-left transition-all',
                 selected
-                  ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
+                  ? 'border-service bg-service-soft ring-2 ring-service/20'
                   : 'border-border hover:border-border-strong hover:bg-surface-sunken',
               )}
             >
               <span
                 className={cx(
                   'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg',
-                  selected ? 'bg-forest-600 text-white' : 'bg-surface-sunken text-text-muted',
+                  selected ? 'bg-service text-white' : 'bg-surface-sunken text-text-muted',
                 )}
               >
                 <MapPin className="size-4.5" aria-hidden="true" />

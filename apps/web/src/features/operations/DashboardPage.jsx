@@ -197,10 +197,11 @@ export default function DashboardPage() {
           <ul className="divide-y divide-border p-4 sm:p-5">
             {openIncidents.slice(0, 5).map((incident) => (
               <li key={incident.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                {/* Sin clasificar tambien pide atencion: nadie sabe aun si es grave. */}
                 <span
                   className={cx(
                     'mt-1 size-2 shrink-0 rounded-full',
-                    incident.severity === 'HIGH' ? 'bg-danger' : 'bg-warning',
+                    incident.severity === 'HIGH' || !incident.severity ? 'bg-danger' : 'bg-warning',
                   )}
                   aria-hidden="true"
                 />

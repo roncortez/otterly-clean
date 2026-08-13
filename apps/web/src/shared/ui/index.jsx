@@ -412,6 +412,10 @@ export function Checkbox({ label, description, className, ...props }) {
 /**
  * Selector de opción en tarjeta. Se usa en el asistente de reserva: elegir
  * entre limpieza estándar y profunda merece más que un desplegable.
+ *
+ * Lo seleccionado se marca con el acento del servicio en el que estás. Fuera de
+ * un servicio ese acento es el verde de la marca, así que se ve igual que
+ * siempre sin que ninguna pantalla tenga que decidirlo.
  */
 export function OptionCard({ selected, title, description, meta, disabled, onSelect }) {
   return (
@@ -424,7 +428,7 @@ export function OptionCard({ selected, title, description, meta, disabled, onSel
         'w-full rounded-xl border p-4 text-left transition-all',
         'disabled:cursor-not-allowed disabled:opacity-50',
         selected
-          ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
+          ? 'border-service bg-service-soft ring-2 ring-service/20'
           : 'border-border bg-surface-raised hover:border-border-strong hover:bg-surface-sunken',
       )}
     >
@@ -433,7 +437,7 @@ export function OptionCard({ selected, title, description, meta, disabled, onSel
           <p className="font-medium text-text">{title}</p>
           {description && <p className="mt-0.5 text-sm text-text-muted">{description}</p>}
         </div>
-        {meta && <span className="shrink-0 text-sm font-semibold text-forest-700 tnum">{meta}</span>}
+        {meta && <span className="shrink-0 text-sm font-semibold text-service-strong tnum">{meta}</span>}
       </div>
     </button>
   );

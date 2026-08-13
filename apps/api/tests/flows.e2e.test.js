@@ -173,11 +173,15 @@ describe('Flujo completo de limpieza', () => {
         city: 'Quito',
         administrativeArea: 'Pichincha',
         reference: 'Edificio Metropolitan, piso 4',
+        // El punto exacto que marco en el mapa, dentro de Quito Norte.
+        latitude: -0.1755432,
+        longitude: -78.4823119,
         isDefault: true,
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     created.addressId = res.body.address.id;
+    created.addressPoint = { latitude: -0.1755432, longitude: -78.4823119 };
   });
 
   it('cotiza limpieza por hora con IVA de Ecuador', async () => {
@@ -326,13 +330,48 @@ describe('Flujo completo de limpieza', () => {
       .set('Authorization', `Bearer ${auth.cleaner}`);
 
     expect(res.status).toBe(200);
-    // Minimo privilegio: nombre y telefono para coordinar, nada mas.
+    // Minimo privilegio: solo el nombre de pila para saber a quien atiende.
     expect(res.body.order.customer.firstName).toBe('Test');
     expect(res.body.order.customer.email).toBeUndefined();
     expect(res.body.order.totalAmount).toBeUndefined();
     // El codigo de acceso no viaja en la respuesta normal.
     expect(res.body.details.access_secret_encrypted).toBeUndefined();
     expect(res.body.details.hasAccessSecret).toBe(true);
+  });
+
+  /**
+   * Privacidad del cliente: recibir una asignacion no es haberla aceptado.
+   * Mientras no exista compromiso, el trabajador no se lleva el telefono ni la
+   * llave de la casa.
+   */
+  it('sin confirmar todavia no tiene el telefono del cliente ni el codigo de acceso', async () => {
+    const res = await request(app)
+      .get(`/api/staff/jobs/${created.cleaningOrderId}`)
+      .set('Authorization', `Bearer ${auth.cleaner}`);
+
+    expect(res.body.order.customer.phone).toBeUndefined();
+    expect(res.body.order.customer.phoneAvailable).toBe(false);
+    expect(res.body.assignment).toEqual({ status: 'OFFERED', accepted: false });
+    expect(res.body.details.canRevealAccessSecret).toBe(false);
+
+    const secret = await request(app)
+      .get(`/api/staff/jobs/${created.cleaningOrderId}/access-secret`)
+      .set('Authorization', `Bearer ${auth.cleaner}`);
+    expect(secret.status).toBe(403);
+  });
+
+  it('tampoco puede reportar una incidencia sobre un trabajo que no ha confirmado', async () => {
+    const res = await request(app)
+      .post(`/api/staff/jobs/${created.cleaningOrderId}/incidents`)
+      .set('Authorization', `Bearer ${auth.cleaner}`)
+      .send({ category: 'OTHER', description: 'Reporte antes de aceptar el trabajo.' });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+
+    const incidents = await db.any('SELECT * FROM incidents WHERE order_id = $1', [
+      created.cleaningOrderId,
+    ]);
+    expect(incidents).toHaveLength(0);
   });
 
   it('exige confirmar la asignacion antes de poder actualizar el servicio', async () => {
@@ -352,6 +391,56 @@ describe('Flujo completo de limpieza', () => {
 
     expect(accept.status, JSON.stringify(accept.body)).toBe(200);
     expect(accept.body.order.status).toBe('CONFIRMED');
+  });
+
+  it('al confirmar aparece el telefono del cliente, y no antes', async () => {
+    const res = await request(app)
+      .get(`/api/staff/jobs/${created.cleaningOrderId}`)
+      .set('Authorization', `Bearer ${auth.cleaner}`);
+
+    expect(res.body.assignment).toEqual({ status: 'ACCEPTED', accepted: true });
+    expect(res.body.order.customer.phone).toBe('+593991234567');
+    expect(res.body.order.customer.phoneAvailable).toBe(true);
+    // Sigue sin ver lo que nunca le corresponde.
+    expect(res.body.order.customer.email).toBeUndefined();
+    expect(res.body.order.customer.lastName).toBeUndefined();
+  });
+
+  /**
+   * La ubicacion que el trabajador usa para llegar es EXACTAMENTE la que marco
+   * el cliente. Sin esto, la pantalla acaba buscando el texto de la direccion en
+   * un mapa y aterrizando en la manzana de al lado.
+   */
+  it('el trabajador recibe la coordenada exacta que el cliente guardo', async () => {
+    const res = await request(app)
+      .get(`/api/staff/jobs/${created.cleaningOrderId}`)
+      .set('Authorization', `Bearer ${auth.cleaner}`);
+
+    expect(res.body.order.address.coordinates).toEqual(created.addressPoint);
+    // Numeros, no cadenas: NUMERIC llega como texto desde PostgreSQL.
+    expect(typeof res.body.order.address.coordinates.latitude).toBe('number');
+
+    // Y es la misma que ve el cliente en su propia direccion.
+    const suya = await request(app)
+      .get(`/api/customer/orders/${created.cleaningOrderId}`)
+      .set('Authorization', `Bearer ${auth.customer}`);
+    expect(suya.body.order.address.coordinates).toEqual(created.addressPoint);
+  });
+
+  it('confirmar es un compromiso: ya no puede rechazar el trabajo por su cuenta', async () => {
+    const res = await request(app)
+      .post(`/api/staff/jobs/${created.cleaningOrderId}/decline`)
+      .set('Authorization', `Bearer ${auth.cleaner}`)
+      .send({ reason: 'Me surgio otra cosa' });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+
+    // Y la orden sigue confirmada y con su trabajador.
+    const detail = await request(app)
+      .get(`/api/operations/orders/${created.cleaningOrderId}`)
+      .set('Authorization', `Bearer ${auth.admin}`);
+    expect(detail.body.order.status).toBe('CONFIRMED');
+    expect(detail.body.assignedStaff[0].assignmentStatus).toBe('ACCEPTED');
   });
 
   it('no permite saltarse pasos de la maquina de estados', async () => {
@@ -624,12 +713,14 @@ describe('Incidencias y cancelacion', () => {
       .set('Authorization', `Bearer ${auth.cleaner}`)
       .send({
         category: 'NO_ACCESS',
-        severity: 'HIGH',
         description: 'La recepcion no tiene autorizacion para dejarme entrar.',
       });
 
     expect(incident.status, JSON.stringify(incident.body)).toBe(201);
     expect(incident.body.statusChanged).toBe(true);
+    // El trabajador cuenta que paso; la gravedad la pone Operaciones despues.
+    expect(incident.body.incident.severity).toBeNull();
+    created.incidentId = incident.body.incident.id;
 
     const detail = await request(app)
       .get(`/api/customer/orders/${orderId}`)
@@ -642,6 +733,105 @@ describe('Incidencias y cancelacion', () => {
       .get('/api/operations/incidents')
       .set('Authorization', `Bearer ${auth.admin}`);
     expect(open.body.incidents.some((i) => i.order_id === orderId)).toBe(true);
+  });
+
+  it('el trabajador no puede decidir la gravedad: enviarla es un error, no un dato ignorado', async () => {
+    const res = await request(app)
+      .post(`/api/staff/jobs/${created.cleaningOrderId}/incidents`)
+      .set('Authorization', `Bearer ${auth.cleaner}`)
+      .send({ category: 'DAMAGE', description: 'Se rompio un vaso.', severity: 'LOW' });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('Operaciones clasifica la gravedad y queda auditado quien lo hizo', async () => {
+    const res = await request(app)
+      .patch(`/api/operations/incidents/${created.incidentId}/severity`)
+      .set('Authorization', `Bearer ${auth.admin}`)
+      .send({ severity: 'HIGH', note: 'El cliente se quedo sin servicio.' });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.incident.severity).toBe('HIGH');
+    expect(res.body.incident.classified_at).toBeTruthy();
+
+    const log = await db.any(
+      "SELECT * FROM audit_log WHERE action = 'INCIDENT_CLASSIFIED' AND entity_id = $1",
+      [String(created.incidentId)],
+    );
+    expect(log.length).toBe(1);
+    expect(log[0].before.severity).toBeNull();
+    expect(log[0].after.severity).toBe('HIGH');
+  });
+
+  it('el trabajador no tiene ninguna ruta para clasificar', async () => {
+    const res = await request(app)
+      .patch(`/api/operations/incidents/${created.incidentId}/severity`)
+      .set('Authorization', `Bearer ${auth.cleaner}`)
+      .send({ severity: 'LOW' });
+
+    expect(res.status).toBe(403);
+  });
+
+  /**
+   * Cancelacion del cliente: hasta que alguien se pone en marcha.
+   * La regla vive en la maquina de estados y se aplica igual desde cualquier
+   * endpoint; aqui se comprueba de extremo a extremo, con la orden en curso.
+   */
+  it('el cliente no puede cancelar con el profesional ya en camino, Operaciones si', async () => {
+    const order = await request(app)
+      .post('/api/customer/orders/cleaning')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: created.cleaningPlanId,
+        addressId: created.addressId,
+        scheduledDate: futureDate(4),
+        windowCode: 'MORNING',
+        pricingInput: { durationMinutes: 120 },
+        cleaning: { bedrooms: 1, bathrooms: 1 },
+      });
+    const orderId = order.body.order.id;
+
+    await request(app)
+      .post(`/api/operations/orders/${orderId}/assign`)
+      .set('Authorization', `Bearer ${auth.admin}`)
+      .send({ staffId: created.cleanerId });
+    await request(app)
+      .post(`/api/staff/jobs/${orderId}/accept`)
+      .set('Authorization', `Bearer ${auth.cleaner}`);
+
+    // Confirmado pero sin salir todavia: el cliente aun manda sobre su reserva.
+    const antes = await request(app)
+      .get(`/api/customer/orders/${orderId}`)
+      .set('Authorization', `Bearer ${auth.customer}`);
+    expect(antes.body.availableTransitions.map((t) => t.to)).toContain('CANCELLED');
+
+    await request(app)
+      .post(`/api/staff/jobs/${orderId}/status`)
+      .set('Authorization', `Bearer ${auth.cleaner}`)
+      .send({ status: 'ON_THE_WAY' });
+
+    const rechazada = await request(app)
+      .post(`/api/customer/orders/${orderId}/cancel`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({ reason: 'Ya no me viene bien' });
+    expect(rechazada.status, JSON.stringify(rechazada.body)).toBe(403);
+    expect(rechazada.body.error.code).toBe('FORBIDDEN_TRANSITION');
+
+    // Y la pantalla del cliente deja de ofrecerlo, porque lee lo mismo.
+    const despues = await request(app)
+      .get(`/api/customer/orders/${orderId}`)
+      .set('Authorization', `Bearer ${auth.customer}`);
+    expect(despues.body.order.status).toBe('ON_THE_WAY');
+    expect(despues.body.availableTransitions.map((t) => t.to)).not.toContain('CANCELLED');
+
+    // Operaciones sigue pudiendo gestionar la excepcion.
+    const porOperaciones = await request(app)
+      .post(`/api/operations/orders/${orderId}/cancel`)
+      .set('Authorization', `Bearer ${auth.admin}`)
+      .send({ reason: 'El cliente llamo a Operaciones' });
+    expect(porOperaciones.status, JSON.stringify(porOperaciones.body)).toBe(200);
+    expect(porOperaciones.body.cancelled).toBe(true);
   });
 
   it('el cliente cancela y la politica marca si fue tardia', async () => {

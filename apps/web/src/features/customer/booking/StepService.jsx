@@ -1,57 +1,71 @@
-import { Sparkles, Shirt } from 'lucide-react';
-import { OptionCard, cx } from '@/shared/ui';
+import { Sparkles, Shirt, Scissors } from 'lucide-react';
+import { Eyebrow, OptionCard, cx } from '@/shared/ui';
 
-const ICONS = { CLEANING: Sparkles, LAUNDRY: Shirt };
+const ICONS = { CLEANING: Sparkles, LAUNDRY: Shirt, ALTERATION: Scissors };
 
-/** Paso 1: qué servicio y con qué plan. */
-export default function StepService({ booking, update, catalog, service, money }) {
+/**
+ * Paso 1: qué servicio y con qué plan.
+ *
+ * Entrando desde la experiencia de un servicio (`lockedService`), el servicio
+ * ya está decidido y este paso solo elige el tipo dentro de él: volver a
+ * ofrecer la lista invitaría a salirse del contexto en el que la persona acaba
+ * de entrar.
+ */
+export default function StepService({ booking, update, catalog, service, money, lockedService }) {
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-text">¿Qué necesitas?</h2>
-        <p className="mt-1 text-text-muted">Elige el servicio y el tipo que mejor te sirva.</p>
+        <h2 className="text-xl font-bold tracking-tight text-text">
+          {lockedService && service ? `¿Qué tipo de ${service.label.toLowerCase()}?` : '¿Qué necesitas?'}
+        </h2>
+        <p className="mt-1 text-text-muted">
+          {lockedService
+            ? 'Elige la modalidad que mejor te sirva.'
+            : 'Elige el servicio y el tipo que mejor te sirva.'}
+        </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {catalog?.map((entry) => {
-          const Icon = ICONS[entry.code] ?? Sparkles;
-          const selected = booking.serviceType === entry.code;
+      {!lockedService && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {catalog?.map((entry) => {
+            const Icon = ICONS[entry.code] ?? Sparkles;
+            const selected = booking.serviceType === entry.code;
 
-          return (
-            <button
-              key={entry.code}
-              type="button"
-              onClick={() => update({ serviceType: entry.code, planId: null, extraCodes: [] })}
-              aria-pressed={selected}
-              className={cx(
-                'flex flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all',
-                selected
-                  ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
-                  : 'border-border hover:border-border-strong hover:bg-surface-sunken',
-              )}
-            >
-              <span
+            return (
+              <button
+                key={entry.code}
+                type="button"
+                data-service={entry.code}
+                onClick={() => update({ serviceType: entry.code, planId: null, extraCodes: [] })}
+                aria-pressed={selected}
                 className={cx(
-                  'flex size-10 items-center justify-center rounded-xl',
-                  selected ? 'bg-forest-600 text-white' : 'bg-surface-sunken text-text-muted',
+                  'flex flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all',
+                  selected
+                    ? 'border-service bg-service-soft ring-2 ring-service/20'
+                    : 'border-border hover:border-border-strong hover:bg-surface-sunken',
                 )}
               >
-                <Icon className="size-5" aria-hidden="true" />
-              </span>
-              <span>
-                <span className="block font-semibold text-text">{entry.label}</span>
-                <span className="mt-0.5 block text-sm text-text-muted">{entry.description}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+                <span
+                  className={cx(
+                    'flex size-10 items-center justify-center rounded-xl',
+                    selected ? 'bg-service text-white' : 'bg-surface-sunken text-text-muted',
+                  )}
+                >
+                  <Icon className="size-5" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block font-semibold text-text">{entry.label}</span>
+                  <span className="mt-0.5 block text-sm text-text-muted">{entry.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {service && (
         <div>
-          <h3 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
-            Tipo de {service.label.toLowerCase()}
-          </h3>
+          <Eyebrow className="mb-3 block">Tipo de {service.label.toLowerCase()}</Eyebrow>
           <div className="space-y-2.5">
             {service.plans.map((plan) => (
               <OptionCard

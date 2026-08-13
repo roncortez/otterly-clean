@@ -58,15 +58,51 @@ vi.mock('@/shared/api/client', () => {
   };
 });
 
+/**
+ * Catálogo tal como lo sirve el backend: limpieza y lavandería reservables,
+ * arreglo de prendas declarado pero sin flujo (`implemented: false`). Es la
+ * diferencia que la interfaz tiene que respetar.
+ */
+const SERVICE_TYPES = [
+  {
+    code: 'CLEANING',
+    label: 'Limpieza',
+    description: 'Limpieza a domicilio',
+    implemented: true,
+    active: true,
+    bookable: true,
+    displayOrder: 1,
+  },
+  {
+    code: 'LAUNDRY',
+    label: 'Lavandería',
+    description: 'Recogida y entrega',
+    implemented: true,
+    active: true,
+    bookable: true,
+    displayOrder: 2,
+  },
+  {
+    code: 'ALTERATION',
+    label: 'Arreglos',
+    description: 'Ajustes y costura',
+    implemented: false,
+    active: true,
+    bookable: false,
+    displayOrder: 3,
+  },
+];
+
 vi.mock('@/shared/config/ConfigContext', () => ({
   useConfig: () => ({
     company: { name: 'Otterly Clean', logoUrl: '', whatsapp: '', phone: '', email: '' },
-    serviceTypes: [],
+    serviceTypes: SERVICE_TYPES,
     region: null,
     isLoading: false,
     money: (cents) => String(cents),
     timeWindows: () => [],
     minLeadTimeHours: 3,
+    areaUnit: 'm2',
   }),
   ConfigProvider: ({ children }) => children,
 }));
@@ -214,6 +250,71 @@ describe('Acceso por roles', () => {
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
     // Y la portada sigue montada detrás.
     expect(screen.getAllByRole('banner').length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Tres experiencias, una sola aplicación.
+ *
+ * Lo que se comprueba aquí es que cada servicio tenga su sitio y su navegación,
+ * que lo común siga siendo común, y —lo más importante— que un servicio sin
+ * flujo de reserva no ofrezca reservar.
+ */
+describe('Experiencias por servicio', () => {
+  it('cada servicio tiene su pantalla con su navegación', async () => {
+    signedInAs(['CUSTOMER']);
+    const limpieza = renderAt('/limpieza');
+
+    // Aparece en la barra de escritorio y en la de móvil: las dos son la misma
+    // lista, pintada donde el pulgar la alcanza.
+    expect((await screen.findAllByRole('link', { name: 'Mi hogar' })).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Reservar').length).toBeGreaterThan(0);
+    limpieza.unmount();
+
+    renderAt('/lavanderia');
+    expect((await screen.findAllByRole('link', { name: 'Mis pedidos' })).length).toBeGreaterThan(0);
+    // La navegación es la del servicio en el que estás, no una lista común.
+    expect(screen.queryAllByRole('link', { name: 'Mi hogar' })).toHaveLength(0);
+  });
+
+  it('se puede cambiar de servicio desde cualquier pantalla', async () => {
+    signedInAs(['CUSTOMER']);
+    renderAt('/limpieza');
+
+    // El conmutador lleva a los tres, estés donde estés.
+    for (const label of ['Limpieza', 'Lavandería', 'Arreglos']) {
+      expect((await screen.findAllByRole('link', { name: label })).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('arreglo de prendas se presenta, pero no ofrece reservar', async () => {
+    signedInAs(['CUSTOMER']);
+    renderAt('/arreglos');
+
+    expect(await screen.findByText(/Todavía no se puede reservar aquí/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Reservar/ })).not.toBeInTheDocument();
+  });
+
+  it('las rutas antiguas siguen llevando a donde ahora vive cada cosa', async () => {
+    signedInAs(['CUSTOMER']);
+
+    const reservar = renderAt('/reservar?servicio=LAUNDRY');
+    // El asistente de lavandería, con el servicio ya fijado.
+    expect((await screen.findAllByRole('link', { name: 'Mis pedidos' })).length).toBeGreaterThan(0);
+    reservar.unmount();
+
+    renderAt('/inmuebles');
+    expect((await screen.findAllByText('Mi hogar')).length).toBeGreaterThan(0);
+  });
+
+  it('el inicio ofrece los tres servicios y solo deja reservar los que existen', async () => {
+    signedInAs(['CUSTOMER']);
+    renderAt('/inicio');
+
+    expect(await screen.findByText('Nuestros servicios')).toBeInTheDocument();
+    // Dos reservables, uno todavía no.
+    expect(screen.getAllByRole('link', { name: 'Reservar' })).toHaveLength(2);
+    expect(screen.getByText('Muy pronto')).toBeInTheDocument();
   });
 });
 

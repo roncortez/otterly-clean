@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Sparkles, Shirt } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { api, errorMessage } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
@@ -21,19 +21,18 @@ import StepSummary from './StepSummary';
  * limpieza necesita más de veinte datos y presentarlos juntos hace abandonar.
  * El paso de resumen muestra el precio calculado por el backend antes de
  * confirmar, para que nadie reserve sin saber cuánto va a pagar.
+ *
+ * El mismo asistente sirve a los dos servicios que tienen flujo. Cuando se
+ * abre desde la experiencia de un servicio (`serviceType`), ese servicio viene
+ * dado y el primer paso solo elige el tipo dentro de él.
+ *
+ * La dirección se pregunta pronto, antes que los detalles, porque de ella
+ * cuelga lo que ya sabemos de esa casa: preguntándola primero, el paso de
+ * detalles llega relleno en lugar de vacío.
  */
 
 /** Tipos que el asistente sabe configurar. Los define el dominio, no la UI. */
 const KNOWN_SERVICE_TYPES = ['CLEANING', 'LAUNDRY'];
-
-const STEPS = [
-  { id: 'service', label: 'Servicio' },
-  { id: 'configure', label: 'Detalles' },
-  { id: 'schedule', label: 'Fecha' },
-  { id: 'address', label: 'Dirección' },
-  { id: 'instructions', label: 'Instrucciones' },
-  { id: 'summary', label: 'Resumen' },
-];
 
 const INITIAL_CLEANING = {
   cleaningType: 'STANDARD',
@@ -75,7 +74,34 @@ const INITIAL_LAUNDRY = {
   specialInstructions: '',
 };
 
-export default function BookingWizard() {
+/**
+ * Lo que ya sabemos de esa casa, traducido al formulario.
+ *
+ * Es la mitad del trabajo que hace desaparecer el formulario duplicado: los
+ * datos que el cliente escribió la última vez llegan puestos, y solo tiene que
+ * corregir lo que cambió. El código de la puerta no viaja de vuelta —el backend
+ * nunca lo devuelve—, así que se deja en blanco: si no escribe otro, se
+ * reutiliza el guardado.
+ */
+function homeDefaults(address) {
+  const profile = address?.cleaningProfile;
+  if (!profile) return {};
+
+  return {
+    propertyType: profile.propertyType ?? INITIAL_CLEANING.propertyType,
+    bedrooms: profile.bedrooms ?? INITIAL_CLEANING.bedrooms,
+    bathrooms: profile.bathrooms ?? INITIAL_CLEANING.bathrooms,
+    areaValue: profile.areaValue ?? '',
+    accessMethod: profile.accessMethod ?? INITIAL_CLEANING.accessMethod,
+    accessInstructions: profile.accessInstructions ?? '',
+    parkingInstructions: profile.parkingInstructions ?? '',
+    hasPets: profile.hasPets ?? false,
+    pets: profile.pets ?? [],
+    petInstructions: profile.petInstructions ?? '',
+  };
+}
+
+export default function BookingWizard({ serviceType: fixedServiceType = null }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { money, timeWindows, weightUnit, areaUnit } = useConfig();
@@ -96,12 +122,14 @@ export default function BookingWizard() {
   const error = catalogQuery.error ?? addressQuery.error ?? actionError;
 
   const [booking, setBooking] = useState(() => ({
-    // El servicio puede llegar preseleccionado desde la portada. Se acepta solo
-    // si es uno de los tipos conocidos; si el catálogo no lo ofrece, el paso 1
-    // lo corrige al primero disponible.
-    serviceType: KNOWN_SERVICE_TYPES.includes(searchParams.get('servicio'))
-      ? searchParams.get('servicio')
-      : 'CLEANING',
+    // El servicio lo fija la ruta cuando se entra desde su experiencia. El
+    // parámetro solo se acepta si es uno de los tipos conocidos; si el catálogo
+    // no lo ofrece, el paso 1 lo corrige al primero disponible.
+    serviceType:
+      fixedServiceType ??
+      (KNOWN_SERVICE_TYPES.includes(searchParams.get('servicio'))
+        ? searchParams.get('servicio')
+        : 'CLEANING'),
     planId: null,
     extraCodes: [],
     scheduledDate: toDateInput(addDays(2)),
@@ -109,9 +137,23 @@ export default function BookingWizard() {
     addressId: null,
     durationMinutes: 180,
     customerNotes: '',
-    cleaning: INITIAL_CLEANING,
-    laundry: INITIAL_LAUNDRY,
+    // Solo lo que la persona ha tocado: el resto se deriva durante el render,
+    // de los valores por defecto y de la ficha de su casa.
+    cleaning: {},
+    laundry: {},
   }));
+
+  const steps = useMemo(
+    () => [
+      { id: 'service', label: fixedServiceType ? 'Tipo' : 'Servicio' },
+      { id: 'address', label: 'Dirección' },
+      { id: 'configure', label: 'Detalles' },
+      { id: 'schedule', label: 'Fecha' },
+      { id: 'instructions', label: 'Instrucciones' },
+      { id: 'summary', label: 'Resumen' },
+    ],
+    [fixedServiceType],
+  );
 
   const update = (patch) => setBooking((current) => ({ ...current, ...patch }));
   const updateDetail = (key, patch) =>
@@ -140,23 +182,27 @@ export default function BookingWizard() {
 
   const selectedWindowCode = booking.windowCode || windows[0]?.code || '';
 
-  const selectedAddressId = useMemo(() => {
-    if (booking.addressId && addresses.some((address) => address.id === booking.addressId)) {
-      return booking.addressId;
+  const selectedAddress = useMemo(() => {
+    if (booking.addressId) {
+      const chosen = addresses.find((address) => address.id === booking.addressId);
+      if (chosen) return chosen;
     }
-    return (addresses.find((address) => address.is_default) ?? addresses[0])?.id ?? null;
+    return addresses.find((address) => address.is_default) ?? addresses[0] ?? null;
   }, [booking.addressId, addresses]);
 
-  // Estado efectivo: lo que el usuario eligió, ya resuelto con los defectos.
+  // Estado efectivo: lo que el usuario eligió, ya resuelto con los defectos y
+  // con lo que ya sabíamos de su casa.
   const effective = useMemo(
     () => ({
       ...booking,
       serviceType: service?.code ?? booking.serviceType,
       planId: selectedPlanId,
       windowCode: selectedWindowCode,
-      addressId: selectedAddressId,
+      addressId: selectedAddress?.id ?? null,
+      cleaning: { ...INITIAL_CLEANING, ...homeDefaults(selectedAddress), ...booking.cleaning },
+      laundry: { ...INITIAL_LAUNDRY, ...booking.laundry },
     }),
-    [booking, service, selectedPlanId, selectedWindowCode, selectedAddressId],
+    [booking, service, selectedPlanId, selectedWindowCode, selectedAddress],
   );
 
   const pricingInput = useMemo(() => {
@@ -169,7 +215,7 @@ export default function BookingWizard() {
     return { estimatedWeight: effective.laundry.estimatedWeight };
   }, [effective, service]);
 
-  const currentStep = STEPS[stepIndex];
+  const currentStep = steps[stepIndex];
   const isSummary = currentStep.id === 'summary';
 
   // El precio siempre lo calcula el backend: el frontend no replica reglas.
@@ -234,7 +280,7 @@ export default function BookingWizard() {
           ...payload,
           cleaning: {
             ...rest,
-            areaValue: areaValue === '' ? null : Number(areaValue),
+            areaValue: areaValue === '' || areaValue === null ? null : Number(areaValue),
             areaUnit,
             pets: rest.hasPets ? pets : [],
             petsSecured: rest.hasPets ? petsSecured : null,
@@ -248,8 +294,7 @@ export default function BookingWizard() {
     };
 
     await execute(request, {
-      onSuccess: (response) =>
-        navigate(`/servicios/${response.data.order.id}`, { replace: true }),
+      onSuccess: (response) => navigate(`/servicios/${response.data.order.id}`, { replace: true }),
     });
   }
 
@@ -276,17 +321,19 @@ export default function BookingWizard() {
     service,
     catalog,
     addresses,
+    selectedAddress,
     money,
     weightUnit,
     areaUnit,
     timeWindows: windows,
+    lockedService: Boolean(fixedServiceType),
   };
 
   return (
     <div className="mx-auto max-w-2xl">
       {/* Progreso: numerado porque la reserva sí es una secuencia real */}
       <ol className="mb-8 flex items-center gap-1.5" aria-label="Progreso de la reserva">
-        {STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const done = index < stepIndex;
           const active = index === stepIndex;
           return (
@@ -294,7 +341,7 @@ export default function BookingWizard() {
               <span
                 className={cx(
                   'h-1 rounded-full transition-colors',
-                  done && 'bg-forest-500',
+                  done && 'bg-service',
                   active && 'bg-accent-500',
                   !done && !active && 'bg-border',
                 )}
@@ -320,9 +367,9 @@ export default function BookingWizard() {
 
       <Card className="p-5 sm:p-7">
         {currentStep.id === 'service' && <StepService {...stepProps} />}
+        {currentStep.id === 'address' && <StepAddress {...stepProps} />}
         {currentStep.id === 'configure' && <StepConfigure {...stepProps} />}
         {currentStep.id === 'schedule' && <StepSchedule {...stepProps} />}
-        {currentStep.id === 'address' && <StepAddress {...stepProps} />}
         {currentStep.id === 'instructions' && <StepInstructions {...stepProps} />}
         {currentStep.id === 'summary' && <StepSummary {...stepProps} pricing={pricing} />}
       </Card>
@@ -336,7 +383,7 @@ export default function BookingWizard() {
           {stepIndex === 0 ? 'Cancelar' : 'Atrás'}
         </Button>
 
-        {stepIndex < STEPS.length - 1 ? (
+        {stepIndex < steps.length - 1 ? (
           <Button size="lg" disabled={!canContinue} onClick={() => setStepIndex(stepIndex + 1)}>
             Continuar
             <ArrowRight className="size-4" aria-hidden="true" />
@@ -351,5 +398,3 @@ export default function BookingWizard() {
     </div>
   );
 }
-
-export { STEPS, Sparkles, Shirt };

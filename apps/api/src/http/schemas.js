@@ -164,6 +164,38 @@ const cleaningDetailSchema = z.object({
   specialInstructions: z.string().trim().max(2000).optional().nullable(),
 });
 
+/**
+ * Datos del hogar de una direccion: lo que antes se registraba como "inmueble".
+ *
+ * Es el subconjunto duradero del detalle de limpieza —lo que describe la casa,
+ * no la visita— y por eso repite sus enums en lugar de inventar otros.
+ *
+ * Todo es opcional porque la ficha se completa a trozos: parte la escribe el
+ * asistente de reserva y parte la pantalla de "Mi hogar", y enviar solo lo que
+ * cambia no puede borrar el resto. `accessSecret` distingue "no lo menciono"
+ * (ausente) de "quitalo" (cadena vacia).
+ */
+const cleaningProfileSchema = z
+  .object({
+    propertyType: z.enum(['HOUSE', 'APARTMENT', 'SUITE', 'OFFICE']).optional(),
+    bedrooms: z.number().int().min(0).max(20).optional(),
+    bathrooms: z.number().int().min(0).max(20).optional(),
+    areaValue: z.number().positive().max(100000).optional().nullable(),
+    areaUnit: z.enum(['m2', 'sqft']).optional().nullable(),
+    hasPets: z.boolean().optional(),
+    pets: z.array(petSchema).max(10).optional(),
+    petInstructions: z.string().trim().max(1000).optional().nullable(),
+    accessMethod: z
+      .enum(['CUSTOMER_OPENS', 'KEY', 'DOOR_CODE', 'CONCIERGE', 'LOCKBOX', 'OTHER'])
+      .optional(),
+    accessInstructions: z.string().trim().max(1000).optional().nullable(),
+    accessSecret: z.string().trim().max(500).optional().nullable(),
+    parkingInstructions: z.string().trim().max(500).optional().nullable(),
+    notes: z.string().trim().max(1000).optional().nullable(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, { message: 'No hay nada que actualizar' });
+
 // --- Detalle de lavanderia -------------------------------------------------
 
 const laundryDetailSchema = z.object({
@@ -329,21 +361,37 @@ const selfProfileSchema = z
 
 const onboardingPatchSchema = selfProfileSchema;
 
-const incidentSchema = z.object({
-  category: z.enum([
-    'NO_ACCESS',
-    'DAMAGE',
-    'MISSING_ITEM',
-    'CUSTOMER_ABSENT',
-    'UNSAFE_CONDITIONS',
-    'INCOMPLETE_SERVICE',
-    'EQUIPMENT',
-    'OTHER',
-  ]),
-  severity: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
-  description: z.string().trim().min(1, 'Describe lo ocurrido').max(2000),
-  attachments: z.array(z.string().url().max(500)).max(10).default([]),
-});
+/**
+ * Reporte de una incidencia: que paso, contado por quien lo vivio.
+ *
+ * `severity` NO esta aqui, y es estricto para que su ausencia se note: quien
+ * envie una gravedad recibe un 400 en lugar de creer que la fijo. Clasificar es
+ * una decision de Operaciones (`classifyIncidentSchema`).
+ */
+const incidentSchema = z
+  .object({
+    category: z.enum([
+      'NO_ACCESS',
+      'DAMAGE',
+      'MISSING_ITEM',
+      'CUSTOMER_ABSENT',
+      'UNSAFE_CONDITIONS',
+      'INCOMPLETE_SERVICE',
+      'EQUIPMENT',
+      'OTHER',
+    ]),
+    description: z.string().trim().min(1, 'Describe lo ocurrido').max(2000),
+    attachments: z.array(z.string().url().max(500)).max(10).default([]),
+  })
+  .strict();
+
+/** Clasificacion administrativa. Solo cuelga de /api/operations. */
+const classifyIncidentSchema = z
+  .object({
+    severity: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+    note: z.string().trim().max(500).optional().nullable(),
+  })
+  .strict();
 
 const resolveIncidentSchema = z.object({
   status: z.enum(['IN_REVIEW', 'RESOLVED', 'DISMISSED']).default('RESOLVED'),
@@ -543,6 +591,7 @@ module.exports = {
   onboardingPatchSchema,
   addressSchema,
   updateAddressSchema,
+  cleaningProfileSchema,
   createCleaningOrderSchema,
   createLaundryOrderSchema,
   quoteSchema,
@@ -553,6 +602,7 @@ module.exports = {
   updateStaffSchema,
   verificationSchema,
   incidentSchema,
+  classifyIncidentSchema,
   resolveIncidentSchema,
   bagSchema,
   bagStatusSchema,

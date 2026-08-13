@@ -54,6 +54,51 @@ El campo `timestamps` hace que marcar un estado registre su hora
 automáticamente. Por eso el timeline del cliente tiene marcas de tiempo reales
 sin que ningún controlador las escriba a mano.
 
+### Confirmar es el momento que parte el flujo en dos
+
+Una asignación tiene dos estados vivos, y la diferencia entre ellos es todo el
+compromiso que existe: `OFFERED` es "te lo hemos ofrecido"; `ACCEPTED` es "dije
+que lo haría". De ahí cuelgan cuatro reglas, todas en el backend:
+
+| Antes de confirmar (`OFFERED`)        | Después de confirmar (`ACCEPTED`)      |
+| ------------------------------------- | -------------------------------------- |
+| Ve el trabajo: qué, cuándo y dónde    | Además, el teléfono del cliente         |
+| Sin código de acceso al domicilio     | Puede pedirlo, y queda auditado         |
+| No puede reportar incidencias         | Puede reportarlas                       |
+| **Puede rechazar la asignación**      | **Ya no**: la reasignación es de Operaciones |
+
+El razonamiento es el mismo en las cuatro: **que la empresa ofrezca un trabajo no
+significa que vaya a hacerse**. Repartir el teléfono del cliente y la llave de su
+casa entre gente que quizá nunca pise esa vivienda es exactamente lo que el
+producto no debe hacer, y una incidencia sobre un servicio que aún no se ha
+aceptado no describe nada que haya pasado.
+
+En el otro sentido: una vez confirmado, el cliente ya tiene profesional y hora.
+Soltar eso desde la aplicación con un botón convertiría un compromiso en una
+sugerencia, así que `declineAssignment` responde 409 y la interfaz lo advierte
+**antes** de confirmar, no después. Reasignar sigue siendo posible: lo hace
+Operaciones, que además puede avisar al cliente o reagendar.
+
+Al completar el servicio la asignación pasa a `COMPLETED` y se pierden los dos
+accesos —teléfono y código—, aunque el trabajador conserve el historial de lo que
+hizo. El acceso dura lo que dura el motivo.
+
+### Reportar una incidencia y clasificarla son dos cosas
+
+Quien vive el problema lo cuenta; **cuánto importa lo decide Operaciones**. La
+gravedad determina a quién se avisa y qué se compensa: es una decisión de
+negocio, no una impresión de quien está en la puerta con prisa.
+
+Por eso `incidents.severity` **nace nulo** —"sin clasificar" es un estado real—,
+el esquema del reporte es `.strict()` y rechaza un `severity` en el cuerpo con un
+400 en lugar de ignorarlo en silencio, y la clasificación vive en
+`PATCH /api/operations/incidents/:id/severity`, dentro del árbol que exige ADMIN.
+Cada clasificación queda en `audit_log` con su valor anterior
+(`INCIDENT_CLASSIFIED`): quien baje la gravedad de un daño tiene nombre.
+
+El `DEFAULT 'MEDIUM'` que había antes era la peor de las opciones: una gravedad
+que nadie eligió, indistinguible de una decidida de verdad.
+
 ### Tipo de servicio ≠ configuración comercial
 
 Son dos preguntas distintas que conviene no mezclar:
@@ -461,6 +506,45 @@ corrigió a mano.
 No se añadieron columnas de número, edificio o departamento: `street_line1` y
 `street_line2` ya lo cubren, y duplicarlas obligaría a decidir cuál manda.
 
+### El inmueble es la ficha de una dirección, no una entidad aparte
+
+Existía una tabla `properties` con su propia calle, ciudad y provincia, editable
+desde una pantalla "Inmuebles". No la miraba ninguna reserva: el cliente escribía
+la misma casa dos veces y el trabajador no veía ninguno de esos datos. Dos
+modelos de dirección en paralelo, uno de ellos inútil.
+
+Lo que sí aportaba —cuántas habitaciones, cuántos baños, cómo se entra, si hay
+mascotas— son datos **del hogar** y solo los usa limpieza. Ahora viven en
+`address_cleaning_profiles`, que cuelga de la dirección igual que
+`cleaning_details` cuelga de la orden:
+
+```
+addresses ──┬── address_cleaning_profiles   (datos del hogar, para limpieza)
+            └── orders                      (cada reserva, con su propio detalle)
+```
+
+Tres consecuencias que son el motivo del cambio:
+
+- **La dirección es lo único que comparten los servicios.** Lavandería usa la
+  misma sin arrastrar datos que no le importan, y un servicio futuro también.
+- **No hay formulario duplicado.** La reserva rellena la ficha al confirmarse
+  (`orderService.rememberHome`) y la siguiente reserva llega con los datos
+  puestos. La pantalla "Mi hogar" es para corregirlos, no para escribirlos otra
+  vez.
+- **La orden sigue guardando su propia foto.** `cleaning_details` no referencia
+  la ficha: si el cliente cambia mañana los datos de su casa, lo que se acordó en
+  una reserva pasada no se reescribe.
+
+El código de acceso se comporta igual que en una orden: se cifra con AES-256-GCM,
+**nunca vuelve en una respuesta** (solo `hasAccessSecret`) y, si el cliente no
+escribe uno nuevo al reservar, se copia el texto cifrado tal cual a la orden, sin
+descifrarlo por el camino.
+
+La migración 006 traslada los inmuebles existentes: si el cliente ya tenía una
+dirección con la misma calle, se fusionan; si no, la dirección se crea a partir
+del inmueble. Después, `properties` se elimina —mantenerla habría dejado el
+modelo viejo al lado del nuevo.
+
 ### El proveedor no da nombre a las columnas
 
 `google_place_id` se renombró a `provider_place_id` y se le añadió
@@ -583,7 +667,8 @@ distintas.
 Enrutado **por audiencia**, no por entidad:
 
 ```
-/inicio, /reservar, /servicios, /direcciones   → CUSTOMER
+/inicio, /limpieza/*, /lavanderia/*, /arreglos,
+/servicios, /direcciones                        → CUSTOMER
 /operaciones/*                                  → ADMIN
 /trabajo/*                                      → STAFF
 ```
@@ -593,6 +678,68 @@ Así el control de acceso se ve al leer `App.jsx`. `RequireRole` comprueba
 cada consola ofrece un enlace a la otra solo si la persona tiene el rol. El
 backend revalida todo: el enrutado solo evita mostrar pantallas que no
 corresponden.
+
+### Tres experiencias, una aplicación
+
+Para el cliente, limpieza, lavandería y arreglo de prendas son servicios
+distintos: se contratan por motivos distintos y se preguntan cosas distintas. En
+la primera versión compartían una sola pantalla con todo mezclado, y el
+resultado era que nada parecía diseñado para lo que la persona venía a hacer.
+
+Ahora cada uno tiene su rama de rutas, su navegación y su acento de color. Lo
+que **no** se duplicó: la sesión, el cliente HTTP, las direcciones, el detalle
+de pedido, el historial global ni los componentes. No hay tres aplicaciones,
+tres backends ni tres sistemas de sesión; hay un contexto de servicio.
+
+Ese contexto es una tabla, `shared/services/index.js`:
+
+```js
+{ code: 'LAUNDRY', slug: 'lavanderia', path: '/lavanderia', label: 'Lavandería',
+  icon: Shirt, nav: [ … ] }
+```
+
+De ahí salen la navegación (escritorio y móvil), el conmutador de servicio, los
+enlaces de la portada y el color. Añadir una pantalla a un servicio es añadir
+una fila; **ninguna pantalla escribe su propia lista de enlaces**.
+
+Tres decisiones que lo mantienen simple:
+
+- **Los tipos siguen siendo tres, fijos y conocidos.** La tabla les da nombre y
+  ruta, no los inventa: sigue mandando `domain/shared/serviceTypes.js`.
+- **Quién decide si se puede reservar es el backend.** `useServiceExperiences`
+  cruza la tabla con `GET /api/catalog/config` (`implemented` + `active` →
+  `bookable`) y solo entonces aparece un botón de reservar. Arreglo de prendas
+  tiene su pantalla y su color, pero no ofrece una reserva que el dominio no
+  sabe crear.
+- **El asistente de reserva es uno.** `BookingWizard` recibe el servicio de la
+  ruta (`serviceType`) y oculta el paso de elegirlo; el resto del flujo es el
+  mismo código.
+
+Las rutas anteriores (`/reservar`, `/reservar?servicio=…`, `/inmuebles`) siguen
+existiendo como redirecciones: no se rompe ningún enlace guardado.
+
+### Identidad visual por servicio
+
+Cada experiencia tiene un acento, y los tres salen de la paleta que ya existía
+—verde bosque, salvia y terracota—, para que sigan siendo la misma marca:
+
+| Servicio  | Acento          |
+| --------- | --------------- |
+| Limpieza  | Verde bosque    |
+| Lavandería| Salvia          |
+| Arreglos  | Terracota       |
+
+Se resuelve con un atributo y cinco variables CSS (`index.css`):
+`[data-service='LAUNDRY']` redefine `--service`, `--service-strong`,
+`--service-soft`… y `@theme inline` las expone como `text-service`,
+`bg-service-soft`, `border-service`. El contenedor de la experiencia pone el
+atributo y **ningún componente escribe el color de un servicio**: una tarjeta de
+pedido en una lista mezclada lleva su propio acento con solo declarar
+`data-service={order.serviceType}`.
+
+Fuera de un servicio —portada, direcciones, consolas internas— `--service` vale
+el verde de la marca, así que esas pantallas se ven exactamente igual que antes
+sin tocarlas. No hay más sistema de temas que esto, a propósito.
 
 ### Formularios de configuración
 
@@ -615,6 +762,31 @@ El access token vive **en memoria** y solo el refresh token se persiste en
 `localStorage`. Un XSS que lea `localStorage` no obtiene un token de acceso
 vigente, y la sesión se puede revocar desde el servidor. Ante un 401 el cliente
 refresca una vez y reintenta la petición original de forma transparente.
+
+**El refresco es único en vuelo.** La promesa vive en el módulo
+(`shared/api/client.js` → `refreshSession`), no en un componente, y todo el que
+necesite refrescar espera a la misma: el interceptor de 401, y también el efecto
+de arranque que recupera la sesión al cargar la página.
+
+No es una optimización, es lo que hace que recargar funcione. El refresh token
+**rota en cada uso**, así que dos llamadas en paralelo con el mismo token
+terminan con una rechazada. Y el efecto de arranque de React se ejecuta **dos
+veces** en modo estricto: sin deduplicar, la segunda presentaba un token ya
+rotado, recibía 401 y cerraba la sesión. El síntoma era exactamente ese —recargar
+parecía cerrar sesión— y la causa no estaba en la autenticación, sino en pedir
+dos veces lo que solo se puede pedir una.
+
+La otra mitad de la regla: **una sesión solo termina cuando el servidor lo dice**
+(401/403). Un servidor caído o una conexión que se corta dejan al usuario fuera
+de las pantallas privadas, pero **no borran el refresh token**, para que volver a
+cargar cuando haya red baste para entrar. Antes, cualquier fallo de red obligaba
+a escribir la contraseña otra vez.
+
+El servidor cierra la carrera por su lado con un **margen de rotación** de 30
+segundos (`authService.ROTATION_GRACE_MS`): un token recién rotado se sigue
+aceptando ese rato, para que dos pestañas que recargan a la vez no se echen
+fuera. Revocar sigue siendo inmediato —ver
+[Seguridad](SECURITY.md#rotación-y-margen).
 
 ## Qué está preparado pero no implementado
 

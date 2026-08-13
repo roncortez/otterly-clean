@@ -1,24 +1,31 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarPlus, Sparkles, Shirt, ArrowRight, CalendarX2 } from 'lucide-react';
+import { ArrowRight, CalendarPlus } from 'lucide-react';
 import { useApiQuery } from '@/shared/api/useApiQuery';
 import { useAuth } from '@/shared/auth/AuthContext';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { Alert, ButtonLink, Card, EmptyState, Spinner, StatusBadge } from '@/shared/ui';
+import { Alert, ButtonLink, Card, EmptyState, Eyebrow, Spinner, StatusBadge, cx } from '@/shared/ui';
 import { StatusTimeline } from '@/shared/ui/StatusTimeline';
 import { ServiceCard } from '@/shared/ui/ServiceCard';
+import { useServiceExperiences } from '@/shared/services';
 import { formatLongDate, formatTimeWindow, isToday } from '@/shared/format';
 
 /**
- * Panel del cliente.
+ * Inicio del cliente.
  *
- * La pregunta que responde arriba del todo es "¿qué está pasando ahora?".
- * Si hay un servicio en curso, ocupa el lugar principal con su timeline
- * desplegado; el resto queda por debajo.
+ * Responde dos preguntas en este orden: "¿qué está pasando ahora?" y "¿qué
+ * puedo pedir?". Lo segundo se presenta como tres puertas —limpieza, lavandería
+ * y arreglos—, porque para el cliente son servicios distintos aunque compartan
+ * cuenta, direcciones e historial.
+ *
+ * Un servicio que el dominio todavía no sabe crear se muestra, pero no ofrece
+ * una acción de reserva que iba a fallar: quien decide si hay botón es el
+ * backend (`bookable`), no esta pantalla.
  */
 export default function DashboardPage() {
   const { user } = useAuth();
   const { money } = useConfig();
+  const experiences = useServiceExperiences();
 
   const activeParams = useMemo(() => ({ activeOnly: true, limit: 10 }), []);
   const historyParams = useMemo(() => ({ limit: 5 }), []);
@@ -44,7 +51,7 @@ export default function DashboardPage() {
       <header>
         <p className="text-sm text-text-muted">Hola, {user?.firstName}</p>
         <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight text-text sm:text-3xl">
-          {active.length > 0 ? 'Tus servicios en curso' : 'Todo en orden'}
+          {active.length > 0 ? 'Tus servicios en curso' : '¿Qué necesitas hoy?'}
         </h1>
       </header>
 
@@ -52,7 +59,7 @@ export default function DashboardPage() {
 
       {/* Servicio activo con timeline: el corazón de la pantalla */}
       {liveDetail && (
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden" data-service={liveDetail.order.serviceType}>
           <div className="border-b border-border bg-forest-800 px-5 py-4 text-text-inverse sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -78,11 +85,9 @@ export default function DashboardPage() {
             <div className="space-y-4 md:border-l md:border-border md:pl-6">
               {liveDetail.assignedStaff?.[0] ? (
                 <div>
-                  <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
-                    Quién lo atiende
-                  </p>
+                  <Eyebrow className="mb-2 block">Quién lo atiende</Eyebrow>
                   <div className="flex items-center gap-3">
-                    <span className="flex size-11 items-center justify-center rounded-full bg-forest-100 font-semibold text-forest-700">
+                    <span className="flex size-11 items-center justify-center rounded-full bg-service-soft font-semibold text-service-strong">
                       {liveDetail.assignedStaff[0].displayName?.[0]}
                     </span>
                     <div>
@@ -121,43 +126,25 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Acciones rápidas */}
+      {/* Las tres puertas */}
       <section>
-        <h2 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
-          Reservar un servicio
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <QuickAction
-            to="/reservar?servicio=CLEANING"
-            icon={Sparkles}
-            title="Limpieza"
-            description="Estándar o profunda, en el horario que elijas."
-          />
-          <QuickAction
-            to="/reservar?servicio=LAUNDRY"
-            icon={Shirt}
-            title="Lavandería"
-            description="Recogemos, lavamos y te la devolvemos doblada."
-          />
+        <Eyebrow className="mb-3 block">Nuestros servicios</Eyebrow>
+        <div className="grid gap-4 md:grid-cols-3">
+          {experiences.map((experience) => (
+            <ServiceEntry key={experience.code} experience={experience} />
+          ))}
         </div>
       </section>
 
       {/* Próximos */}
       {active.length > (liveDetail ? 1 : 0) && (
         <section>
-          <h2 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
-            Próximas reservas
-          </h2>
+          <Eyebrow className="mb-3 block">Próximas reservas</Eyebrow>
           <div className="space-y-3">
             {active
               .filter((order) => order.id !== liveDetail?.order.id)
               .map((order) => (
-                <ServiceCard
-                  key={order.id}
-                  order={order}
-                  to={`/servicios/${order.id}`}
-                  money={money}
-                />
+                <ServiceCard key={order.id} order={order} to={`/servicios/${order.id}`} money={money} />
               ))}
           </div>
         </section>
@@ -166,9 +153,7 @@ export default function DashboardPage() {
       {/* Historial */}
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
-            Historial
-          </h2>
+          <Eyebrow>Historial</Eyebrow>
           <Link
             to="/servicios"
             className="flex items-center gap-1 text-sm font-medium text-forest-600 hover:text-forest-700"
@@ -180,16 +165,9 @@ export default function DashboardPage() {
 
         {past.length === 0 ? (
           <EmptyState
-            icon={active.length === 0 ? CalendarPlus : CalendarX2}
+            icon={CalendarPlus}
             title={active.length === 0 ? 'Todavía no has reservado nada' : 'Sin servicios anteriores'}
             description="Cuando termines un servicio aparecerá aquí, con su historial completo."
-            action={
-              active.length === 0 ? (
-                <ButtonLink as={Link} to="/reservar" variant="accent">
-                  Reservar mi primer servicio
-                </ButtonLink>
-              ) : null
-            }
           />
         ) : (
           <div className="space-y-3">
@@ -203,23 +181,51 @@ export default function DashboardPage() {
   );
 }
 
-function QuickAction({ to, icon: Icon, title, description }) {
+/**
+ * Puerta de entrada a un servicio.
+ *
+ * Siempre se puede entrar a ver de qué va; reservar solo aparece si el backend
+ * dice que ese servicio es reservable hoy. Un servicio apagado por Operaciones
+ * y uno que el dominio aún no implementa se explican distinto, porque para el
+ * cliente son cosas distintas: uno vuelve pronto, el otro todavía no existe.
+ */
+function ServiceEntry({ experience }) {
+  const Icon = experience.icon;
+
   return (
-    <Link
-      to={to}
-      className="group flex items-start gap-4 rounded-2xl border border-border bg-surface-raised p-5 transition-all hover:border-forest-300 hover:shadow-[var(--shadow-card)]"
+    <Card
+      data-service={experience.code}
+      className={cx(
+        'flex flex-col gap-4 p-5 transition-shadow hover:shadow-[var(--shadow-raised)]',
+        !experience.bookable && 'opacity-95',
+      )}
     >
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-forest-50 text-forest-600 transition-colors group-hover:bg-forest-100">
-        <Icon className="size-5" aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <span className="block font-semibold text-text">{title}</span>
-        <span className="mt-0.5 block text-sm text-text-muted">{description}</span>
-      </span>
-      <ArrowRight
-        className="size-4 shrink-0 self-center text-text-subtle transition-transform group-hover:translate-x-0.5"
-        aria-hidden="true"
-      />
-    </Link>
+      <div className="flex items-start justify-between gap-3">
+        <span className="flex size-11 items-center justify-center rounded-xl bg-service-soft text-service-strong">
+          <Icon className="size-5" aria-hidden="true" />
+        </span>
+        {!experience.bookable && (
+          <span className="rounded-full bg-surface-sunken px-2.5 py-1 text-[11px] font-medium text-text-muted">
+            {experience.implemented ? 'No disponible ahora' : 'Muy pronto'}
+          </span>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <h3 className="font-bold tracking-tight text-text">{experience.label}</h3>
+        <p className="mt-1 text-sm text-text-muted">{experience.description}</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <ButtonLink as={Link} to={experience.path} variant="outline" size="sm">
+          Ver {experience.label.toLowerCase()}
+        </ButtonLink>
+        {experience.bookingPath && (
+          <ButtonLink as={Link} to={experience.bookingPath} variant="accent" size="sm">
+            Reservar
+          </ButtonLink>
+        )}
+      </div>
+    </Card>
   );
 }

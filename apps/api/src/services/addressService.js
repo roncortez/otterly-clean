@@ -3,6 +3,7 @@
 const { db } = require('../db');
 const addressRepo = require('../db/repositories/addressRepository');
 const catalogRepo = require('../db/repositories/catalogRepository');
+const { encrypt } = require('./crypto');
 const { locateZone, coverageEnvelope, isValidPoint } = require('../domain/shared/serviceArea');
 const { NotFoundError, DomainError } = require('../domain/errors');
 
@@ -101,8 +102,87 @@ async function mapHints(regionCode, tx = db) {
   };
 }
 
+/**
+ * Datos del hogar que ve el cliente.
+ *
+ * Se construye campo a campo en lugar de reenviar la fila: `access_secret_encrypted`
+ * no puede salir de aqui ni por descuido, igual que en el detalle de una orden.
+ * Lo que viaja es si hay algo guardado, no que es.
+ */
+function projectCleaningProfile(profile) {
+  if (!profile) return null;
+  return {
+    propertyType: profile.property_type,
+    bedrooms: profile.bedrooms,
+    bathrooms: profile.bathrooms,
+    areaValue: profile.area_value === null ? null : Number(profile.area_value),
+    areaUnit: profile.area_unit,
+    hasPets: profile.has_pets,
+    pets: profile.pets ?? [],
+    petInstructions: profile.pet_instructions,
+    accessMethod: profile.access_method,
+    accessInstructions: profile.access_instructions,
+    parkingInstructions: profile.parking_instructions,
+    notes: profile.notes,
+    hasAccessSecret: Boolean(profile.access_secret_encrypted),
+    updatedAt: profile.updated_at,
+  };
+}
+
+/**
+ * Direcciones del cliente con los datos de hogar que tenga cada una.
+ *
+ * Van juntos en una sola respuesta porque juntos se usan: el asistente de
+ * limpieza necesita saber, al elegir la direccion, que ya sabemos de esa casa
+ * para no volver a preguntarlo.
+ */
 async function list(userId, tx = db) {
-  return addressRepo.listByUser(userId, tx);
+  const [addresses, profiles] = await Promise.all([
+    addressRepo.listByUser(userId, tx),
+    addressRepo.listCleaningProfilesByUser(userId, tx),
+  ]);
+
+  const byAddress = new Map(profiles.map((profile) => [String(profile.address_id), profile]));
+
+  return addresses.map((address) => ({
+    ...address,
+    cleaningProfile: projectCleaningProfile(byAddress.get(String(address.id))),
+  }));
+}
+
+/**
+ * Guarda los datos del hogar de una direccion propia.
+ *
+ * El codigo de acceso se cifra aqui, igual que al reservar, y solo se toca si
+ * viene en la peticion: guardar el resto de la ficha no puede borrar en
+ * silencio la clave de la puerta. Enviar cadena vacia si lo retira, que es una
+ * intencion distinta de no mencionarlo.
+ */
+async function saveCleaningProfile({ user, addressId, payload }) {
+  const address = await addressRepo.findByIdForUser(addressId, user.id);
+  if (!address) throw new NotFoundError('Direccion', addressId);
+
+  const fields = {
+    property_type: payload.propertyType,
+    bedrooms: payload.bedrooms,
+    bathrooms: payload.bathrooms,
+    area_value: payload.areaValue,
+    area_unit: payload.areaUnit,
+    has_pets: payload.hasPets,
+    pets: payload.pets,
+    pet_instructions: payload.petInstructions,
+    access_method: payload.accessMethod,
+    access_instructions: payload.accessInstructions,
+    parking_instructions: payload.parkingInstructions,
+    notes: payload.notes,
+  };
+
+  if (payload.accessSecret !== undefined) {
+    fields.access_secret_encrypted = payload.accessSecret ? encrypt(payload.accessSecret) : null;
+  }
+
+  const profile = await addressRepo.upsertCleaningProfile(addressId, fields);
+  return { cleaningProfile: projectCleaningProfile(profile) };
 }
 
 /**
@@ -245,4 +325,6 @@ module.exports = {
   update,
   archive,
   assertServiceable,
+  projectCleaningProfile,
+  saveCleaningProfile,
 };

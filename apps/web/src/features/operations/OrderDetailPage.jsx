@@ -20,6 +20,9 @@ import { StatusTimeline } from '@/shared/ui/StatusTimeline';
 import { SERVICE_LABELS } from '@/shared/ui/ServiceCard';
 import { formatLongDate, formatTimeWindow, formatDateTime, fullName } from '@/shared/format';
 
+/** La gravedad la pone Operaciones desde /operaciones/incidencias. */
+const SEVERITY_LABELS = { LOW: 'baja', MEDIUM: 'media', HIGH: 'alta' };
+
 /**
  * Detalle operativo de una solicitud.
  * Es la pantalla donde se asigna, se corrige el estado y se ve el rastro
@@ -242,6 +245,12 @@ export default function OrderDetailPage() {
                         )}
                       >
                         {incident.category}
+                      </span>
+                      {/* La gravedad es de Operaciones: si nadie la puso, se dice. */}
+                      <span className="text-xs text-text-muted">
+                        {incident.severity
+                          ? `Gravedad ${SEVERITY_LABELS[incident.severity]}`
+                          : 'Sin clasificar'}
                       </span>
                       <span className="text-xs text-text-subtle">
                         {incident.first_name} · {formatDateTime(incident.created_at)}

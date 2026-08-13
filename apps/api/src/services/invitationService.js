@@ -197,10 +197,7 @@ async function accept({ token, password, request, userAgent }) {
 
     // Cualquier sesion previa deja de valer: la cuenta acaba de cambiar de
     // dueno efectivo.
-    await tx.none(
-      'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
-      [invitation.user_id],
-    );
+    await authService.revokeAllSessions(invitation.user_id, tx);
 
     await audit.record(
       {

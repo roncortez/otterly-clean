@@ -69,6 +69,15 @@
   --info: hsl(206 60% 42%);
   --info-soft: hsl(206 70% 95%);
 
+  /* Acento del servicio activo. Ver "Identidad por servicio" más abajo: por
+     defecto es el verde de la marca, que es lo que se ve fuera de un servicio
+     concreto (portada, cuenta, consolas internas). */
+  --service: var(--forest-600);
+  --service-strong: var(--forest-700);
+  --service-soft: var(--forest-50);
+  --service-muted: var(--forest-100);
+  --service-contrast: hsl(0 0% 100%);
+
   --radius: 0.75rem;
   --radius-sm: 0.5rem;
   --radius-lg: 1.125rem;
@@ -79,7 +88,50 @@
   --shadow-cta: 0 4px 12px hsl(15 63% 54% / 0.22), 0 12px 32px hsl(174 30% 12% / 0.14);
 }
 
+/* ==========================================================================
+   Identidad por servicio
+
+   Limpieza, lavandería y arreglos son experiencias distintas dentro de la misma
+   aplicación, y el color es lo que hace que se note al cambiar de una a otra
+   sin necesidad de leer el título.
+
+   Los tres acentos salen de la paleta que ya existe —verde bosque, salvia y
+   terracota—, así que siguen siendo Otterly Clean y no tres marcas sueltas.
+
+   Se resuelve con un atributo en el contenedor de la experiencia y cinco
+   variables. Ningún componente escribe `forest-600` o `sage-700` para decir "de
+   este servicio": usa `text-service`, `bg-service-soft` y compañía, y el color
+   lo decide el contenedor. No hay más sistema de temas que esto a propósito.
+   ========================================================================== */
+
+[data-service='CLEANING'] {
+  --service: var(--forest-600);
+  --service-strong: var(--forest-700);
+  --service-soft: var(--forest-50);
+  --service-muted: var(--forest-100);
+}
+
+[data-service='LAUNDRY'] {
+  --service: var(--sage-500);
+  --service-strong: var(--sage-700);
+  --service-soft: var(--sage-50);
+  --service-muted: var(--sage-100);
+}
+
+[data-service='ALTERATION'] {
+  --service: var(--accent-600);
+  --service-strong: var(--accent-700);
+  --service-soft: var(--accent-50);
+  --service-muted: var(--accent-100);
+}
+
 @theme inline {
+  --color-service: var(--service);
+  --color-service-strong: var(--service-strong);
+  --color-service-soft: var(--service-soft);
+  --color-service-muted: var(--service-muted);
+  --color-service-contrast: var(--service-contrast);
+
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --color-surface-sunken: var(--surface-sunken);

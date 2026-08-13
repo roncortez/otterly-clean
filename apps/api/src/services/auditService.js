@@ -22,6 +22,9 @@ const ACTIONS = Object.freeze({
   ASSIGNMENT_ACCEPTED: 'ASSIGNMENT_ACCEPTED',
   ASSIGNMENT_DECLINED: 'ASSIGNMENT_DECLINED',
   INCIDENT_REPORTED: 'INCIDENT_REPORTED',
+  // Gravedad puesta o corregida por Operaciones. Se guarda con su valor
+  // anterior: quien bajo la gravedad de un dano tiene nombre.
+  INCIDENT_CLASSIFIED: 'INCIDENT_CLASSIFIED',
   INCIDENT_RESOLVED: 'INCIDENT_RESOLVED',
   ACCESS_SECRET_VIEWED: 'ACCESS_SECRET_VIEWED',
   STAFF_CREATED: 'STAFF_CREATED',

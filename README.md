@@ -21,6 +21,22 @@ su tabla de detalle. Lo que Operaciones administra desde la aplicación es su
 capa comercial —si se ofrecen, cómo se presentan y a qué precio—, no cómo
 funcionan. Ver [Configuración administrable](docs/ARCHITECTURE.md#configuración-administrable).
 
+Para el cliente cada uno es una **experiencia propia**, con su navegación y su
+color, dentro de la misma aplicación y la misma sesión:
+
+```text
+/inicio        elegir servicio y ver qué está pasando ahora
+/limpieza      resumen · reservar · mis reservas · mi hogar
+/lavanderia    resumen · pedir recogida · mis pedidos
+/arreglos      presentación (sin reserva todavía: el dominio aún no la crea)
+/servicios     todas las reservas, de todos los servicios
+/direcciones   las direcciones, compartidas por todos
+```
+
+No son tres aplicaciones: comparten sesión, cliente HTTP, direcciones,
+componentes y asistente de reserva. Ver
+[Tres experiencias, una aplicación](docs/ARCHITECTURE.md#tres-experiencias-una-aplicación).
+
 ## Stack
 
 - **Backend**: Node.js 20+, Express 5, PostgreSQL 18 (pg-promise), Zod, JWT.
@@ -154,7 +170,8 @@ apps/web/
       auth/              panel de acceso: entrar, crear cuenta y activar invitación
       onboarding/        completar el perfil, con los pasos que decide el backend
       profile/           perfil propio: datos personales y foto
-      customer/          panel, asistente de reserva, detalle, direcciones
+      customer/          inicio, experiencias por servicio, reserva, direcciones
+        cleaning/        datos del hogar (lo que antes era "inmuebles")
       operations/        panel operativo, solicitudes, trabajadores, incidencias
         configuration/   empresa, servicios, agenda y avisos
       staff/             trabajos del día y detalle (optimizado para móvil)
@@ -194,7 +211,22 @@ correo.
 **Direcciones**: el cliente marca en el mapa dónde está su casa y corrige la
 dirección escrita encima, porque ningún geocodificador conoce las urbanizaciones
 de Quito. El backend valida contra las zonas de cobertura antes de aceptar una
-reserva.
+reserva. Esa misma coordenada es la que ve el trabajador para llegar: no se
+vuelve a buscar el texto en ningún mapa.
+
+**Datos del hogar**: cuántas habitaciones, cómo se entra, si hay mascotas. Van
+con la dirección —no en una lista de "inmuebles" aparte— y los rellena la propia
+reserva, así que la segunda vez llegan puestos. Se corrigen en
+`/limpieza/hogar`.
+
+**Privacidad del trabajador y del cliente**: recibir una asignación no es
+aceptarla. El teléfono del cliente y el código de acceso al domicilio aparecen
+al **confirmar** el trabajo, y desaparecen al terminarlo. Confirmar es un
+compromiso: a partir de ahí, soltar el servicio se gestiona con Operaciones.
+
+**Incidencias**: quien las vive cuenta qué pasó; la gravedad la clasifica
+Operaciones desde `/operaciones/incidencias`, y cada clasificación queda
+auditada con su valor anterior.
 
 ### Preparado pero no implementado
 
