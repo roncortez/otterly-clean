@@ -1,10 +1,11 @@
 import { Field, Input, Select, Checkbox, OptionCard, Divider, cx } from '@/shared/ui';
 
 /**
- * Paso 2: detalles del servicio.
+ * Paso 1 (detalles del servicio): definición del trabajo.
  * Cambia por completo entre limpieza y lavandería, porque son negocios
- * distintos: uno se mide en horas y habitaciones, el otro en kilos y
- * preferencias de lavado.
+ * distintos: uno se mide en horas, el otro en kilos y preferencias de lavado.
+ * La identidad del espacio (tipo, habitaciones, baños) se pide en el paso 2,
+ * junto a la dirección, para que el lugar sea una sola cosa.
  */
 export default function StepConfigure(props) {
   return props.booking.serviceType === 'CLEANING' ? (
@@ -13,13 +14,6 @@ export default function StepConfigure(props) {
     <LaundryStep {...props} />
   );
 }
-
-const PROPERTY_TYPES = [
-  { value: 'APARTMENT', label: 'Departamento' },
-  { value: 'HOUSE', label: 'Casa' },
-  { value: 'SUITE', label: 'Suite' },
-  { value: 'OFFICE', label: 'Oficina' },
-];
 
 const PRIORITY_AREAS = ['Cocina', 'Baños', 'Dormitorios', 'Sala', 'Comedor', 'Balcón', 'Lavandería'];
 
@@ -51,49 +45,10 @@ function CleaningStep({ booking, update, updateDetail, service, money, areaUnit 
   return (
     <div className="space-y-7">
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-text">Cuéntanos del espacio</h2>
+        <h2 className="text-xl font-bold tracking-tight text-text">Cómo quieres tu limpieza</h2>
         <p className="mt-1 text-text-muted">
-          Con esto calculamos cuánto tiempo hace falta y quién es la persona indicada.
+          Cuéntanos qué es lo más importante y cuánto tiempo reservamos.
         </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Tipo de propiedad">
-          <Select
-            value={cleaning.propertyType}
-            onChange={(event) => updateDetail('cleaning', { propertyType: event.target.value })}
-          >
-            {PROPERTY_TYPES.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
-        <Field label="Habitaciones">
-          <Input
-            type="number"
-            min="0"
-            max="20"
-            value={cleaning.bedrooms}
-            onChange={(event) =>
-              updateDetail('cleaning', { bedrooms: Number(event.target.value) || 0 })
-            }
-          />
-        </Field>
-
-        <Field label="Baños">
-          <Input
-            type="number"
-            min="0"
-            max="20"
-            value={cleaning.bathrooms}
-            onChange={(event) =>
-              updateDetail('cleaning', { bathrooms: Number(event.target.value) || 0 })
-            }
-          />
-        </Field>
       </div>
 
       <Field

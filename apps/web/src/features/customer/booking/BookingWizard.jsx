@@ -1,39 +1,44 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Sparkles, Shirt } from 'lucide-react';
 import { api, errorMessage } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { Alert, Button, ButtonLink, Card, Spinner, cx } from '@/shared/ui';
+import { Alert, Button, Card, Modal, Spinner, cx } from '@/shared/ui';
 import { toDateInput, addDays } from '@/shared/format';
 
 import StepService from './StepService';
 import StepConfigure from './StepConfigure';
+import StepPlace from './StepPlace';
 import StepSchedule from './StepSchedule';
-import StepAddress from './StepAddress';
-import StepInstructions from './StepInstructions';
 import StepSummary from './StepSummary';
 
 /**
- * Asistente de reserva.
+ * Asistente de reserva, en tres pasos.
  *
  * Se pide una cosa por pantalla en lugar de un formulario largo: la reserva de
  * limpieza necesita más de veinte datos y presentarlos juntos hace abandonar.
- * El paso de resumen muestra el precio calculado por el backend antes de
- * confirmar, para que nadie reserve sin saber cuánto va a pagar.
+ * El patrón es Qué / Dónde y cómo / Cuándo: el servicio, el lugar (dirección,
+ * espacio y acceso como una sola cosa) y la fecha. La revisión y el precio
+ * viven en un modal antes de confirmar, porque ya no son un paso más sino el
+ * último control antes de comprometerse.
  */
 
 /** Tipos que el asistente sabe configurar. Los define el dominio, no la UI. */
 const KNOWN_SERVICE_TYPES = ['CLEANING', 'LAUNDRY'];
 
 const STEPS = [
-  { id: 'service', label: 'Servicio' },
-  { id: 'configure', label: 'Detalles' },
-  { id: 'schedule', label: 'Fecha' },
-  { id: 'address', label: 'Dirección' },
-  { id: 'instructions', label: 'Instrucciones' },
-  { id: 'summary', label: 'Resumen' },
+  { id: 'service', label: 'Tu servicio' },
+  { id: 'place', label: 'Dónde y cómo' },
+  { id: 'schedule', label: 'Cuándo' },
 ];
+
+const INITIAL_PROPERTY_DRAFT = {
+  name: '',
+  propertyType: 'APARTMENT',
+  bedrooms: 1,
+  bathrooms: 1,
+};
 
 const INITIAL_CLEANING = {
   cleaningType: 'STANDARD',
@@ -81,6 +86,7 @@ export default function BookingWizard() {
   const { money, timeWindows, weightUnit, areaUnit } = useConfig();
 
   const [stepIndex, setStepIndex] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [pricing, setPricing] = useState(null);
 
   const catalogQuery = useApiQuery('/catalog/services');
@@ -117,6 +123,11 @@ export default function BookingWizard() {
   const updateDetail = (key, patch) =>
     setBooking((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
 
+  // En limpieza el lugar se pide siempre dentro del asistente: rellena identidad
+  // y acceso desde el inmueble guardado de la dirección o desde los valores por
+  // defecto, y al confirmar se crea o se reemplaza el guardado.
+  const [propertyDraft, setPropertyDraft] = useState(INITIAL_PROPERTY_DRAFT);
+
   // Si el servicio preseleccionado ya no se ofrece (Operaciones lo desactivó),
   // se cae al primero disponible en lugar de dejar el asistente bloqueado.
   const service = useMemo(() => {
@@ -147,6 +158,43 @@ export default function BookingWizard() {
     return (addresses.find((address) => address.is_default) ?? addresses[0])?.id ?? null;
   }, [booking.addressId, addresses]);
 
+  // La dirección efectivamente elegida y el inmueble que vive en ella (si hay):
+  // le dice al paso de lugar si puede rellenar con datos ya guardados.
+  const selectedAddress = useMemo(
+    () => addresses.find((address) => address.id === selectedAddressId) ?? null,
+    [addresses, selectedAddressId],
+  );
+  const savedProperty = selectedAddress?.property ?? null;
+
+  // Al elegir una dirección (o al aterrizar en la que viene por defecto) se
+  // llena el formulario del lugar con lo guardado en ella; si no tiene inmueble
+  // se dejan los valores por defecto para que no queden datos de otra casa. Se
+  // ajusta durante el render solo cuando cambia la dirección: editar después no
+  // se pisa, y volver a tocar la misma dirección no resetea lo ya corregido.
+  const [prefilledAddressId, setPrefilledAddressId] = useState(null);
+  if (selectedAddressId !== prefilledAddressId && booking.serviceType === 'CLEANING') {
+    setPrefilledAddressId(selectedAddressId);
+    const identity = {
+      propertyType: savedProperty?.propertyType ?? 'APARTMENT',
+      bedrooms: savedProperty?.bedrooms ?? 1,
+      bathrooms: savedProperty?.bathrooms ?? 1,
+    };
+    setPropertyDraft({ name: savedProperty?.name ?? '', ...identity });
+    updateDetail('cleaning', {
+      ...identity,
+      accessMethod: savedProperty?.accessMethod ?? 'CUSTOMER_OPENS',
+      accessSecret: savedProperty?.accessCode ?? '',
+      accessInstructions: savedProperty?.accessInstructions ?? '',
+      parkingInstructions: savedProperty?.parkingInstructions ?? '',
+      customerPresent: savedProperty?.customerPresent ?? true,
+      hasPets: savedProperty?.hasPets ?? false,
+      pets: savedProperty?.pets ?? [],
+      petsSecured: savedProperty?.petsSecured ?? null,
+      petInstructions: savedProperty?.petInstructions ?? '',
+      delicateItems: savedProperty?.delicateItems ?? '',
+    });
+  }
+
   // Estado efectivo: lo que el usuario eligió, ya resuelto con los defectos.
   const effective = useMemo(
     () => ({
@@ -170,13 +218,12 @@ export default function BookingWizard() {
   }, [effective, service]);
 
   const currentStep = STEPS[stepIndex];
-  const isSummary = currentStep.id === 'summary';
 
   // El precio siempre lo calcula el backend: el frontend no replica reglas.
-  // Se pide solo en el resumen; la clave serializada evita repetir la consulta
-  // mientras no cambie nada relevante.
+  // Se pide al abrir el modal de confirmación; la clave serializada evita
+  // repetir la consulta mientras no cambie nada relevante.
   const quoteKey =
-    isSummary && effective.planId
+    confirmOpen && effective.planId
       ? JSON.stringify({
           planId: effective.planId,
           extraCodes: effective.extraCodes,
@@ -207,33 +254,92 @@ export default function BookingWizard() {
     switch (currentStep.id) {
       case 'service':
         return Boolean(effective.planId);
+      case 'place': {
+        if (!effective.addressId) return false;
+        if (effective.serviceType === 'CLEANING') {
+          // En limpieza el lugar siempre se persiste, así que la identidad del
+          // espacio y el nombre son obligatorios.
+          const identityReady =
+            Boolean(propertyDraft.propertyType) &&
+            Number(propertyDraft.bedrooms) >= 0 &&
+            Number(propertyDraft.bathrooms) >= 0;
+          return identityReady && Boolean(propertyDraft.name.trim());
+        }
+        return true;
+      }
       case 'schedule':
-        return Boolean(effective.scheduledDate && effective.windowCode);
-      case 'address':
-        return Boolean(effective.addressId);
+        return Boolean(effective.scheduledDate) && Boolean(effective.windowCode);
       default:
         return true;
     }
-  }, [currentStep.id, effective]);
+  }, [currentStep.id, effective, propertyDraft]);
 
   async function handleSubmit() {
-    const payload = {
-      planId: effective.planId,
-      addressId: effective.addressId,
-      scheduledDate: effective.scheduledDate,
-      windowCode: effective.windowCode,
-      extraCodes: effective.extraCodes,
-      pricingInput,
-      customerNotes: effective.customerNotes || null,
-    };
+    const request = async () => {
+      // La identidad del espacio siempre sale del formulario del paso; al
+      // confirmar se persiste como lugar de la dirección (se crea o se
+      // reemplaza) y la orden la referencia, para que el orden en que se
+      // eligieron las direcciones no filtre datos de otra casa al snapshot.
+      const identity = {
+        propertyType: propertyDraft.propertyType,
+        bedrooms: Number(propertyDraft.bedrooms) || 0,
+        bathrooms: Number(propertyDraft.bathrooms) || 0,
+      };
 
-    const request = () => {
+      // En limpieza el lugar siempre se persiste: se crea si la dirección no
+      // tiene inmueble o se reemplaza si ya tiene uno.
+      let propertyId = null;
+      if (effective.serviceType === 'CLEANING') {
+        const cleaning = effective.cleaning;
+        const propertyPayload = {
+          name: propertyDraft.name.trim(),
+          propertyType: propertyDraft.propertyType,
+          bedrooms: Number(propertyDraft.bedrooms) || 0,
+          bathrooms: Number(propertyDraft.bathrooms) || 0,
+          accessCode: cleaning.accessSecret || null,
+          accessMethod: cleaning.accessMethod,
+          accessInstructions: cleaning.accessInstructions || null,
+          parkingInstructions: cleaning.parkingInstructions || null,
+          customerPresent: cleaning.customerPresent,
+          hasPets: cleaning.hasPets,
+          pets: cleaning.hasPets ? cleaning.pets : [],
+          petsSecured: cleaning.hasPets ? cleaning.petsSecured : null,
+          petInstructions: cleaning.petInstructions || null,
+          delicateItems: cleaning.delicateItems || null,
+        };
+        if (savedProperty) {
+          const propertyRes = await api.patch(
+            `/customer/properties/${savedProperty.id}`,
+            propertyPayload,
+          );
+          propertyId = propertyRes.data.property.id;
+        } else {
+          const propertyRes = await api.post('/customer/properties', {
+            ...propertyPayload,
+            addressId: effective.addressId,
+          });
+          propertyId = propertyRes.data.property.id;
+        }
+      }
+
+      const payload = {
+        planId: effective.planId,
+        addressId: effective.addressId,
+        propertyId,
+        scheduledDate: effective.scheduledDate,
+        windowCode: effective.windowCode,
+        extraCodes: effective.extraCodes,
+        pricingInput,
+        customerNotes: effective.customerNotes || null,
+      };
+
       if (effective.serviceType === 'CLEANING') {
         const { areaValue, pets, petsSecured, ...rest } = effective.cleaning;
         return api.post('/customer/orders/cleaning', {
           ...payload,
           cleaning: {
             ...rest,
+            ...identity,
             areaValue: areaValue === '' ? null : Number(areaValue),
             areaUnit,
             pets: rest.hasPets ? pets : [],
@@ -255,20 +361,6 @@ export default function BookingWizard() {
 
   if (loading) return <Spinner label="Preparando tu reserva" />;
 
-  if (addresses.length === 0) {
-    return (
-      <Card className="p-8 text-center">
-        <h1 className="text-xl font-bold tracking-tight text-text">Primero, ¿a dónde vamos?</h1>
-        <p className="mx-auto mt-2 max-w-md text-text-muted">
-          Necesitamos una dirección para poder asignar un profesional de tu zona.
-        </p>
-        <ButtonLink as={Link} to="/direcciones" variant="accent" className="mt-6">
-          Agregar mi dirección
-        </ButtonLink>
-      </Card>
-    );
-  }
-
   const stepProps = {
     booking: effective,
     update,
@@ -276,6 +368,10 @@ export default function BookingWizard() {
     service,
     catalog,
     addresses,
+    savedProperty,
+    propertyDraft,
+    setPropertyDraft,
+    reloadAddresses: addressQuery.reload,
     money,
     weightUnit,
     areaUnit,
@@ -329,11 +425,8 @@ export default function BookingWizard() {
       </div>
       <Card className="p-5 sm:p-7">
         {currentStep.id === 'service' && <StepService {...stepProps} />}
-        {currentStep.id === 'configure' && <StepConfigure {...stepProps} />}
+        {currentStep.id === 'place' && <StepPlace {...stepProps} />}
         {currentStep.id === 'schedule' && <StepSchedule {...stepProps} />}
-        {currentStep.id === 'address' && <StepAddress {...stepProps} />}
-        {currentStep.id === 'instructions' && <StepInstructions {...stepProps} />}
-        {currentStep.id === 'summary' && <StepSummary {...stepProps} pricing={pricing} />}
       </Card>
 
       <div className="mt-6 flex justify-end">
@@ -343,12 +436,38 @@ export default function BookingWizard() {
             <ArrowRight className="size-4" aria-hidden="true" />
           </Button>
         ) : (
-          <Button size="lg" variant="accent" loading={submitting} onClick={handleSubmit}>
+          <Button size="lg" variant="accent" disabled={!canContinue} onClick={() => setConfirmOpen(true)}>
             <Check className="size-4" aria-hidden="true" />
-            Confirmar reserva
+            Revisar y confirmar
           </Button>
         )}
       </div>
+
+      <Modal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Confirma tu reserva"
+        description="Revisa el resumen y el precio; el pago se coordina directamente con la empresa."
+        size="lg"
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={() => setConfirmOpen(false)}>
+              Atrás
+            </Button>
+            <Button variant="accent" loading={submitting} onClick={handleSubmit}>
+              <Check className="size-4" aria-hidden="true" />
+              Confirmar reserva
+            </Button>
+          </>
+        }
+      >
+        {actionError && (
+          <div className="mb-4">
+            <Alert tone="danger">{actionError}</Alert>
+          </div>
+        )}
+        <StepSummary {...stepProps} pricing={pricing} compact />
+      </Modal>
     </div>
   );
 }

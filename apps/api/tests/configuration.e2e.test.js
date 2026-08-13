@@ -432,7 +432,7 @@ describe('Configuracion de servicios', () => {
         scheduledDate: futureDate(5),
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 120 },
-        cleaning: { bedrooms: 1, bathrooms: 1 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 1, bathrooms: 1 },
       });
 
     expect(reserva.status).toBe(400);
@@ -455,7 +455,7 @@ describe('Configuracion de servicios', () => {
         scheduledDate: futureDate(6),
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 120 },
-        cleaning: { bedrooms: 1, bathrooms: 1 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 1, bathrooms: 1 },
       });
     expect(pedido.status, JSON.stringify(pedido.body)).toBe(201);
 
@@ -516,7 +516,7 @@ describe('Configuracion de servicios', () => {
         // Intento de imponer el total: debe ignorarse por completo.
         totalAmount: 1,
         subtotalAmount: 1,
-        cleaning: { bedrooms: 1, bathrooms: 1 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 1, bathrooms: 1 },
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(201);
@@ -572,7 +572,7 @@ describe('Bloqueos de agenda', () => {
         scheduledDate,
         windowCode,
         pricingInput: { durationMinutes: 120 },
-        cleaning: { bedrooms: 1, bathrooms: 1 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 1, bathrooms: 1 },
       });
 
   async function crearBloqueo(payload) {

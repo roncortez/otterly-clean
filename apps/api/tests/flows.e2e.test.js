@@ -213,7 +213,7 @@ describe('Flujo completo de limpieza', () => {
         scheduledDate: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 180 },
-        cleaning: { bedrooms: 2, bathrooms: 1 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 2, bathrooms: 1 },
       });
 
     expect(res.status).toBe(400);
@@ -598,7 +598,13 @@ describe('Incidencias y cancelacion', () => {
         scheduledDate: futureDate(4),
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 120 },
-        cleaning: { bedrooms: 1, bathrooms: 1, customerPresent: false, accessMethod: 'CONCIERGE' },
+        cleaning: {
+          propertyType: 'APARTMENT',
+          bedrooms: 1,
+          bathrooms: 1,
+          customerPresent: false,
+          accessMethod: 'CONCIERGE',
+        },
       });
     const orderId = order.body.order.id;
 
@@ -654,7 +660,7 @@ describe('Incidencias y cancelacion', () => {
         scheduledDate: futureDate(10),
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 120 },
-        cleaning: { bedrooms: 1, bathrooms: 1 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 1, bathrooms: 1 },
       });
 
     const res = await request(app)
@@ -765,5 +771,135 @@ describe('Panel de operaciones', () => {
     expect(assign.status).toBe(409);
 
     await db.none('DELETE FROM users WHERE id = $1', [staffId]);
+  });
+});
+
+describe('Vinculo con el inmueble', () => {
+  /** Reserva de limpieza mínima pero valida, sobre la direccion del cliente. */
+  const reservar = (payload = {}) =>
+    request(app)
+      .post('/api/customer/orders/cleaning')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: created.cleaningPlanId,
+        addressId: created.addressId,
+        scheduledDate: futureDate(5),
+        windowCode: 'MORNING',
+        pricingInput: { durationMinutes: 120 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 1, bathrooms: 1 },
+        ...payload,
+      });
+
+  it('rechaza una limpieza sin la identidad del espacio', async () => {
+    const res = await reservar({ cleaning: {} });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('vincula el inmueble que la direccion ya tiene', async () => {
+    const property = await request(app)
+      .post('/api/customer/properties')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        name: 'Mi depto de prueba',
+        propertyType: 'APARTMENT',
+        bedrooms: 2,
+        bathrooms: 1,
+        addressId: created.addressId,
+      });
+    expect(property.status, JSON.stringify(property.body)).toBe(201);
+    created.propertyId = property.body.property.id;
+
+    // Sin propertyId: el servidor deriva el del inmueble guardado en la direccion.
+    const res = await reservar();
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.order.propertyId).toBe(created.propertyId);
+
+    const detalle = await request(app)
+      .get(`/api/customer/orders/${res.body.order.id}`)
+      .set('Authorization', `Bearer ${auth.customer}`);
+    expect(detalle.body.order.property.name).toBe('Mi depto de prueba');
+    expect(detalle.body.order.property.propertyType).toBe('APARTMENT');
+
+    const guardado = await db.one('SELECT property_id FROM orders WHERE id = $1', [
+      res.body.order.id,
+    ]);
+    expect(guardado.property_id).toBe(created.propertyId);
+  });
+
+  it('rechaza un inmueble de otra direccion', async () => {
+    // El cliente tiene otra direccion con su propio inmueble. Si manda ese
+    // propertyId en una reserva para la otra casa, no corresponde.
+    const otra = await request(app)
+      .post('/api/customer/addresses')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        streetLine1: 'Calle de la otra casa',
+        city: 'Quito',
+        administrativeArea: 'Pichincha',
+      });
+    expect(otra.status, JSON.stringify(otra.body)).toBe(201);
+
+    const otroInmueble = await request(app)
+      .post('/api/customer/properties')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        name: 'Casa de otra direccion',
+        propertyType: 'HOUSE',
+        bedrooms: 3,
+        bathrooms: 2,
+        addressId: otra.body.address.id,
+      });
+    expect(otroInmueble.status, JSON.stringify(otroInmueble.body)).toBe(201);
+
+    const res = await reservar({ propertyId: otroInmueble.body.property.id });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.error.code).toBe('PROPERTY_MISMATCH');
+  });
+
+  it('con un inmueble indicado, la orden lo referencia', async () => {
+    const res = await reservar({ propertyId: created.propertyId });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.order.propertyId).toBe(created.propertyId);
+  });
+
+  it('una limpieza con la casilla desmarcada no exige inmueble guardado', async () => {
+    // Direccion sin inmueble guardado (creada antes de que existiera el de
+    // prueba): la identidad viaja en el detalle, sin propertyId, y aun asi se
+    // puede reservar. Es el caso del wizard con "Guardar para proximas reservas"
+    // desmarcado.
+    const sinInmueble = await request(app)
+      .post('/api/customer/addresses')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        streetLine1: 'Av. para limpiar sin guardar',
+        city: 'Quito',
+        administrativeArea: 'Pichincha',
+      });
+    expect(sinInmueble.status, JSON.stringify(sinInmueble.body)).toBe(201);
+
+    const res = await request(app)
+      .post('/api/customer/orders/cleaning')
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({
+        planId: created.cleaningPlanId,
+        addressId: sinInmueble.body.address.id,
+        scheduledDate: futureDate(6),
+        windowCode: 'MORNING',
+        pricingInput: { durationMinutes: 120 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 1, bathrooms: 1 },
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.order.propertyId).toBeNull();
+
+    const guardado = await db.one('SELECT property_id FROM orders WHERE id = $1', [
+      res.body.order.id,
+    ]);
+    expect(guardado.property_id).toBeNull();
   });
 });

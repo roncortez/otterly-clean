@@ -4,6 +4,7 @@ const { db } = require('../db');
 const orderRepo = require('../db/repositories/orderRepository');
 const addressRepo = require('../db/repositories/addressRepository');
 const addressService = require('./addressService');
+const propertyRepo = require('../db/repositories/propertyRepository');
 const catalogRepo = require('../db/repositories/catalogRepository');
 const assignmentRepo = require('../db/repositories/assignmentRepository');
 const audit = require('./auditService');
@@ -21,7 +22,7 @@ const {
   evaluateCancellation,
 } = require('../domain/shared/policies');
 const { ROLES } = require('../domain/shared/roles');
-const { NotFoundError, ForbiddenError } = require('../domain/errors');
+const { NotFoundError, ForbiddenError, DomainError } = require('../domain/errors');
 
 /**
  * Orquestacion de ordenes.
@@ -70,6 +71,25 @@ async function createOrder({ serviceType, customer, payload, request }) {
   // La direccion debe pertenecer al cliente: nunca se confia en el id recibido.
   const address = await addressRepo.findByIdForUser(payload.addressId, customer.id);
   if (!address) throw new NotFoundError('Direccion', payload.addressId);
+
+  // El inmueble (cuando hay) da trazabilidad a la orden: "este servicio fue de
+  // este inmueble". Se acepta un `propertyId` explícito (validado: del cliente
+  // y de la direccion de la orden) o se vincula el que la direccion ya tenga.
+  // La identidad del espacio viaja igual en el snapshot de `cleaning`; esto no
+  // reemplaza el detalle, lo enlaza.
+  let property = null;
+  if (payload.propertyId) {
+    property = await propertyRepo.findPropertyById(payload.propertyId, customer.id);
+    if (!property) throw new NotFoundError('Inmueble', payload.propertyId);
+    if (property.address_id !== address.id) {
+      throw new DomainError(
+        'PROPERTY_MISMATCH',
+        'El inmueble indicado no corresponde a la dirección de la reserva.',
+      );
+    }
+  } else {
+    property = await propertyRepo.findByAddress(address.id, customer.id);
+  }
 
   // Que Google devuelva un punto valido no significa que lo atendamos. Se
   // comprueba aqui, en el servidor, y no solo al guardar la direccion: la
@@ -132,6 +152,7 @@ async function createOrder({ serviceType, customer, payload, request }) {
         status: stateMachine.initialState,
         addressId: address.id,
         deliveryAddressId: deliveryAddress?.id ?? null,
+        propertyId: property?.id ?? null,
         scheduledDate: payload.scheduledDate,
         scheduledWindowCode: window.code,
         scheduledWindowStart: window.startTime,
@@ -343,6 +364,10 @@ function projectOrder(order, actor) {
       postalCode: order.postal_code,
       reference: order.address_reference,
     },
+    propertyId: order.property_id ?? null,
+    property: order.property_name
+      ? { name: order.property_name, propertyType: order.property_type }
+      : null,
   };
 
   // El trabajador no necesita saber cuanto pago el cliente ni sus datos de
@@ -644,6 +669,7 @@ function summarize(order, { hideMoney = false } = {}) {
     city: order.city,
     neighborhood: order.neighborhood,
     streetLine1: order.street_line1,
+    propertyId: order.property_id ?? null,
     createdAt: order.created_at,
     ...(hideMoney ? {} : { currency: order.currency, totalAmount: order.total_amount }),
   };

@@ -118,8 +118,12 @@ const updateAddressSchema = z
     message: 'No hay nada que actualizar',
   });
 
-// --- Detalle de limpieza ---------------------------------------------------
+// --- Inmuebles -------------------------------------------------------------
 
+const propertyTypeEnum = z.enum(['HOUSE', 'APARTMENT', 'SUITE', 'OFFICE']);
+
+// Mascota del detalle de limpieza; tambien la usan los inmuebles para guardar
+// el perfil persistente de acceso.
 const petSchema = z.object({
   type: z.string().trim().max(40),
   count: z.number().int().min(1).max(20).default(1),
@@ -127,11 +131,76 @@ const petSchema = z.object({
   behavior: z.string().trim().max(200).optional(),
 });
 
+/**
+ * Inmueble del cliente.
+ *
+ * El inmueble es el perfil de la residencia que vive en una direccion. El
+ * domicilio (calle, coordenadas, cobertura) se guarda en `addresses` y aqui
+ * solo lo que describe al espacio y el acceso. Por eso se referencia por
+ * `addressId` o se crea la direccion al vuelo (campo `address`); el texto
+ * nunca se copia. Los campos de acceso espejan cleaning_details: el inmueble
+ * es el perfil persistente y cada orden copia su snapshot al confirmar.
+ */
+const propertyAccessFields = {
+  // Se cifra antes de guardarse. Ver services/crypto.js
+  accessCode: z.string().trim().max(200).optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+  accessMethod: z
+    .enum(['CUSTOMER_OPENS', 'KEY', 'DOOR_CODE', 'CONCIERGE', 'LOCKBOX', 'OTHER'])
+    .optional()
+    .nullable(),
+  accessInstructions: z.string().trim().max(1000).optional().nullable(),
+  parkingInstructions: z.string().trim().max(500).optional().nullable(),
+  customerPresent: z.boolean().optional(),
+  hasPets: z.boolean().optional(),
+  pets: z.array(petSchema).max(10).optional(),
+  petsSecured: z.boolean().optional().nullable(),
+  petInstructions: z.string().trim().max(1000).optional().nullable(),
+  delicateItems: z.string().trim().max(1000).optional().nullable(),
+};
+
+const propertySchema = z
+  .object({
+    name: z.string().trim().min(1, 'El nombre es obligatorio').max(80),
+    propertyType: propertyTypeEnum.default('APARTMENT'),
+    bedrooms: z.number().int().min(0).max(20).default(1),
+    bathrooms: z.number().int().min(0).max(20).default(1),
+    ...propertyAccessFields,
+    addressId: id.optional().nullable(),
+    address: addressSchema.optional(),
+  })
+  .refine((value) => value.addressId || value.address, {
+    message: 'El inmueble necesita una dirección guardada o una dirección nueva',
+  });
+
+/**
+ * Actualizacion parcial del inmueble (PATCH): los mismos campos descriptivos y
+ * de acceso, sin `addressId`/`address`. El inmueble vive en una direccion y esa
+ * pertenencia no se cambia aqui; si hay que moverlo, se crea otro.
+ */
+const updatePropertySchema = z
+  .object({
+    name: z.string().trim().min(1, 'El nombre es obligatorio').max(80).optional(),
+    propertyType: propertyTypeEnum.optional(),
+    bedrooms: z.number().int().min(0).max(20).optional(),
+    bathrooms: z.number().int().min(0).max(20).optional(),
+    ...propertyAccessFields,
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'No hay nada que actualizar',
+  });
+
+// --- Detalle de limpieza ---------------------------------------------------
+
 const cleaningDetailSchema = z.object({
   cleaningType: z.enum(['STANDARD', 'DEEP', 'MOVE_IN_OUT', 'POST_CONSTRUCTION']).default('STANDARD'),
-  propertyType: z.enum(['HOUSE', 'APARTMENT', 'SUITE', 'OFFICE']).default('APARTMENT'),
-  bedrooms: z.number().int().min(0).max(20).default(0),
-  bathrooms: z.number().int().min(0).max(20).default(0),
+  // La identidad del espacio es obligatoria: limpiar sin saber que tipo de casa
+  // es, cuantas habitaciones o banos tiene no tiene sentido. Ya no hay defectos
+  // invisibles ("APARTMENT/0/0").
+  propertyType: z.enum(['HOUSE', 'APARTMENT', 'SUITE', 'OFFICE']),
+  bedrooms: z.number().int().min(0).max(20),
+  bathrooms: z.number().int().min(0).max(20),
   areaValue: z.number().positive().max(100000).optional().nullable(),
   areaUnit: z.enum(['m2', 'sqft']).optional().nullable(),
   sizeTier: z.string().trim().max(40).optional().nullable(),
@@ -204,6 +273,11 @@ const pricingInputSchema = z.object({
 const createOrderBase = {
   planId: id,
   addressId: id,
+  // Referencia opcional al inmueble persistido. El servidor la valida (que sea
+  // del cliente y de la direccion de la orden); si no viene, vincula el que la
+  // direccion ya tenga. La identidad del espacio siempre viaja en `cleaning`
+  // (snapshot), aqui solo se enlaza para trazabilidad.
+  propertyId: id.optional().nullable(),
   deliveryAddressId: id.optional().nullable(),
   scheduledDate: isoDate,
   windowCode: z.string().trim().min(1).max(30),
@@ -538,6 +612,8 @@ module.exports = {
   onboardingPatchSchema,
   addressSchema,
   updateAddressSchema,
+  propertySchema,
+  updatePropertySchema,
   createCleaningOrderSchema,
   createLaundryOrderSchema,
   quoteSchema,

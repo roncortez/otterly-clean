@@ -24,14 +24,14 @@ async function insertOrder(order, tx = db) {
   return tx.one(
     `INSERT INTO orders (
        reference, service_type, customer_id, plan_id, region_code, zone_id, status,
-       address_id, delivery_address_id,
+       address_id, delivery_address_id, property_id,
        scheduled_date, scheduled_window_code, scheduled_window_start, scheduled_window_end,
        estimated_duration_minutes,
        currency, subtotal_amount, discount_amount, tax_rate, tax_amount, total_amount,
        price_breakdown, requires_quote, customer_notes
      ) VALUES (
        $[reference], $[serviceType], $[customerId], $[planId], $[regionCode], $[zoneId], $[status],
-       $[addressId], $[deliveryAddressId],
+       $[addressId], $[deliveryAddressId], $[propertyId],
        $[scheduledDate], $[scheduledWindowCode], $[scheduledWindowStart], $[scheduledWindowEnd],
        $[estimatedDurationMinutes],
        $[currency], $[subtotalAmount], $[discountAmount], $[taxRate], $[taxAmount], $[totalAmount],
@@ -100,12 +100,15 @@ const ORDER_BASE_QUERY = `
          a.label       AS address_label,
          a.street_line1, a.street_line2, a.neighborhood, a.city,
          a.administrative_area, a.postal_code, a.reference AS address_reference,
-         a.latitude, a.longitude
+         a.latitude, a.longitude,
+         prop.name        AS property_name,
+         prop.property_type AS property_type
     FROM orders o
     JOIN users c          ON c.id = o.customer_id
     LEFT JOIN service_plans p ON p.id = o.plan_id
     LEFT JOIN service_zones z ON z.id = o.zone_id
     LEFT JOIN addresses a     ON a.id = o.address_id
+    LEFT JOIN properties prop ON prop.id = o.property_id
 `;
 
 async function findById(id, tx = db) {

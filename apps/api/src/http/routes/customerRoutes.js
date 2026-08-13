@@ -211,9 +211,19 @@ router.get(
 
 router.post(
   '/properties',
+  validate({ body: schemas.propertySchema }),
   asyncHandler(async (req, res) => {
-    const property = await propertyService.createProperty(req.user.id, req.body);
+    const property = await propertyService.createProperty(req.user, req.body);
     res.status(201).json({ property });
+  }),
+);
+
+router.patch(
+  '/properties/:id',
+  validate({ params: schemas.idParamSchema, body: schemas.updatePropertySchema }),
+  asyncHandler(async (req, res) => {
+    const property = await propertyService.updateProperty(req.user, req.validatedParams.id, req.body);
+    res.json({ property });
   }),
 );
 

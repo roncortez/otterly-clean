@@ -8,7 +8,7 @@ const NAV = [
   { to: '/inicio', label: 'Inicio', icon: Home },
   { to: '/servicios', label: 'Servicios', icon: CalendarCheck },
   { to: '/direcciones', label: 'Direcciones', icon: MapPin },
-  { to: '/inmuebles', label: 'Inmuebles', icon: Building },
+  { to: '/inmuebles', label: 'Lugares', icon: Building },
 ];
 
 /**

@@ -3,23 +3,36 @@ import { useConfig } from '@/shared/config/ConfigContext';
 import { formatLongDate, formatTime } from '@/shared/format';
 
 /**
- * Paso 6: resumen.
+ * Resumen de la reserva.
  * El precio lo calcula el backend, no el navegador: es la misma cifra que se
- * guardará en la orden.
+ * guardará en la orden. Dentro del modal de confirmación se usa `compact`, que
+ * oculta el encabezado porque el modal ya trae su propio título.
  */
-export default function StepSummary({ booking, service, addresses, pricing, money, timeWindows }) {
+export default function StepSummary({
+  booking,
+  service,
+  addresses,
+  propertyDraft,
+  pricing,
+  money,
+  timeWindows,
+  compact,
+}) {
   const { taxLabel, freeCancellationHours } = useConfig();
 
   const plan = service?.plans.find((entry) => entry.id === booking.planId);
   const address = addresses.find((entry) => entry.id === booking.addressId);
   const window = timeWindows.find((entry) => entry.code === booking.windowCode);
+  const propertyName = address?.property?.name ?? propertyDraft?.name;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-text">Revisa antes de confirmar</h2>
-        <p className="mt-1 text-text-muted">Podrás cancelar sin costo si cambias de planes.</p>
-      </div>
+      {!compact && (
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-text">Revisa antes de confirmar</h2>
+          <p className="mt-1 text-text-muted">Podrás cancelar sin costo si cambias de planes.</p>
+        </div>
+      )}
 
       <dl className="divide-y divide-border">
         <Row label="Servicio" value={plan?.name} />
@@ -40,6 +53,7 @@ export default function StepSummary({ booking, service, addresses, pricing, mone
         />
         {booking.serviceType === 'CLEANING' && (
           <>
+            <Row label="Lugar" value={propertyName} />
             <Row
               label="Espacio"
               value={`${booking.cleaning.bedrooms} hab · ${booking.cleaning.bathrooms} baños`}

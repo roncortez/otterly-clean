@@ -22,9 +22,31 @@ const FIELDS = `
 
 async function listByUser(userId, tx = db) {
   return tx.any(
-    `SELECT ${FIELDS} FROM addresses
-      WHERE user_id = $1 AND archived_at IS NULL
-      ORDER BY is_default DESC, created_at DESC`,
+    `SELECT a.id, a.user_id, a.label, a.region_code, a.street_line1, a.street_line2,
+            a.neighborhood, a.city, a.administrative_area, a.postal_code, a.reference,
+            a.latitude, a.longitude, a.google_place_id, a.zone_id, a.is_default, a.created_at,
+            p.id AS property_id, p.name AS property_name, p.property_type AS property_type,
+            p.bedrooms AS property_bedrooms, p.bathrooms AS property_bathrooms,
+            p.access_code AS property_access_code, p.notes AS property_notes,
+            p.access_method AS property_access_method,
+            p.access_instructions AS property_access_instructions,
+            p.parking_instructions AS property_parking_instructions,
+            p.customer_present AS property_customer_present, p.has_pets AS property_has_pets,
+            p.pets AS property_pets, p.pets_secured AS property_pets_secured,
+            p.pet_instructions AS property_pet_instructions,
+            p.delicate_items AS property_delicate_items
+     FROM addresses a
+     LEFT JOIN LATERAL (
+       SELECT id, name, property_type, bedrooms, bathrooms, access_code, notes, access_method,
+              access_instructions, parking_instructions, customer_present, has_pets, pets,
+              pets_secured, pet_instructions, delicate_items
+       FROM properties
+       WHERE address_id = a.id
+       ORDER BY created_at DESC
+       LIMIT 1
+     ) p ON TRUE
+     WHERE a.user_id = $1 AND a.archived_at IS NULL
+     ORDER BY a.is_default DESC, a.created_at DESC`,
     [userId],
   );
 }

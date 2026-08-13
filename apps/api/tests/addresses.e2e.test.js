@@ -271,7 +271,7 @@ describe('Reservar solo donde atendemos', () => {
         scheduledDate: date.toISOString().slice(0, 10),
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 180 },
-        cleaning: { bedrooms: 2, bathrooms: 1 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 2, bathrooms: 1 },
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(422);
@@ -294,7 +294,7 @@ describe('Reservar solo donde atendemos', () => {
         scheduledDate: date.toISOString().slice(0, 10),
         windowCode: 'MORNING',
         pricingInput: { durationMinutes: 180 },
-        cleaning: { bedrooms: 2, bathrooms: 1 },
+        cleaning: { propertyType: 'APARTMENT', bedrooms: 2, bathrooms: 1 },
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(201);
@@ -320,6 +320,8 @@ describe('Sin proveedor de mapas', () => {
       .set('Authorization', `Bearer ${auth.customer}`);
     expect(listed.status).toBe(200);
     expect(listed.body.addresses.length).toBeGreaterThan(0);
+    // Cada direccion llega con su inmueble vinculado (o null), nunca ausente.
+    expect(listed.body.addresses.every((a) => Object.prototype.hasOwnProperty.call(a, 'property'))).toBe(true);
   });
 
   it('la orientacion del buscador sale de las zonas, no de una constante', async () => {

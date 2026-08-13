@@ -5,6 +5,7 @@ const addressRepo = require('../db/repositories/addressRepository');
 const catalogRepo = require('../db/repositories/catalogRepository');
 const { locateZone, coverageEnvelope, isValidPoint } = require('../domain/shared/serviceArea');
 const { NotFoundError, DomainError } = require('../domain/errors');
+const { decrypt } = require('./crypto');
 
 /**
  * Direcciones del cliente.
@@ -86,7 +87,53 @@ async function mapHints(regionCode, tx = db) {
 }
 
 async function list(userId, tx = db) {
-  return addressRepo.listByUser(userId, tx);
+  const addresses = await addressRepo.listByUser(userId, tx);
+  return addresses.map(
+    ({
+      property_id,
+      property_name,
+      property_type,
+      property_bedrooms,
+      property_bathrooms,
+      property_access_code,
+      property_notes,
+      property_access_method,
+      property_access_instructions,
+      property_parking_instructions,
+      property_customer_present,
+      property_has_pets,
+      property_pets,
+      property_pets_secured,
+      property_pet_instructions,
+      property_delicate_items,
+      ...address
+    }) => ({
+      ...address,
+      // El inmueble que vive en esta direccion (si hay): permite a la reserva
+      // pre-rellenar identidad y acceso con los datos ya guardados. El codigo
+      // de acceso viaja descifrado, igual que en el listado de inmuebles.
+      property: property_id
+        ? {
+            id: property_id,
+            name: property_name,
+            propertyType: property_type,
+            bedrooms: property_bedrooms,
+            bathrooms: property_bathrooms,
+            accessCode: property_access_code ? decrypt(property_access_code) : null,
+            notes: property_notes,
+            accessMethod: property_access_method,
+            accessInstructions: property_access_instructions,
+            parkingInstructions: property_parking_instructions,
+            customerPresent: property_customer_present,
+            hasPets: property_has_pets,
+            pets: property_pets,
+            petsSecured: property_pets_secured,
+            petInstructions: property_pet_instructions,
+            delicateItems: property_delicate_items,
+          }
+        : null,
+    }),
+  );
 }
 
 /**

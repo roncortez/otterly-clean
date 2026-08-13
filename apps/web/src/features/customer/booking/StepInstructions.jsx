@@ -2,11 +2,12 @@ import { ShieldCheck, PawPrint } from 'lucide-react';
 import { Field, Input, Textarea, Select, Checkbox, OptionCard, Divider, Alert } from '@/shared/ui';
 
 /**
- * Paso 5: acceso, mascotas e instrucciones.
+ * Acceso, mascotas e instrucciones.
  *
- * Es el paso más delicado del producto: aquí el cliente entrega la llave de su
+ * Es el punto más delicado del producto: aquí el cliente entrega la llave de su
  * casa. Se le dice explícitamente qué hacemos con ese dato en lugar de pedirlo
- * sin más.
+ * sin más. Vive dentro del paso de lugar; `embedded` oculta el encabezado que
+ * usaba cuando era un paso propio.
  */
 export default function StepInstructions(props) {
   return props.booking.serviceType === 'CLEANING' ? (
@@ -25,18 +26,20 @@ const ACCESS_METHODS = [
   { value: 'OTHER', label: 'Otro', needsSecret: false },
 ];
 
-function CleaningInstructions({ booking, update, updateDetail }) {
+function CleaningInstructions({ booking, update, updateDetail, embedded }) {
   const { cleaning } = booking;
   const method = ACCESS_METHODS.find((entry) => entry.value === cleaning.accessMethod);
 
   return (
     <div className="space-y-7">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-text">Acceso y detalles</h2>
-        <p className="mt-1 text-text-muted">
-          Esto es lo que le llega al profesional el día del servicio.
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-text">Acceso y detalles</h2>
+          <p className="mt-1 text-text-muted">
+            Esto es lo que le llega al profesional el día del servicio.
+          </p>
+        </div>
+      )}
 
       <div>
         <p className="mb-2.5 text-sm font-medium text-text">¿Estarás en casa?</p>
@@ -199,17 +202,19 @@ function CleaningInstructions({ booking, update, updateDetail }) {
   );
 }
 
-function LaundryInstructions({ booking, update, updateDetail }) {
+function LaundryInstructions({ booking, update, updateDetail, embedded }) {
   const { laundry } = booking;
 
   return (
     <div className="space-y-7">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-text">Recogida e instrucciones</h2>
-        <p className="mt-1 text-text-muted">
-          Cuanto más claro esté, menos posibilidad de que algo se trate mal.
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-text">Recogida e instrucciones</h2>
+          <p className="mt-1 text-text-muted">
+            Cuanto más claro esté, menos posibilidad de que algo se trate mal.
+          </p>
+        </div>
+      )}
 
       <Field label="¿Cómo recogemos la ropa?" hint="Dónde la dejas o con quién la coordinamos.">
         <Textarea
