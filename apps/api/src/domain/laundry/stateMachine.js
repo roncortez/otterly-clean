@@ -98,7 +98,10 @@ const TRANSITIONS = [
   { from: 'REQUIRES_REVIEW', to: 'COMPLETED', roles: [ADMIN], timestamps: ['completed_at'] },
   { from: 'REQUIRES_REVIEW', to: 'CANCELLED', roles: [ADMIN], timestamps: ['cancelled_at'] },
 
-  // Cancelacion: el cliente solo puede cancelar mientras su ropa siga en casa.
+  // Cancelacion: misma frontera que en limpieza, traducida a este flujo. El
+  // cliente cancela solo mientras la ropa siga en su casa y nadie haya salido a
+  // por ella; en cuanto sale del domicilio hay logistica en marcha y la
+  // cancelacion pasa por Operaciones.
   ...['REQUESTED', 'PICKUP_SCHEDULED', 'ASSIGNED', 'PICKUP_CONFIRMED'].map((from) => ({
     from,
     to: 'CANCELLED',

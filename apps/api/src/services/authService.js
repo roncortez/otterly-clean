@@ -20,6 +20,22 @@ const { UnauthorizedError, ConflictError, ForbiddenError } = require('../domain/
  * desactivado.
  */
 
+/**
+ * Margen de rotación.
+ *
+ * El refresh token rota en cada uso y el anterior deja de servir. Sin margen,
+ * dos peticiones legítimas que presentan el mismo token a la vez —dos pestañas
+ * que recargan, dos llamadas que reciben 401 juntas— hacen que una gane y la
+ * otra reciba "sesión expirada", cerrando la sesión de alguien que no hizo nada
+ * malo.
+ *
+ * Durante estos segundos, un token que se acaba de rotar se sigue aceptando y
+ * emite una sesión nueva. No se relaja nada más: `revoked_at` sin `rotated_at`
+ * —cerrar sesión, cambiar la contraseña, desactivar la cuenta— muere en el
+ * acto, y pasado el margen el token rotado tampoco vale.
+ */
+const ROTATION_GRACE_MS = 30_000;
+
 function signAccessToken(user) {
   return jwt.sign(
     { sub: String(user.id), roles: user.roles ?? [], region: user.region_code },
@@ -158,12 +174,24 @@ async function login({ email, password }, context = {}) {
   });
 }
 
-/** Rota el refresh token: el anterior se revoca al usarse. */
+/**
+ * Rota el refresh token: el anterior se revoca al usarse.
+ *
+ * Se acepta también un token recién rotado (ver ROTATION_GRACE_MS): es el caso
+ * de dos peticiones simultáneas de la misma sesión, no el de un token robado.
+ * Un token revocado por cerrar sesión o por cambiar la contraseña no entra por
+ * esa puerta, porque esos no llevan `rotated_at`.
+ */
 async function refresh(refreshTokenValue, context = {}) {
   const stored = await db.oneOrNone(
     `SELECT * FROM refresh_tokens
-      WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
-    [hashToken(refreshTokenValue)],
+      WHERE token_hash = $1
+        AND expires_at > NOW()
+        AND (
+          revoked_at IS NULL
+          OR (rotated_at IS NOT NULL AND rotated_at > NOW() - ($2::int * INTERVAL '1 millisecond'))
+        )`,
+    [hashToken(refreshTokenValue), ROTATION_GRACE_MS],
   );
 
   if (!stored) throw new UnauthorizedError('Sesión expirada, inicia sesión de nuevo');
@@ -174,16 +202,48 @@ async function refresh(refreshTokenValue, context = {}) {
   }
 
   return db.tx(async (tx) => {
-    await tx.none('UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1', [stored.id]);
+    // Solo la primera rotación marca la hora: si se reusara dentro del margen,
+    // extender `rotated_at` alargaría la ventana indefinidamente.
+    await tx.none(
+      `UPDATE refresh_tokens
+          SET revoked_at = COALESCE(revoked_at, NOW()),
+              rotated_at = COALESCE(rotated_at, NOW())
+        WHERE id = $1`,
+      [stored.id],
+    );
     return buildSession(user, context, tx);
   });
 }
 
+/**
+ * Cierra la sesión. `rotated_at = NULL` no es un detalle: es lo que retira el
+ * margen de rotación, de modo que cerrar sesión mata el token en el acto aunque
+ * se acabara de rotar.
+ */
 async function logout(refreshTokenValue) {
   if (!refreshTokenValue) return;
   await db.none(
-    'UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = $1 AND revoked_at IS NULL',
+    `UPDATE refresh_tokens
+        SET revoked_at = COALESCE(revoked_at, NOW()), rotated_at = NULL
+      WHERE token_hash = $1`,
     [hashToken(refreshTokenValue)],
+  );
+}
+
+/**
+ * Cierra todas las sesiones de una persona.
+ *
+ * Lo usan quien acepta una invitación, quien desactiva una cuenta y quien
+ * cambia su contraseña. Está aquí y no repetido en cada servicio porque el
+ * margen de rotación obliga a revocar de una forma concreta —retirando también
+ * `rotated_at`—, y tres copias de ese SQL serían tres sitios donde olvidarlo.
+ */
+async function revokeAllSessions(userId, tx = db) {
+  await tx.none(
+    `UPDATE refresh_tokens
+        SET revoked_at = COALESCE(revoked_at, NOW()), rotated_at = NULL
+      WHERE user_id = $1 AND (revoked_at IS NULL OR rotated_at IS NOT NULL)`,
+    [userId],
   );
 }
 
@@ -199,9 +259,7 @@ async function changePassword(userId, { currentPassword, newPassword }) {
   await db.tx(async (tx) => {
     await userRepository.updatePassword(userId, passwordHash, tx);
     // Cambiar la clave cierra todas las sesiones abiertas.
-    await tx.none('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL', [
-      userId,
-    ]);
+    await revokeAllSessions(userId, tx);
   });
 }
 
@@ -210,6 +268,7 @@ module.exports = {
   login,
   refresh,
   logout,
+  revokeAllSessions,
   changePassword,
   verifyAccessToken,
   signAccessToken,

@@ -66,8 +66,9 @@ const acceptInvitationSchema = z.object({ password });
  * Direccion del cliente.
  *
  * Dos bloques que no se confunden: la ubicacion (coordenada y referencia del
- * lugar de Google) y la direccion escrita, que el cliente corrige a mano porque
- * Google no conoce urbanizaciones, conjuntos ni "junto al parque".
+ * lugar que devolvio el geocodificador) y la direccion escrita, que el cliente
+ * corrige a mano porque ningun proveedor conoce urbanizaciones, conjuntos ni
+ * "junto al parque".
  */
 const addressSchema = z.object({
   label: z.string().trim().min(1).max(60).default('Casa'),
@@ -81,9 +82,12 @@ const addressSchema = z.object({
   reference: z.string().trim().max(500).optional().nullable(),
   latitude: z.number().min(-90).max(90).optional().nullable(),
   longitude: z.number().min(-180).max(180).optional().nullable(),
-  // Identificador del lugar elegido en el mapa. Se conserva como referencia,
-  // pero la direccion tiene que seguir sirviendo sin el.
-  googlePlaceId: z.string().trim().max(255).optional().nullable(),
+  // Identificador del lugar elegido en el mapa y quien lo emitio. Se conservan
+  // como referencia, pero la direccion tiene que seguir sirviendo sin ellos, y
+  // por eso ninguno es obligatorio. El nombre no menciona al proveedor de turno:
+  // cambiarlo no puede obligar a migrar la base (ver migracion 010).
+  providerPlaceId: z.string().trim().max(255).optional().nullable(),
+  geocodingProvider: z.string().trim().max(40).toUpperCase().optional().nullable(),
   zoneId: id.optional().nullable(),
   isDefault: z.boolean().default(false),
 });
@@ -106,7 +110,8 @@ const updateAddressSchema = z
     reference: z.string().trim().max(500).optional().nullable(),
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),
-    googlePlaceId: z.string().trim().max(255).optional().nullable(),
+    providerPlaceId: z.string().trim().max(255).optional().nullable(),
+    geocodingProvider: z.string().trim().max(40).toUpperCase().optional().nullable(),
     zoneId: id.optional().nullable(),
     isDefault: z.boolean().optional(),
   })
@@ -132,14 +137,14 @@ const petSchema = z.object({
 });
 
 /**
- * Inmueble del cliente.
+ * Lugar de limpieza del cliente.
  *
- * El inmueble es el perfil de la residencia que vive en una direccion. El
+ * El lugar es el perfil de lo que limpiamos, y vive en una direccion. El
  * domicilio (calle, coordenadas, cobertura) se guarda en `addresses` y aqui
  * solo lo que describe al espacio y el acceso. Por eso se referencia por
  * `addressId` o se crea la direccion al vuelo (campo `address`); el texto
- * nunca se copia. Los campos de acceso espejan cleaning_details: el inmueble
- * es el perfil persistente y cada orden copia su snapshot al confirmar.
+ * nunca se copia. Los campos de acceso espejan cleaning_details: el lugar es el
+ * perfil persistente y cada orden copia su snapshot al confirmar.
  */
 const propertyAccessFields = {
   // Se cifra antes de guardarse. Ver services/crypto.js
@@ -157,6 +162,9 @@ const propertyAccessFields = {
   petsSecured: z.boolean().optional().nullable(),
   petInstructions: z.string().trim().max(1000).optional().nullable(),
   delicateItems: z.string().trim().max(1000).optional().nullable(),
+  // El tamano es del lugar, no de la visita (ver migracion 012).
+  areaValue: z.number().positive().max(100000).optional().nullable(),
+  areaUnit: z.enum(['m2', 'sqft']).optional().nullable(),
 };
 
 const propertySchema = z
@@ -166,16 +174,20 @@ const propertySchema = z
     bedrooms: z.number().int().min(0).max(20).default(1),
     bathrooms: z.number().int().min(0).max(20).default(1),
     ...propertyAccessFields,
+    // Solo sirve para marcarlo; nunca para desmarcarlo. Quitar el
+    // predeterminado dejando lugares sin ninguno no es un estado que la
+    // aplicacion sepa leer, asi que se cambia marcando otro (ver propertyService).
+    isDefault: z.boolean().optional(),
     addressId: id.optional().nullable(),
     address: addressSchema.optional(),
   })
   .refine((value) => value.addressId || value.address, {
-    message: 'El inmueble necesita una dirección guardada o una dirección nueva',
+    message: 'El lugar necesita una dirección guardada o una dirección nueva',
   });
 
 /**
- * Actualizacion parcial del inmueble (PATCH): los mismos campos descriptivos y
- * de acceso, sin `addressId`/`address`. El inmueble vive en una direccion y esa
+ * Actualizacion parcial del lugar (PATCH): los mismos campos descriptivos y de
+ * acceso, sin `addressId`/`address`. El lugar vive en una direccion y esa
  * pertenencia no se cambia aqui; si hay que moverlo, se crea otro.
  */
 const updatePropertySchema = z
@@ -185,6 +197,7 @@ const updatePropertySchema = z
     bedrooms: z.number().int().min(0).max(20).optional(),
     bathrooms: z.number().int().min(0).max(20).optional(),
     ...propertyAccessFields,
+    isDefault: z.boolean().optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, {
@@ -193,38 +206,54 @@ const updatePropertySchema = z
 
 // --- Detalle de limpieza ---------------------------------------------------
 
+/**
+ * Detalle de limpieza de una reserva.
+ *
+ * Dos mitades con reglas distintas, y la frontera la define el dominio
+ * (`domain/cleaning/placeProfile.js`), no este archivo:
+ *
+ *   * **Lo de la visita** (tipo de limpieza, areas prioritarias, si estaras en
+ *     casa) se pregunta cada vez y por eso conserva sus valores por defecto.
+ *   * **Lo del lugar** (habitaciones, banos, acceso, mascotas) es opcional
+ *     *a proposito*: si el cliente ya lo dijo, la reserva no lo repite y el
+ *     backend lo toma del lugar guardado. Un `default(0)` aqui volveria a
+ *     escribir "cero habitaciones" en cada reserva que no lo mencione, que es
+ *     exactamente el fallo que se viene a arreglar.
+ *
+ * Enviarlos sigue siendo valido: lo que llega manda sobre lo guardado.
+ */
 const cleaningDetailSchema = z.object({
-  cleaningType: z.enum(['EXPRESS', 'STANDARD', 'DEEP', 'MOVE_IN_OUT', 'POST_CONSTRUCTION']).default('STANDARD'),
-  // La identidad del espacio es obligatoria: limpiar sin saber que tipo de casa
-  // es, cuantas habitaciones o banos tiene no tiene sentido. Ya no hay defectos
-  // invisibles ("APARTMENT/0/0").
-  propertyType: z.enum(['HOUSE', 'APARTMENT', 'SUITE', 'OFFICE']),
-  bedrooms: z.number().int().min(0).max(20),
-  bathrooms: z.number().int().min(0).max(20),
-  areaValue: z.number().positive().max(100000).optional().nullable(),
-  areaUnit: z.enum(['m2', 'sqft']).optional().nullable(),
+  // --- De esta visita -----------------------------------------------------
+  cleaningType: z
+    .enum(['EXPRESS', 'STANDARD', 'DEEP', 'MOVE_IN_OUT', 'POST_CONSTRUCTION'])
+    .default('STANDARD'),
   sizeTier: z.string().trim().max(40).optional().nullable(),
   priorityAreas: z.array(z.string().trim().max(60)).max(20).default([]),
-
   suppliesProvidedBy: z.enum(['COMPANY', 'CUSTOMER']).default('COMPANY'),
   productPreferences: z.array(z.string().trim().max(60)).max(20).default([]),
   fragrancePreference: z.string().trim().max(60).optional().nullable(),
-
   customerPresent: z.boolean().default(true),
+  // Si las mascotas estaran encerradas ESE dia; que existan es del espacio.
+  petsSecured: z.boolean().optional().nullable(),
+  delicateItems: z.string().trim().max(1000).optional().nullable(),
+
+  // --- Del espacio: se heredan de su ficha si no vienen --------------------
+  propertyType: z.enum(['HOUSE', 'APARTMENT', 'SUITE', 'OFFICE']).optional(),
+  bedrooms: z.number().int().min(0).max(20).optional(),
+  bathrooms: z.number().int().min(0).max(20).optional(),
+  areaValue: z.number().positive().max(100000).optional().nullable(),
+  areaUnit: z.enum(['m2', 'sqft']).optional().nullable(),
   accessMethod: z
     .enum(['CUSTOMER_OPENS', 'KEY', 'DOOR_CODE', 'CONCIERGE', 'LOCKBOX', 'OTHER'])
-    .default('CUSTOMER_OPENS'),
+    .optional(),
   accessInstructions: z.string().trim().max(1000).optional().nullable(),
   // Se cifra antes de guardarse. Ver services/crypto.js
   accessSecret: z.string().trim().max(500).optional().nullable(),
   parkingInstructions: z.string().trim().max(500).optional().nullable(),
-
-  hasPets: z.boolean().default(false),
-  pets: z.array(petSchema).max(10).default([]),
-  petsSecured: z.boolean().optional().nullable(),
+  hasPets: z.boolean().optional(),
+  pets: z.array(petSchema).max(10).optional(),
   petInstructions: z.string().trim().max(1000).optional().nullable(),
-
-  delicateItems: z.string().trim().max(1000).optional().nullable(),
+  // Instrucciones fijas del lugar. En la ficha del espacio se llama `notes`.
   specialInstructions: z.string().trim().max(2000).optional().nullable(),
 });
 
@@ -247,6 +276,15 @@ const laundryDetailSchema = z.object({
     .enum(['STANDARD', 'HYPOALLERGENIC', 'FRAGRANCE_FREE', 'CUSTOMER_PROVIDED'])
     .optional()
     .nullable(),
+  /**
+   * Codigo del catalogo de fragancias (`catalog_options`, kind FRAGRANCE).
+   *
+   * No es un enum de Zod a proposito: la lista la administra Operaciones desde
+   * la base y anadir "Vainilla" no puede exigir un despliegue. La validacion de
+   * que el codigo existe y esta activo la hace el servicio contra el catalogo,
+   * que es quien tiene la lista; aqui solo se comprueba la forma.
+   */
+  fragranceCode: z.string().trim().max(40).optional().nullable(),
   useFabricSoftener: z.boolean().default(true),
   useBleach: z.boolean().default(false),
   separateColors: z.boolean().default(true),
@@ -288,7 +326,9 @@ const createOrderBase = {
 
 const createCleaningOrderSchema = z.object({
   ...createOrderBase,
-  cleaning: cleaningDetailSchema,
+  // Reservar en un espacio ya descrito no necesita bloque de detalle: los datos
+  // del lugar salen de su ficha y el resto tiene valores por defecto.
+  cleaning: cleaningDetailSchema.default({}),
 });
 
 const createLaundryOrderSchema = z.object({
@@ -417,21 +457,37 @@ const selfProfileSchema = z
 
 const onboardingPatchSchema = selfProfileSchema;
 
-const incidentSchema = z.object({
-  category: z.enum([
-    'NO_ACCESS',
-    'DAMAGE',
-    'MISSING_ITEM',
-    'CUSTOMER_ABSENT',
-    'UNSAFE_CONDITIONS',
-    'INCOMPLETE_SERVICE',
-    'EQUIPMENT',
-    'OTHER',
-  ]),
-  severity: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
-  description: z.string().trim().min(1, 'Describe lo ocurrido').max(2000),
-  attachments: z.array(z.string().url().max(500)).max(10).default([]),
-});
+/**
+ * Reporte de una incidencia: que paso, contado por quien lo vivio.
+ *
+ * `severity` NO esta aqui, y es estricto para que su ausencia se note: quien
+ * envie una gravedad recibe un 400 en lugar de creer que la fijo. Clasificar es
+ * una decision de Operaciones (`classifyIncidentSchema`).
+ */
+const incidentSchema = z
+  .object({
+    category: z.enum([
+      'NO_ACCESS',
+      'DAMAGE',
+      'MISSING_ITEM',
+      'CUSTOMER_ABSENT',
+      'UNSAFE_CONDITIONS',
+      'INCOMPLETE_SERVICE',
+      'EQUIPMENT',
+      'OTHER',
+    ]),
+    description: z.string().trim().min(1, 'Describe lo ocurrido').max(2000),
+    attachments: z.array(z.string().url().max(500)).max(10).default([]),
+  })
+  .strict();
+
+/** Clasificacion administrativa. Solo cuelga de /api/operations. */
+const classifyIncidentSchema = z
+  .object({
+    severity: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+    note: z.string().trim().max(500).optional().nullable(),
+  })
+  .strict();
 
 const resolveIncidentSchema = z.object({
   status: z.enum(['IN_REVIEW', 'RESOLVED', 'DISMISSED']).default('RESOLVED'),
@@ -644,6 +700,7 @@ module.exports = {
   updateStaffSchema,
   verificationSchema,
   incidentSchema,
+  classifyIncidentSchema,
   resolveIncidentSchema,
   bagSchema,
   bagStatusSchema,

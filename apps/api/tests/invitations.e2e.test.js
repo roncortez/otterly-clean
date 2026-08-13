@@ -322,11 +322,8 @@ describe('La sesion sigue funcionando igual', () => {
       .send({ refreshToken: session.refreshToken });
     expect(refreshed.status).toBe(200);
     expect(refreshed.body.accessToken).toBeTruthy();
-    // El refresh rota: el token anterior ya no vale.
-    const reused = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: session.refreshToken });
-    expect(reused.status).toBe(401);
+    // El refresh rota: la respuesta trae un token distinto del que se envio.
+    expect(refreshed.body.refreshToken).not.toBe(session.refreshToken);
 
     const loggedOut = await request(app)
       .post('/api/auth/logout')
@@ -337,6 +334,57 @@ describe('La sesion sigue funcionando igual', () => {
       .post('/api/auth/refresh')
       .send({ refreshToken: refreshed.body.refreshToken });
     expect(afterLogout.status).toBe(401);
+  });
+
+  /**
+   * Recargar la pagina con una sesion valida no puede cerrarla.
+   *
+   * El navegador puede presentar el mismo refresh token dos veces casi a la vez
+   * -dos pestanas que recargan, dos peticiones que reciben 401 juntas-. Sin
+   * margen de rotacion, la segunda recibia "sesion expirada" y echaba fuera a
+   * alguien que no hizo nada malo.
+   */
+  it('dos peticiones simultaneas con el mismo refresh token no cierran la sesion', async () => {
+    const session = await login('cliente@ejemplo.com', 'Cliente123!');
+
+    const [primera, segunda] = await Promise.all([
+      request(app).post('/api/auth/refresh').send({ refreshToken: session.refreshToken }),
+      request(app).post('/api/auth/refresh').send({ refreshToken: session.refreshToken }),
+    ]);
+
+    expect(primera.status, JSON.stringify(primera.body)).toBe(200);
+    expect(segunda.status, JSON.stringify(segunda.body)).toBe(200);
+    // Cada una recibe su propia sesion: el margen no reparte la misma dos veces.
+    expect(primera.body.refreshToken).not.toBe(segunda.body.refreshToken);
+
+    // Y el access token que sale de ahi sirve de verdad.
+    const me = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${segunda.body.accessToken}`);
+    expect(me.status).toBe(200);
+    expect(me.body.user.email).toBe('cliente@ejemplo.com');
+  });
+
+  /**
+   * El margen es solo para la carrera de la rotacion. Cerrar sesion mata el
+   * token en el acto, aunque se acabe de rotar y aunque queden segundos de
+   * margen por delante.
+   */
+  it('cerrar sesion invalida tambien el token que se acaba de rotar', async () => {
+    const session = await login('cliente@ejemplo.com', 'Cliente123!');
+
+    const rotado = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: session.refreshToken });
+    expect(rotado.status).toBe(200);
+
+    // Se cierra sesion con el token viejo: ninguno de los dos debe sobrevivir.
+    await request(app).post('/api/auth/logout').send({ refreshToken: session.refreshToken });
+
+    const conElViejo = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: session.refreshToken });
+    expect(conElViejo.status).toBe(401);
   });
 
   it('las rutas protegidas siguen exigiendo su rol', async () => {

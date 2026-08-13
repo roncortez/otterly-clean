@@ -54,6 +54,51 @@ El campo `timestamps` hace que marcar un estado registre su hora
 automáticamente. Por eso el timeline del cliente tiene marcas de tiempo reales
 sin que ningún controlador las escriba a mano.
 
+### Confirmar es el momento que parte el flujo en dos
+
+Una asignación tiene dos estados vivos, y la diferencia entre ellos es todo el
+compromiso que existe: `OFFERED` es "te lo hemos ofrecido"; `ACCEPTED` es "dije
+que lo haría". De ahí cuelgan cuatro reglas, todas en el backend:
+
+| Antes de confirmar (`OFFERED`)        | Después de confirmar (`ACCEPTED`)      |
+| ------------------------------------- | -------------------------------------- |
+| Ve el trabajo: qué, cuándo y dónde    | Además, el teléfono del cliente         |
+| Sin código de acceso al domicilio     | Puede pedirlo, y queda auditado         |
+| No puede reportar incidencias         | Puede reportarlas                       |
+| **Puede rechazar la asignación**      | **Ya no**: la reasignación es de Operaciones |
+
+El razonamiento es el mismo en las cuatro: **que la empresa ofrezca un trabajo no
+significa que vaya a hacerse**. Repartir el teléfono del cliente y la llave de su
+casa entre gente que quizá nunca pise esa vivienda es exactamente lo que el
+producto no debe hacer, y una incidencia sobre un servicio que aún no se ha
+aceptado no describe nada que haya pasado.
+
+En el otro sentido: una vez confirmado, el cliente ya tiene profesional y hora.
+Soltar eso desde la aplicación con un botón convertiría un compromiso en una
+sugerencia, así que `declineAssignment` responde 409 y la interfaz lo advierte
+**antes** de confirmar, no después. Reasignar sigue siendo posible: lo hace
+Operaciones, que además puede avisar al cliente o reagendar.
+
+Al completar el servicio la asignación pasa a `COMPLETED` y se pierden los dos
+accesos —teléfono y código—, aunque el trabajador conserve el historial de lo que
+hizo. El acceso dura lo que dura el motivo.
+
+### Reportar una incidencia y clasificarla son dos cosas
+
+Quien vive el problema lo cuenta; **cuánto importa lo decide Operaciones**. La
+gravedad determina a quién se avisa y qué se compensa: es una decisión de
+negocio, no una impresión de quien está en la puerta con prisa.
+
+Por eso `incidents.severity` **nace nulo** —"sin clasificar" es un estado real—,
+el esquema del reporte es `.strict()` y rechaza un `severity` en el cuerpo con un
+400 en lugar de ignorarlo en silencio, y la clasificación vive en
+`PATCH /api/operations/incidents/:id/severity`, dentro del árbol que exige ADMIN.
+Cada clasificación queda en `audit_log` con su valor anterior
+(`INCIDENT_CLASSIFIED`): quien baje la gravedad de un daño tiene nombre.
+
+El `DEFAULT 'MEDIUM'` que había antes era la peor de las opciones: una gravedad
+que nadie eligió, indistinguible de una decidida de verdad.
+
 ### Tipo de servicio ≠ configuración comercial
 
 Son dos preguntas distintas que conviene no mezclar:
@@ -448,17 +493,136 @@ Una dirección son dos datos complementarios que **no se sustituyen**:
 
 | Mitad                  | Qué responde                | Quién manda |
 | ---------------------- | --------------------------- | ----------- |
-| `latitude`, `longitude`, `google_place_id` | Dónde está la casa | El mapa |
+| `latitude`, `longitude`, `provider_place_id`, `geocoding_provider` | Dónde está la casa | El mapa |
 | `street_line1/2`, `neighborhood`, `city`, `administrative_area`, `reference` | Cómo se describe | El cliente |
 
-Google acierta con la ciudad y la provincia, y falla con urbanizaciones,
-conjuntos y numeraciones de Quito. Por eso el formulario **no desaparece** tras
-elegir el punto: una sugerencia solo se aplica cuando hay una acción explícita
-(elegir un resultado, mover el pin, pedir la ubicación actual o pulsar "usar la
-dirección del mapa"), y mover el pin no pisa lo que ya se corrigió a mano.
+Los geocodificadores aciertan con la ciudad y la provincia, y fallan con
+urbanizaciones, conjuntos y numeraciones de Quito. Por eso el formulario **no
+desaparece** tras elegir el punto: una sugerencia solo se aplica cuando hay una
+acción explícita (elegir un resultado, mover el pin, pedir la ubicación actual o
+pulsar "usar la dirección del mapa"), y mover el pin no pisa lo que ya se
+corrigió a mano.
 
 No se añadieron columnas de número, edificio o departamento: `street_line1` y
 `street_line2` ya lo cubren, y duplicarlas obligaría a decidir cuál manda.
+
+### Un espacio es una dirección con su ficha de limpieza
+
+Existía una tabla `properties` con su propia calle, ciudad y provincia, editable
+desde una pantalla "Inmuebles". No la miraba ninguna reserva: el cliente escribía
+la misma casa dos veces y el trabajador no veía ninguno de esos datos. Dos
+modelos de dirección en paralelo, uno de ellos inútil.
+
+Lo que sí aportaba —cuántas habitaciones, cuántos baños, cómo se entra, si hay
+mascotas— describe **el lugar** y solo lo usa limpieza. Vive en
+`address_cleaning_profiles`, que cuelga de la dirección igual que
+`cleaning_details` cuelga de la orden:
+
+```
+addresses ──┬── address_cleaning_profiles   (la ficha: qué limpiamos ahí)
+            └── orders                      (cada reserva, con su propio detalle)
+```
+
+De cara al cliente esas dos mitades juntas son **un espacio**, y así se llaman en
+la interfaz (`/limpieza/espacios`). La dirección responde *dónde*; la ficha, *qué
+limpiamos ahí*. El nombre del espacio es el `label` de la dirección —el mismo que
+elige quien la guarda— y no hay un segundo nombre en paralelo.
+
+Cuatro consecuencias que son el motivo del cambio:
+
+- **La dirección es lo único que comparten los servicios.** Lavandería usa la
+  misma sin arrastrar datos que no le importan, y un servicio futuro también.
+- **No hay formulario duplicado.** El mismo componente
+  (`cleaning/HomeProfileForm`) se usa en "Mis espacios" y dentro del asistente de
+  reserva, y los dos guardan en `PATCH /customer/addresses/:id/cleaning-profile`.
+- **Reservar no vuelve a preguntar lo del lugar.** El detalle de la orden se
+  resuelve en el backend con `homeProfile.resolveHomeFields`: lo que la petición
+  dice manda, y lo que no dice sale de la ficha. Antes se rellenaba con ceros
+  cuando la petición no lo mencionaba, así que "no repetir datos" dependía de que
+  el navegador se acordara de reenviarlos todos —es decir, de volver a
+  preguntarlos para tener algo que enviar—.
+- **La orden sigue guardando su propia foto.** `cleaning_details` no referencia
+  la ficha: si el cliente cambia mañana los datos de su espacio, lo que se acordó
+  en una reserva pasada no se reescribe.
+
+#### Qué es del lugar y qué es de la visita
+
+La frontera se declara una sola vez, en `domain/cleaning/homeProfile.js`, y de
+ahí la leen los tres sitios que la necesitan: la ficha, la creación de la orden y
+la validación (`http/schemas.js`). Una prueba comprueba que los tres conjuntos
+siguen coincidiendo, así que un campo nuevo no puede quedarse a medio clasificar.
+
+| Del lugar (se pregunta una vez)                       | De la visita (se pregunta cada vez)                     |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| tipo, habitaciones, baños, tamaño                     | tipo de limpieza, duración, áreas prioritarias, extras  |
+| cómo se entra, clave de acceso, instrucciones, parqueo | si estarás en casa, si hoy las mascotas quedan aparte   |
+| si hay mascotas y cuáles                              | algo delicado que cuidar esta vez, notas del día        |
+| instrucciones fijas del lugar (`notes`)                | fecha y franja horaria                                  |
+
+`notes` en la ficha y `special_instructions` en la orden son el mismo dato con dos
+nombres heredados: las instrucciones que valen para todas las visitas de ese
+lugar. Se unifican en el dominio en lugar de dejar que cada capa invente el suyo.
+
+Una ficha cuenta como completa cuando tiene al menos un baño
+(`isHomeProfileComplete`). No es un `completed_at` porque una fila podía existir
+con todo a cero —creada de paso por una reserva antigua—, y un lugar sin baños no
+es uno a medio describir: es uno que nadie ha descrito. Las habitaciones no
+sirven para medirlo, porque una suite tiene cero.
+
+El código de acceso se comporta igual que en una orden: se cifra con AES-256-GCM,
+**nunca vuelve en una respuesta** (solo `hasAccessSecret`) y, si el cliente no
+escribe uno nuevo al reservar, se copia el texto cifrado tal cual a la orden, sin
+descifrarlo por el camino.
+
+La migración 006 traslada los inmuebles existentes: si el cliente ya tenía una
+dirección con la misma calle, se fusionan; si no, la dirección se crea a partir
+del inmueble. Después, `properties` se elimina —mantenerla habría dejado el
+modelo viejo al lado del nuevo.
+
+### El proveedor no da nombre a las columnas
+
+`google_place_id` se renombró a `provider_place_id` y se le añadió
+`geocoding_provider` (migración 010) al cambiar el mapa a MapLibre y la
+geocodificación a Geoapify. Un nombre de columna que menciona al proveedor de
+turno obliga a migrar la base cada vez que ese proveedor cambia, y mezclar
+identificadores de dos proveedores en la misma columna sin decir cuál es cuál
+los vuelve inservibles: un `place_id` de Google no significa nada en Geoapify.
+
+Los identificadores que ya existían se conservan, etiquetados como `GOOGLE`.
+Nada de esto es imprescindible: lo que permite encontrar la casa son las
+coordenadas y el texto, y la aplicación funciona con esos campos vacíos.
+
+### Mapa y geocodificación
+
+| Pieza | Quién | Dónde vive |
+| ----- | ----- | ---------- |
+| Render del mapa, pin arrastrable | MapLibre GL JS | `shared/maps/MapCanvas.jsx` |
+| Autocompletado, geocodificación inversa, teselas | Geoapify | `shared/maps/geoapify.js`, `config.js` |
+
+Se pasó de Google Maps Platform a esta combinación por coste: el flujo entero
+—buscar, marcar, arrastrar, corregir— cabe en un plan gratuito. La frontera está
+en `shared/maps/`: `MapCanvas` es el único archivo que importa MapLibre,
+`geoapify.js` el único que conoce la forma de sus respuestas, y `config.js` el
+único con URLs y claves. `AddressForm` no sabe nada de ninguno de los dos: recibe
+`{ coordinates, placeId, provider, fields, source }` y decide qué hacer con eso.
+
+Un detalle que no se ve venir: MapLibre parsea las teselas en un **web worker
+que carga por su cuenta**, construyendo su ruta en tiempo de ejecución. El
+empaquetador no puede verla, así que el worker no llega a emitirse y la petición
+acaba en 404. El síntoma engaña —mapa gris con sus controles y su atribución,
+sin pin y sin ningún error visible, porque el evento `load` no se emite nunca—,
+así que la URL se le da explícitamente en `shared/maps/worker.js`.
+
+La cuota se cuida donde se gasta: el buscador espera a que la escritura se
+detenga (350 ms), ignora textos de menos de tres caracteres, cancela la petición
+anterior, reutiliza los campos que ya trae el resultado elegido en lugar de
+volver a preguntar, y la geocodificación inversa se dispara al **soltar** el pin,
+nunca durante el arrastre.
+
+Ninguna de las tres piezas es imprescindible: sin clave configurada el selector
+se retira entero, si el mapa no carga queda el buscador, y si la geocodificación
+inversa falla se conserva la coordenada marcada. En los tres casos la dirección
+se escribe a mano.
 
 ### Cobertura sin PostGIS
 
@@ -537,7 +701,8 @@ distintas.
 Enrutado **por audiencia**, no por entidad:
 
 ```
-/inicio, /reservar, /servicios, /direcciones   → CUSTOMER
+/inicio, /limpieza/*, /lavanderia/*, /arreglos,
+/servicios, /direcciones                        → CUSTOMER
 /operaciones/*                                  → ADMIN
 /trabajo/*                                      → STAFF
 ```
@@ -547,6 +712,118 @@ Así el control de acceso se ve al leer `App.jsx`. `RequireRole` comprueba
 cada consola ofrece un enlace a la otra solo si la persona tiene el rol. El
 backend revalida todo: el enrutado solo evita mostrar pantallas que no
 corresponden.
+
+### Cuatro contextos, una aplicación
+
+Para el cliente, limpieza, lavandería y arreglo de prendas son servicios
+distintos: se contratan por motivos distintos y se preguntan cosas distintas. En
+la primera versión compartían una sola pantalla con todo mezclado, y el
+resultado era que nada parecía diseñado para lo que la persona venía a hacer.
+
+Ahora cada uno tiene su rama de rutas, su navegación y su acento de color. Lo
+que **no** se duplicó: la sesión, el cliente HTTP, las direcciones, el detalle
+de pedido, el historial global ni los componentes. No hay tres aplicaciones,
+tres backends ni tres sistemas de sesión; hay un contexto de servicio.
+
+Ese contexto es una tabla, `shared/services/index.js`:
+
+```js
+{ code: 'LAUNDRY', slug: 'lavanderia', path: '/lavanderia', label: 'Lavandería',
+  icon: Shirt, nav: [ … ] }
+```
+
+De ahí salen la navegación (escritorio y móvil), el conmutador de servicio, los
+enlaces de la portada y el color. Añadir una pantalla a un servicio es añadir
+una fila; **ninguna pantalla escribe su propia lista de enlaces**.
+
+Junto a los tres servicios hay un cuarto contexto: **Mi cuenta**
+(`ACCOUNT_CONTEXT`). "Fuera de un servicio" tiene nombre y navegación propios en
+lugar de ser la ausencia de contexto, y eso es lo que permite dibujar un solo
+sistema de navegación en vez de dos barras que se pisan.
+
+#### La jerarquía del encabezado
+
+```
+OTTERLY CLEAN                                    ← marca y sesión
+     ↓
+[Mi cuenta] [LIMPIEZA] [Lavandería] [Arreglos]   ← en qué estás (relleno = actual)
+     ↓
+Resumen · Reservar · Mis reservas · Mis espacios  ← qué se puede hacer ahí
+```
+
+El orden es el arreglo: antes la navegación del servicio iba arriba y el
+conmutador debajo, así que lo que representaba el contexto entero parecía un menú
+secundario colgado de sus propias opciones. Ahora el contexto va primero, lleva su
+acento de color relleno, y sus opciones cuelgan de él en una banda con ese mismo
+acento —la única con fondo sólido es la pestaña activa; si las opciones también lo
+tuvieran, volverían a pesar lo mismo—.
+
+En móvil son los mismos tres niveles repartidos para no apilar barras: marca y
+sesión arriba, el conmutador justo debajo (desplazable), y las opciones del
+contexto en la barra inferior, donde llega el pulgar. La banda de escritorio no se
+repite ahí.
+
+**Cuenta o servicio, nunca las dos cosas.** Ninguna opción aparece en dos
+niveles: Direcciones y el historial completo son de la cuenta —una dirección sirve
+para limpiar, para recoger ropa y para lo que venga—; Mis espacios es de limpieza,
+porque solo limpieza necesita saber cuántos baños tiene un lugar. Un contexto con
+una sola pantalla (Arreglos) no dibuja banda: la pantalla ya se titula.
+
+Tres decisiones que lo mantienen simple:
+
+- **Los tipos siguen siendo tres, fijos y conocidos.** La tabla les da nombre y
+  ruta, no los inventa: sigue mandando `domain/shared/serviceTypes.js`.
+- **Quién decide si se puede reservar es el backend.** `useServiceExperiences`
+  cruza la tabla con `GET /api/catalog/config` (`implemented` + `active` →
+  `bookable`) y solo entonces aparece un botón de reservar. Arreglo de prendas
+  tiene su pantalla y su color, pero no ofrece una reserva que el dominio no
+  sabe crear.
+- **El asistente de reserva es uno.** `BookingWizard` recibe el servicio de la
+  ruta (`serviceType`) y oculta el paso de elegirlo; el resto del flujo es el
+  mismo código. Lo único que cambia es el segundo paso: limpieza elige un espacio
+  (`StepSpace`) y lavandería una dirección (`StepAddress`), porque lavandería no
+  entra en la casa.
+- **Nadie sale del asistente para volver a entrar.** Si no hay espacio o no hay
+  dirección, se crea ahí mismo con los mismos formularios de siempre
+  (`SpaceSetup` encadena `AddressForm` y `HomeProfileForm`); no hay una segunda
+  implementación del formulario dentro del wizard.
+
+Las rutas anteriores (`/reservar`, `/reservar?servicio=…`, `/inmuebles`,
+`/limpieza/hogar`) siguen existiendo como redirecciones: no se rompe ningún enlace
+guardado.
+
+### El seguimiento muestra cinco estados
+
+Una limpieza tiene ocho estados y una lavandería más, y una columna de ocho puntos
+deja de leerse de un vistazo: se vuelve un documento. `timelineWindow`
+(`shared/ui/timelineWindow.js`) recorta a cinco **alrededor del estado actual**, no
+a los cinco primeros: al empezar se ven los primeros, y con el servicio avanzado se
+ve el paso anterior, el actual y lo que queda. Lo que se deja fuera se dice ("2
+estados antes") y la línea vertical se difumina, así que la lista no se corta en
+silencio. En el detalle del servicio se puede desplegar el recorrido completo.
+
+### Identidad visual por servicio
+
+Cada experiencia tiene un acento, y los tres salen de la paleta que ya existía
+—verde bosque, salvia y terracota—, para que sigan siendo la misma marca:
+
+| Servicio  | Acento          |
+| --------- | --------------- |
+| Limpieza  | Verde bosque    |
+| Lavandería| Salvia          |
+| Arreglos  | Terracota       |
+
+Se resuelve con un atributo y cinco variables CSS (`index.css`):
+`[data-service='LAUNDRY']` redefine `--service`, `--service-strong`,
+`--service-soft`… y `@theme inline` las expone como `text-service`,
+`bg-service-soft`, `border-service`. El contenedor de la experiencia pone el
+atributo y **ningún componente escribe el color de un servicio**: una tarjeta de
+pedido en una lista mezclada lleva su propio acento con solo declarar
+`data-service={order.serviceType}`.
+
+Fuera de un servicio —portada, direcciones, consolas internas— `--service` vale
+el verde de la marca, así que esas pantallas se ven exactamente igual que antes
+sin tocarlas. No hay más sistema de temas que esto, a propósito.
 
 ### Formularios de configuración
 
@@ -569,6 +846,31 @@ El access token vive **en memoria** y solo el refresh token se persiste en
 `localStorage`. Un XSS que lea `localStorage` no obtiene un token de acceso
 vigente, y la sesión se puede revocar desde el servidor. Ante un 401 el cliente
 refresca una vez y reintenta la petición original de forma transparente.
+
+**El refresco es único en vuelo.** La promesa vive en el módulo
+(`shared/api/client.js` → `refreshSession`), no en un componente, y todo el que
+necesite refrescar espera a la misma: el interceptor de 401, y también el efecto
+de arranque que recupera la sesión al cargar la página.
+
+No es una optimización, es lo que hace que recargar funcione. El refresh token
+**rota en cada uso**, así que dos llamadas en paralelo con el mismo token
+terminan con una rechazada. Y el efecto de arranque de React se ejecuta **dos
+veces** en modo estricto: sin deduplicar, la segunda presentaba un token ya
+rotado, recibía 401 y cerraba la sesión. El síntoma era exactamente ese —recargar
+parecía cerrar sesión— y la causa no estaba en la autenticación, sino en pedir
+dos veces lo que solo se puede pedir una.
+
+La otra mitad de la regla: **una sesión solo termina cuando el servidor lo dice**
+(401/403). Un servidor caído o una conexión que se corta dejan al usuario fuera
+de las pantallas privadas, pero **no borran el refresh token**, para que volver a
+cargar cuando haya red baste para entrar. Antes, cualquier fallo de red obligaba
+a escribir la contraseña otra vez.
+
+El servidor cierra la carrera por su lado con un **margen de rotación** de 30
+segundos (`authService.ROTATION_GRACE_MS`): un token recién rotado se sigue
+aceptando ese rato, para que dos pestañas que recargan a la vez no se echen
+fuera. Revocar sigue siendo inmediato —ver
+[Seguridad](SECURITY.md#rotación-y-margen).
 
 ## Qué está preparado pero no implementado
 

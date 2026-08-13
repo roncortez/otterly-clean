@@ -21,6 +21,22 @@ su tabla de detalle. Lo que Operaciones administra desde la aplicación es su
 capa comercial —si se ofrecen, cómo se presentan y a qué precio—, no cómo
 funcionan. Ver [Configuración administrable](docs/ARCHITECTURE.md#configuración-administrable).
 
+Para el cliente cada uno es una **experiencia propia**, con su navegación y su
+color, dentro de la misma aplicación y la misma sesión:
+
+```text
+/inicio        elegir servicio y ver qué está pasando ahora
+/limpieza      resumen · reservar · mis reservas · mi hogar
+/lavanderia    resumen · pedir recogida · mis pedidos
+/arreglos      presentación (sin reserva todavía: el dominio aún no la crea)
+/servicios     todas las reservas, de todos los servicios
+/direcciones   las direcciones, compartidas por todos
+```
+
+No son tres aplicaciones: comparten sesión, cliente HTTP, direcciones,
+componentes y asistente de reserva. Ver
+[Tres experiencias, una aplicación](docs/ARCHITECTURE.md#tres-experiencias-una-aplicación).
+
 ## Stack
 
 - **Backend**: Node.js 20+, Express 5, PostgreSQL 18 (pg-promise), Zod, JWT.
@@ -75,18 +91,22 @@ degradan a un campo de URL. Las fotos de perfil usan la misma configuración.
 
 ### Mapa para elegir la dirección (opcional)
 
-El cliente marca en un mapa dónde está su casa y corrige después la dirección
-escrita. Para habilitarlo, en `apps/web/.env`:
+El cliente busca su ubicación, marca el punto exacto en el mapa y corrige
+manualmente la dirección resultante.
+
+La interfaz usa **MapLibre GL JS** para el mapa y **Geoapify** para la búsqueda,
+las teselas y la geocodificación inversa. Para habilitarlo, en `apps/web/.env`:
 
 ```bash
-VITE_GOOGLE_MAPS_API_KEY=...
-VITE_GOOGLE_MAPS_MAP_ID=DEMO_MAP_ID   # o uno propio, con el estilo de la marca
+VITE_GEOAPIFY_API_KEY=...
+VITE_GEOAPIFY_MAP_STYLE=osm-bright-smooth   # opcional, es el valor por defecto
 ```
 
 Esa clave la usa el navegador, así que **no es un secreto**: lo que la protege
-son sus restricciones de dominio y de API en la consola de Google
-([detalles](docs/SECURITY.md#la-clave-de-google-maps)). Sin clave, la dirección
-se escribe a mano y todo lo demás sigue igual.
+son las restricciones de dominio del panel de Geoapify
+([detalles](docs/SECURITY.md#la-clave-del-mapa)). Sin esta variable, la dirección
+se sigue introduciendo a mano y todo lo demás funciona igual: el mapa es una
+ayuda, no un requisito.
 
 ### Invitaciones
 
@@ -145,12 +165,13 @@ apps/api/
 apps/web/
   src/
     shared/              cliente API, sesión, configuración regional, UI, formato
-    shared/maps/         carga de Google Maps y selector de ubicación
+    shared/maps/         mapa (MapLibre), buscador y geocodificación (Geoapify)
     features/
       auth/              panel de acceso: entrar, crear cuenta y activar invitación
       onboarding/        completar el perfil, con los pasos que decide el backend
       profile/           perfil propio: datos personales y foto
-      customer/          panel, asistente de reserva, detalle, direcciones
+      customer/          inicio, experiencias por servicio, reserva, direcciones
+        cleaning/        datos del hogar (lo que antes era "inmuebles")
       operations/        panel operativo, solicitudes, trabajadores, incidencias
         configuration/   empresa, servicios, agenda y avisos
       staff/             trabajos del día y detalle (optimizado para móvil)
@@ -188,8 +209,26 @@ escribe datos personales en nombre de otro y no circula ninguna contraseña por
 correo.
 
 **Direcciones**: el cliente marca en el mapa dónde está su casa y corrige la
-dirección escrita encima, porque Google no conoce las urbanizaciones de Quito. El
-backend valida contra las zonas de cobertura antes de aceptar una reserva.
+dirección escrita encima, porque ningún geocodificador conoce las urbanizaciones
+de Quito. El backend valida contra las zonas de cobertura antes de aceptar una
+reserva. Esa misma coordenada es la que ve el trabajador para llegar: no se
+vuelve a buscar el texto en ningún mapa.
+
+**Espacios**: una dirección más lo que hay que saber para limpiarla —cuántas
+habitaciones, cuántos baños, cómo se entra, si hay mascotas—. Se describe una vez
+en `/limpieza/espacios`, con el nombre que le dé el cliente ("Mi departamento",
+"Casa de mis padres"), y **al reservar solo se elige**: la reserva pregunta lo que
+cambia ese día, no lo que ya sabemos del lugar. Las direcciones siguen siendo de
+la cuenta, porque lavandería usa las mismas.
+
+**Privacidad del trabajador y del cliente**: recibir una asignación no es
+aceptarla. El teléfono del cliente y el código de acceso al domicilio aparecen
+al **confirmar** el trabajo, y desaparecen al terminarlo. Confirmar es un
+compromiso: a partir de ahí, soltar el servicio se gestiona con Operaciones.
+
+**Incidencias**: quien las vive cuenta qué pasó; la gravedad la clasifica
+Operaciones desde `/operaciones/incidencias`, y cada clasificación queda
+auditada con su valor anterior.
 
 ### Preparado pero no implementado
 

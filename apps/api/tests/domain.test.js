@@ -20,6 +20,18 @@ const {
   assertBookable,
   describeDayAvailability,
 } = require('../src/domain/shared/availability');
+const {
+  ACCESS_SECRET,
+  HOME_KEYS,
+  HOME_DETAIL_KEYS,
+  VISIT_FIELDS,
+  needsAccessSecret,
+  homeFieldsToColumns,
+  resolveHomeFields,
+  projectHomeProfile,
+  isHomeProfileComplete,
+} = require('../src/domain/cleaning/homeProfile');
+const schemas = require('../src/http/schemas');
 const { getRegion } = require('../src/config/regions');
 const { ROLES, hasRole, hasAnyRole, primaryRole, normalizeRoles } = require('../src/domain/shared/roles');
 
@@ -67,6 +79,26 @@ describe('Maquina de estados de limpieza', () => {
     // Con el profesional ya en camino, la cancelacion es decision de la empresa.
     expect(() => cleaningStateMachine.assertTransition('ON_THE_WAY', 'CANCELLED', ROLES.CUSTOMER)).toThrow();
     expect(() => cleaningStateMachine.assertTransition('ON_THE_WAY', 'CANCELLED', ROLES.ADMIN)).not.toThrow();
+  });
+
+  /**
+   * La politica de cancelacion del cliente, enumerada de una vez: la frontera
+   * es el momento en que alguien se pone en marcha. Se comprueba el conjunto
+   * completo y no un par de casos sueltos, porque anadir un estado nuevo al
+   * flujo no debe abrir una puerta sin que nadie se entere.
+   */
+  it('la frontera de la cancelacion del cliente es que el profesional salga', () => {
+    const canCancel = (from, role) =>
+      cleaningStateMachine.allowedTransitions(from, role).some((t) => t.to === 'CANCELLED');
+
+    for (const state of ['REQUESTED', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'CONFIRMED']) {
+      expect(canCancel(state, ROLES.CUSTOMER), state).toBe(true);
+    }
+    for (const state of ['ON_THE_WAY', 'ARRIVED', 'IN_PROGRESS', 'NO_ACCESS', 'INCIDENT_REPORTED']) {
+      expect(canCancel(state, ROLES.CUSTOMER), state).toBe(false);
+      // Operaciones sigue pudiendo gestionar la excepcion en todos ellos.
+      expect(canCancel(state, ROLES.ADMIN), state).toBe(true);
+    }
   });
 
   it('trata los estados finales como inmutables', () => {
@@ -476,5 +508,155 @@ describe('Configuracion regional', () => {
     expect(US.tax.rate).toBe(0);
     expect(EC.units.weight).toBe('kg');
     expect(US.units.weight).toBe('lb');
+  });
+});
+
+/**
+ * El perfil de un espacio: una sola definicion de que describe un lugar.
+ *
+ * Lo que se prueba aqui es la frontera, no la implementacion: que un dato del
+ * lugar no se pregunte otra vez en cada reserva, que uno de la visita no se
+ * quede pegado al lugar, y que las tres capas —ficha, reserva y validacion—
+ * sigan hablando del mismo conjunto de campos. Si alguien anade un campo a la
+ * reserva y se olvida de clasificarlo, esto falla.
+ */
+describe('Perfil de limpieza de un espacio', () => {
+  const profile = {
+    property_type: 'HOUSE',
+    bedrooms: 3,
+    bathrooms: 2,
+    area_value: '120.00',
+    area_unit: 'm2',
+    has_pets: true,
+    pets: [{ type: 'gato', count: 2 }],
+    pet_instructions: 'No sale al pasillo',
+    access_method: 'DOOR_CODE',
+    access_instructions: 'Timbre 5B',
+    parking_instructions: 'Subsuelo 1',
+    notes: 'El timbre no funciona',
+    access_secret_encrypted: 'v1:aa:bb:cc',
+    updated_at: new Date('2026-08-01T10:00:00Z'),
+  };
+
+  it('una reserva que no repite nada del lugar lo hereda entero', () => {
+    const resolved = resolveHomeFields({ payload: {}, profile, areaUnit: 'm2' });
+
+    expect(resolved.bedrooms).toBe(3);
+    expect(resolved.bathrooms).toBe(2);
+    expect(resolved.propertyType).toBe('HOUSE');
+    expect(resolved.areaValue).toBe(120);
+    expect(resolved.hasPets).toBe(true);
+    expect(resolved.pets).toEqual([{ type: 'gato', count: 2 }]);
+    expect(resolved.accessMethod).toBe('DOOR_CODE');
+    // Las instrucciones fijas del lugar viajan a la orden con su otro nombre.
+    expect(resolved.specialInstructions).toBe('El timbre no funciona');
+  });
+
+  it('lo que la reserva si dice manda sobre lo guardado', () => {
+    const resolved = resolveHomeFields({
+      payload: { bathrooms: 3, hasPets: false },
+      profile,
+      areaUnit: 'm2',
+    });
+
+    expect(resolved.bathrooms).toBe(3);
+    expect(resolved.hasPets).toBe(false);
+    // Y lo que no menciona sigue viniendo del espacio.
+    expect(resolved.bedrooms).toBe(3);
+  });
+
+  it('sin ficha usa valores por defecto, no ceros inventados a medias', () => {
+    const resolved = resolveHomeFields({ payload: { bedrooms: 2 }, areaUnit: 'm2' });
+
+    expect(resolved.bedrooms).toBe(2);
+    expect(resolved.bathrooms).toBe(0);
+    expect(resolved.propertyType).toBe('APARTMENT');
+    expect(resolved.accessMethod).toBe('CUSTOMER_OPENS');
+    expect(resolved.pets).toEqual([]);
+  });
+
+  it('la unidad de area la pone la region cuando hay medida y nadie la dijo', () => {
+    const resolved = resolveHomeFields({ payload: { areaValue: 80 }, areaUnit: 'sqft' });
+    expect(resolved.areaUnit).toBe('sqft');
+
+    // Sin medida no hay unidad que guardar.
+    expect(resolveHomeFields({ payload: {}, areaUnit: 'sqft' }).areaUnit).toBeNull();
+  });
+
+  it('solo se escriben los campos que vienen: una reserva no borra lo que no menciona', () => {
+    const columns = homeFieldsToColumns({ bathrooms: 3 });
+
+    expect(columns).toEqual({ bathrooms: 3 });
+    expect(columns.pets).toBeUndefined();
+    expect(columns.pet_instructions).toBeUndefined();
+  });
+
+  it('los datos de la visita nunca se guardan en el espacio', () => {
+    const columns = homeFieldsToColumns({
+      bedrooms: 2,
+      cleaningType: 'DEEP',
+      priorityAreas: ['Cocina'],
+      customerPresent: false,
+      petsSecured: true,
+      delicateItems: 'Cuadros',
+      suppliesProvidedBy: 'CUSTOMER',
+      fragrancePreference: 'Lavanda',
+    });
+
+    expect(Object.keys(columns)).toEqual(['bedrooms']);
+  });
+
+  it('la ficha que sale al cliente no lleva el secreto, solo si existe', () => {
+    const projected = projectHomeProfile(profile);
+
+    expect(projected.hasAccessSecret).toBe(true);
+    expect(JSON.stringify(projected)).not.toContain('v1:aa:bb:cc');
+    // Y los numericos salen como numeros, no como cadenas de PostgreSQL.
+    expect(projected.areaValue).toBe(120);
+    expect(projected.bathrooms).toBe(2);
+  });
+
+  it('una ficha sin banos esta incompleta: nadie la ha descrito todavia', () => {
+    expect(isHomeProfileComplete(null)).toBe(false);
+    expect(isHomeProfileComplete({ bathrooms: 0, bedrooms: 3 })).toBe(false);
+    expect(isHomeProfileComplete({ bathrooms: 1, bedrooms: 0 })).toBe(true);
+    expect(projectHomeProfile(profile).complete).toBe(true);
+  });
+
+  it('la clave de la puerta solo se hereda si asi se entra esta vez', () => {
+    expect(needsAccessSecret('DOOR_CODE')).toBe(true);
+    expect(needsAccessSecret('KEY')).toBe(true);
+    expect(needsAccessSecret('LOCKBOX')).toBe(true);
+    expect(needsAccessSecret('CUSTOMER_OPENS')).toBe(false);
+    expect(needsAccessSecret('CONCIERGE')).toBe(false);
+  });
+
+  /**
+   * La prueba que evita que el concepto se vuelva a partir: los campos del
+   * detalle de una reserva son exactamente los del espacio mas los de la visita,
+   * sin solapes ni huerfanos, y la ficha admite justo los del espacio (mas la
+   * clave de acceso, que se escribe pero no se lee).
+   */
+  it('reserva, ficha y validacion hablan del mismo conjunto de campos', () => {
+    const detailKeys = Object.keys(schemas.createCleaningOrderSchema.shape.cleaning.def.innerType.shape);
+    const profileKeys = Object.keys(schemas.cleaningProfileSchema.shape);
+
+    const home = new Set(HOME_DETAIL_KEYS);
+    const visit = new Set(VISIT_FIELDS);
+
+    // Ni un campo del detalle sin clasificar.
+    for (const key of detailKeys) {
+      if (key === ACCESS_SECRET.key) continue;
+      expect(home.has(key) || visit.has(key), `${key} no esta clasificado`).toBe(true);
+    }
+    // Ni un campo clasificado que el detalle no acepte.
+    for (const key of [...home, ...visit]) {
+      expect(detailKeys, `${key} no llega en la reserva`).toContain(key);
+    }
+    // Los dos conjuntos son disjuntos: nada es de la visita y del lugar a la vez.
+    expect([...home].filter((key) => visit.has(key))).toEqual([]);
+
+    // La ficha del espacio: los campos del lugar y la clave, nada mas.
+    expect(profileKeys.sort()).toEqual([...HOME_KEYS, ACCESS_SECRET.key].sort());
   });
 });

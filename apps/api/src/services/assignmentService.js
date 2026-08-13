@@ -221,10 +221,27 @@ async function acceptAssignment({ orderId, actor, request }) {
   });
 }
 
-/** El trabajador rechaza: la orden vuelve a la cola de Operaciones. */
+/**
+ * El trabajador rechaza la asignacion que se le ofrecio: la orden vuelve a la
+ * cola de Operaciones.
+ *
+ * Solo se puede rechazar lo que todavia no se ha aceptado. Confirmar un
+ * servicio es comprometerse a hacerlo: a partir de ahi el cliente ya tiene un
+ * profesional asignado y una hora, y deshacerlo es una decision operativa
+ * -reasignar, reagendar, avisar al cliente- que toma Operaciones. Sin esta
+ * regla la pantalla podia prometer un compromiso que la API dejaba abandonar de
+ * un solo toque.
+ */
 async function declineAssignment({ orderId, actor, reason, request }) {
   const assignment = await assignmentRepo.findActiveForStaff(orderId, actor.id);
   if (!assignment) throw new NotFoundError('Asignacion', orderId);
+
+  if (assignment.status === 'ACCEPTED') {
+    throw new ConflictError(
+      'Ya confirmaste este servicio. Si no puedes atenderlo, contacta con Operaciones para que lo reasignen.',
+      { assignmentStatus: assignment.status },
+    );
+  }
 
   const order = await orderRepo.findById(orderId);
   const queueStatus = order.service_type === 'LAUNDRY' ? 'PICKUP_SCHEDULED' : 'PENDING_ASSIGNMENT';

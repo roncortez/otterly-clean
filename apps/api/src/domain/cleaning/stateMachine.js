@@ -75,8 +75,14 @@ const TRANSITIONS = [
   { from: 'REQUIRES_REVIEW', to: 'CANCELLED', roles: [ADMIN], timestamps: ['cancelled_at'] },
 
   // --- Cancelacion -------------------------------------------------------
-  // El cliente solo puede cancelar antes de que el trabajo arranque, y la
-  // politica horaria se valida aparte (cancellationPolicy.js).
+  //
+  // La frontera es el momento en que alguien se pone en marcha. Hasta que el
+  // profesional sale hacia el domicilio, cancelar solo cuesta una casilla de
+  // agenda y el cliente lo hace solo. Desde que va en camino hay una persona
+  // desplazandose, y deshacer eso es una decision operativa: se cancela
+  // hablando con Operaciones, que ademas puede reagendar en lugar de perder el
+  // servicio. La politica horaria (cancelacion tardia) se evalua aparte, en
+  // domain/shared/policies.js, y no bloquea: solo la marca.
   ...['REQUESTED', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'CONFIRMED'].map((from) => ({
     from,
     to: 'CANCELLED',

@@ -287,6 +287,28 @@ router.get(
   }),
 );
 
+/**
+ * PATCH /api/operations/incidents/:id/severity
+ *
+ * Clasificacion administrativa. Quien reporta describe el hecho; decidir si es
+ * grave -y con ello a quien se avisa y que se compensa- es una decision de
+ * Operaciones, asi que vive aqui, en el arbol que exige ADMIN, y no en el
+ * formulario del trabajador.
+ */
+router.patch(
+  '/incidents/:id/severity',
+  validate({ params: schemas.idParamSchema, body: schemas.classifyIncidentSchema }),
+  asyncHandler(async (req, res) => {
+    const incident = await incidentService.classify({
+      incidentId: req.validatedParams.id,
+      actor: req.user,
+      payload: req.body,
+      request: req,
+    });
+    res.json({ incident });
+  }),
+);
+
 router.post(
   '/incidents/:id/resolve',
   validate({ params: schemas.idParamSchema, body: schemas.resolveIncidentSchema }),

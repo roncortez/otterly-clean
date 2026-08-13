@@ -7,7 +7,7 @@ const audit = require('./auditService');
 const notifications = require('../notifications');
 const orderService = require('./orderService');
 const { ROLES } = require('../domain/shared/roles');
-const { NotFoundError } = require('../domain/errors');
+const { NotFoundError, ForbiddenError } = require('../domain/errors');
 
 /**
  * Incidencias.
@@ -15,6 +15,15 @@ const { NotFoundError } = require('../domain/errors');
  * Reportar una incidencia hace dos cosas a la vez: crea el registro y mueve la
  * orden al estado excepcional correspondiente, para que el cliente vea que algo
  * pasa sin tener que leer notas internas.
+ *
+ * Dos responsabilidades que no se mezclan:
+ *
+ *   * **Reportar el hecho** lo hace quien lo vive —el trabajador que confirmo
+ *     el servicio o el cliente— y consiste en describir que paso.
+ *   * **Clasificar su gravedad** lo hace Operaciones (`classify`). La gravedad
+ *     decide a quien se avisa y que se compensa: es una decision de negocio, no
+ *     una impresion de quien reporta, y por eso nace vacia en lugar de con un
+ *     "MEDIA" por defecto que nadie eligio.
  */
 
 /** Categoria de incidencia -> estado al que va la orden. */
@@ -32,25 +41,26 @@ async function report({ orderId, actor, payload, request }) {
   if (actor.role === ROLES.STAFF) {
     const assignment = await assignmentRepo.findActiveForStaff(orderId, actor.id);
     if (!assignment) throw new NotFoundError('Orden', orderId);
+    // Una incidencia mueve la orden a una rama excepcional, avisa a Operaciones
+    // y queda en el expediente del servicio. Quien todavia no ha confirmado que
+    // hara el trabajo no tiene nada que reportar sobre el: primero se acepta,
+    // y si no se puede atender, se rechaza la asignacion.
+    if (assignment.status !== 'ACCEPTED') {
+      throw new ForbiddenError('Confirma el trabajo antes de reportar una incidencia');
+    }
   } else if (actor.role === ROLES.CUSTOMER && order.customer_id !== actor.id) {
     throw new NotFoundError('Orden', orderId);
   }
 
   const incident = await db.tx(async (tx) => {
+    // `severity` no se escribe aqui a proposito: nace sin clasificar y la pone
+    // Operaciones desde `classify`.
     const created = await tx.one(
       `INSERT INTO incidents
-         (order_id, reported_by, reporter_role, category, severity, description, attachments)
-       VALUES ($1, $2, $3, $4, $5, $6, $7:json)
+         (order_id, reported_by, reporter_role, category, description, attachments)
+       VALUES ($1, $2, $3, $4, $5, $6:json)
        RETURNING *`,
-      [
-        orderId,
-        actor.id,
-        actor.role,
-        payload.category,
-        payload.severity ?? 'MEDIUM',
-        payload.description,
-        payload.attachments ?? [],
-      ],
+      [orderId, actor.id, actor.role, payload.category, payload.description, payload.attachments ?? []],
     );
 
     await audit.record(
@@ -96,6 +106,42 @@ async function report({ orderId, actor, payload, request }) {
   return { incident, statusChanged };
 }
 
+/**
+ * Clasificacion administrativa: Operaciones decide la gravedad.
+ *
+ * Se puede reclasificar —lo que parecia menor deja de serlo cuando aparece el
+ * parte del seguro— y cada cambio queda auditado con su valor anterior.
+ */
+async function classify({ incidentId, actor, payload, request }) {
+  const incident = await db.oneOrNone('SELECT * FROM incidents WHERE id = $1', [incidentId]);
+  if (!incident) throw new NotFoundError('Incidencia', incidentId);
+
+  return db.tx(async (tx) => {
+    const updated = await tx.one(
+      `UPDATE incidents
+          SET severity = $2, classified_by = $3, classified_at = NOW()
+        WHERE id = $1 RETURNING *`,
+      [incidentId, payload.severity, actor.id],
+    );
+
+    await audit.record(
+      {
+        actor,
+        action: audit.ACTIONS.INCIDENT_CLASSIFIED,
+        entityType: 'incident',
+        entityId: incidentId,
+        before: { severity: incident.severity },
+        after: { severity: updated.severity },
+        metadata: { orderId: incident.order_id, note: payload.note ?? null },
+        request,
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
 async function resolve({ incidentId, actor, payload, request }) {
   const incident = await db.oneOrNone('SELECT * FROM incidents WHERE id = $1', [incidentId]);
   if (!incident) throw new NotFoundError('Incidencia', incidentId);
@@ -136,6 +182,10 @@ async function listForOrder(orderId) {
   );
 }
 
+/**
+ * Cola de Operaciones. Las que esperan clasificacion van primero: nadie sabe
+ * todavia si son graves, y esa es exactamente la razon para mirarlas.
+ */
 async function listOpen({ status, limit = 50 } = {}) {
   return db.any(
     `SELECT i.*, o.reference, o.service_type, o.scheduled_date,
@@ -145,11 +195,16 @@ async function listOpen({ status, limit = 50 } = {}) {
        LEFT JOIN users u ON u.id = i.reported_by
       WHERE i.status = ANY($1)
       ORDER BY
-        CASE i.severity WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,
+        CASE
+          WHEN i.severity IS NULL THEN 0
+          WHEN i.severity = 'HIGH' THEN 1
+          WHEN i.severity = 'MEDIUM' THEN 2
+          ELSE 3
+        END,
         i.created_at DESC
       LIMIT $2`,
     [status ? [status] : ['OPEN', 'IN_REVIEW'], limit],
   );
 }
 
-module.exports = { report, resolve, listForOrder, listOpen };
+module.exports = { report, classify, resolve, listForOrder, listOpen };

@@ -8,6 +8,7 @@ const staffRepo = require('../db/repositories/staffRepository');
 const customerRepo = require('../db/repositories/customerRepository');
 const invitationRepo = require('../db/repositories/invitationRepository');
 const invitationService = require('./invitationService');
+const authService = require('./authService');
 const audit = require('./auditService');
 const { assertNotLastActiveAdmin } = require('./userService');
 const { ROLES, normalizeRoles } = require('../domain/shared/roles');
@@ -203,10 +204,7 @@ async function setActive({ staffId, active, actor, request }) {
 
     if (!active) {
       // Cerrar sesiones abiertas al desactivar.
-      await tx.none(
-        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
-        [staffId],
-      );
+      await authService.revokeAllSessions(staffId, tx);
     }
 
     await audit.record(

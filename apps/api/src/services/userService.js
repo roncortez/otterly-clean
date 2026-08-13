@@ -3,6 +3,7 @@
 const { db } = require('../db');
 const userRepository = require('../db/repositories/userRepository');
 const staffRepo = require('../db/repositories/staffRepository');
+const authService = require('./authService');
 const audit = require('./auditService');
 const { ROLES, normalizeRoles } = require('../domain/shared/roles');
 const { NotFoundError, ConflictError, ValidationError } = require('../domain/errors');
@@ -125,10 +126,7 @@ async function setStatus({ userId, active, actor, request }) {
     }
 
     if (!active) {
-      await tx.none(
-        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
-        [userId],
-      );
+      await authService.revokeAllSessions(userId, tx);
     }
 
     await audit.record(

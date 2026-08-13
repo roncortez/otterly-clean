@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Crosshair, MapPin, Search } from 'lucide-react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Crosshair, Loader2, MapPin } from 'lucide-react';
 import { Alert, Button, cx } from '@/shared/ui';
-import { loadGoogleMaps, hasMapsKey, MAPS_MAP_ID } from './loader';
-import { toAddressFields, toCoordinates } from './addressComponents';
+import AddressAutocomplete from './AddressAutocomplete';
+import { FALLBACK_CENTER, GEOCODING_PROVIDER, hasGeocodingKey, zoomForRadius } from './config';
+import { toCoordinates } from './addressComponents';
+import { reverseGeocode } from './geoapify';
 
 /**
- * Selector de ubicación sobre el mapa.
+ * El motor del mapa pesa cerca de un megabyte y solo hace falta aquí: se carga
+ * cuando esta pantalla se abre, no en la portada ni en el resto de la
+ * aplicación. Mientras llega, el buscador ya funciona.
+ */
+const MapCanvas = lazy(() => import('./MapCanvas'));
+
+/**
+ * Selector de ubicación: buscador + mapa.
  *
  * Su único trabajo es responder *dónde está la casa*. No escribe la dirección:
  * propone una y quien manda sobre el texto es el formulario que hay debajo.
@@ -15,9 +24,11 @@ import { toAddressFields, toCoordinates } from './addressComponents';
  * su cuenta. Esa es la regla que impide que una corrección escrita a mano
  * ("Urbanización Los Jardines, casa 18") desaparezca sola.
  *
- * Si no hay clave de Google configurada o la carga falla, el componente se
- * retira con un aviso y la dirección se sigue pudiendo escribir a mano: el mapa
- * es una ayuda, no un requisito.
+ * Ninguna de las tres piezas es imprescindible: sin clave configurada se
+ * retira entero, si el mapa no carga queda el buscador, y si la geocodificación
+ * inversa falla se conserva la coordenada marcada. La dirección se puede
+ * escribir a mano en cualquiera de esos casos, porque el mapa es una ayuda y no
+ * un requisito.
  */
 export default function LocationPicker({
   value,
@@ -27,200 +38,102 @@ export default function LocationPicker({
   className,
   height = 'h-64 sm:h-72',
 }) {
-  const mapNodeRef = useRef(null);
-  const searchNodeRef = useRef(null);
-  const mapRef = useRef(null);
-  const markerRef = useRef(null);
-  const geocoderRef = useRef(null);
+  const configured = hasGeocodingKey();
+
+  const [mapFailed, setMapFailed] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [notice, setNotice] = useState(null);
+
   // El callback cambia en cada render del padre; guardarlo en una ref evita
-  // rehacer el mapa entero cada vez que se escribe una letra en el formulario.
+  // arrastrar ese cambio hasta el mapa.
   const onSelectRef = useRef(onSelect);
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
-  const [status, setStatus] = useState(hasMapsKey() ? 'loading' : 'unavailable');
-  const [locating, setLocating] = useState(false);
-  const [notice, setNotice] = useState(null);
+  /**
+   * Geocodificación inversa en curso. Tocar el mapa dos veces seguidas no debe
+   * dejar dos peticiones compitiendo: la vieja se cancela, así no se gasta
+   * cuota de más ni llega tarde una propuesta que ya no corresponde al punto.
+   */
+  const reverseRef = useRef(null);
+  useEffect(() => () => reverseRef.current?.abort(), []);
 
-  const hasPoint = Number.isFinite(Number(value?.latitude)) && Number.isFinite(Number(value?.longitude));
+  const point = useMemo(
+    () => toCoordinates({ latitude: value?.latitude, longitude: value?.longitude }),
+    [value?.latitude, value?.longitude],
+  );
+
+  const center = bias?.center ?? FALLBACK_CENTER;
+  const zoom = zoomForRadius(bias?.radiusMeters, center.latitude);
 
   /**
    * Convierte un punto en una propuesta de dirección.
    *
-   * Si el geocodificador inverso falla, se emite igualmente la coordenada sin
+   * Si la sugerencia ya viene resuelta (el resultado del buscador la trae), no
+   * se vuelve a preguntar: es la misma información y una petición menos.
+   *
+   * Si la geocodificación inversa falla, se emite igualmente la coordenada sin
    * propuesta: perder la sugerencia es un inconveniente, perder el punto que la
    * persona acaba de marcar es un error.
    */
   const emit = useCallback(async ({ coordinates, placeId = null, fields = null, source }) => {
+    const publish = (payload) =>
+      onSelectRef.current?.({
+        coordinates,
+        placeId: payload.placeId ?? null,
+        // El proveedor solo se declara si hay identificador que atribuir.
+        provider: payload.placeId ? GEOCODING_PROVIDER : null,
+        fields: payload.fields ?? null,
+        source,
+      });
+
     if (fields) {
-      onSelectRef.current?.({ coordinates, placeId, fields, source });
+      publish({ placeId, fields });
       return;
     }
 
+    reverseRef.current?.abort();
+    const controller = new AbortController();
+    reverseRef.current = controller;
+
+    setResolving(true);
     try {
-      const { results } = await geocoderRef.current.geocode({
-        location: { lat: coordinates.latitude, lng: coordinates.longitude },
-      });
-      const best = results?.[0];
-      onSelectRef.current?.({
-        coordinates,
-        placeId: placeId ?? best?.place_id ?? null,
-        fields: best ? toAddressFields(best.address_components, best.formatted_address) : null,
-        source,
-      });
-    } catch {
-      onSelectRef.current?.({ coordinates, placeId, fields: null, source });
+      const place = await reverseGeocode(coordinates, { signal: controller.signal });
+      setNotice(null);
+      publish({ placeId: place?.placeId ?? placeId, fields: place?.fields ?? null });
+    } catch (error) {
+      // Si la sustituyó otra petición más reciente, es esa la que manda.
+      if (error?.name === 'AbortError') return;
+      publish({ placeId, fields: null });
+      setNotice('No pudimos leer la dirección de ese punto. Escríbela tú abajo.');
+    } finally {
+      if (reverseRef.current === controller) setResolving(false);
     }
   }, []);
 
-  const moveMarker = useCallback((coordinates) => {
-    const position = { lat: coordinates.latitude, lng: coordinates.longitude };
-    if (markerRef.current) markerRef.current.position = position;
-    mapRef.current?.panTo(position);
-  }, []);
+  const handlePick = useCallback(
+    (coordinates) => {
+      emit({ coordinates, source: 'MAP' });
+    },
+    [emit],
+  );
 
-  // --- Montaje del mapa ----------------------------------------------------
-  useEffect(() => {
-    if (!hasMapsKey()) return undefined;
+  const handleSuggestion = useCallback(
+    (suggestion) => {
+      setNotice(null);
+      emit({
+        coordinates: suggestion.coordinates,
+        placeId: suggestion.placeId,
+        fields: suggestion.fields,
+        source: 'SEARCH',
+      });
+    },
+    [emit],
+  );
 
-    let cancelled = false;
-    const listeners = [];
-
-    (async () => {
-      try {
-        const maps = await loadGoogleMaps({ region: regionCode.toUpperCase() });
-        if (cancelled || !mapNodeRef.current) return;
-
-        const [{ Map }, { AdvancedMarkerElement }, { Geocoder }] = await Promise.all([
-          maps.importLibrary('maps'),
-          maps.importLibrary('marker'),
-          maps.importLibrary('geocoding'),
-        ]);
-        if (cancelled || !mapNodeRef.current) return;
-
-        const center = hasPoint
-          ? { lat: Number(value.latitude), lng: Number(value.longitude) }
-          : { lat: bias?.center?.latitude ?? -0.1807, lng: bias?.center?.longitude ?? -78.4678 };
-
-        const map = new Map(mapNodeRef.current, {
-          center,
-          zoom: hasPoint ? 17 : 12,
-          mapId: MAPS_MAP_ID,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          // En móvil el mapa vive dentro de una página que se desplaza: un dedo
-          // arrastra la página, dos mueven el mapa. Así no se queda atrapado.
-          gestureHandling: 'cooperative',
-        });
-        mapRef.current = map;
-        geocoderRef.current = new Geocoder();
-
-        const marker = new AdvancedMarkerElement({
-          map,
-          position: center,
-          gmpDraggable: true,
-          title: 'Arrastra el pin hasta la puerta',
-        });
-        markerRef.current = marker;
-        // Sin punto todavía: el pin aparece cuando se elige uno.
-        marker.map = hasPoint ? map : null;
-
-        listeners.push(
-          marker.addListener('dragend', () => {
-            const coordinates = toCoordinates(marker.position);
-            if (coordinates) emit({ coordinates, source: 'MAP' });
-          }),
-        );
-
-        listeners.push(
-          map.addListener('click', (event) => {
-            const coordinates = toCoordinates(event.latLng);
-            if (!coordinates) return;
-            marker.map = map;
-            marker.position = event.latLng;
-            emit({ coordinates, source: 'MAP' });
-          }),
-        );
-
-        // --- Buscador -------------------------------------------------------
-        try {
-          const { PlaceAutocompleteElement } = await maps.importLibrary('places');
-          if (cancelled || !searchNodeRef.current) return;
-
-          const autocomplete = new PlaceAutocompleteElement({
-            // Sesga hacia donde opera la empresa, sin encerrar la búsqueda: las
-            // zonas de servicio pueden crecer y esto sale de ellas, no de una
-            // constante escrita aquí.
-            includedRegionCodes: [regionCode],
-          });
-
-          if (bias?.center) {
-            autocomplete.locationBias = {
-              center: { lat: bias.center.latitude, lng: bias.center.longitude },
-              // El sesgo admite hasta 50 km; más allá deja de ser una pista útil.
-              radius: Math.min(bias.radiusMeters ?? 25000, 50000),
-            };
-          }
-
-          autocomplete.style.width = '100%';
-          searchNodeRef.current.replaceChildren(autocomplete);
-
-          autocomplete.addEventListener('gmp-select', async ({ placePrediction }) => {
-            try {
-              const place = placePrediction.toPlace();
-              await place.fetchFields({
-                fields: ['location', 'addressComponents', 'formattedAddress', 'id'],
-              });
-
-              const coordinates = toCoordinates(place.location);
-              if (!coordinates) return;
-
-              marker.map = map;
-              moveMarker(coordinates);
-              map.setZoom(17);
-
-              emit({
-                coordinates,
-                placeId: place.id ?? null,
-                fields: toAddressFields(place.addressComponents, place.formattedAddress),
-                source: 'SEARCH',
-              });
-            } catch {
-              setNotice('No pudimos leer ese lugar. Marca el punto en el mapa.');
-            }
-          });
-        } catch {
-          // Sin buscador el mapa sigue sirviendo: se toca y se arrastra.
-          setNotice('El buscador no está disponible. Toca el mapa para marcar el punto.');
-        }
-
-        if (!cancelled) setStatus('ready');
-      } catch {
-        if (!cancelled) setStatus('unavailable');
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      for (const listener of listeners) listener.remove?.();
-      if (markerRef.current) markerRef.current.map = null;
-      markerRef.current = null;
-      mapRef.current = null;
-    };
-    // Se monta una vez: el punto inicial y el sesgo solo importan al crear el
-    // mapa, y rehacerlo con cada tecla del formulario sería absurdo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // El pin sigue al valor cuando cambia desde fuera (por ejemplo, al editar
-  // otra dirección con el mismo formulario).
-  useEffect(() => {
-    if (status !== 'ready' || !hasPoint || !markerRef.current || !mapRef.current) return;
-    markerRef.current.map = mapRef.current;
-    moveMarker({ latitude: Number(value.latitude), longitude: Number(value.longitude) });
-  }, [status, hasPoint, value?.latitude, value?.longitude, moveMarker]);
+  const handleMapUnavailable = useCallback(() => setMapFailed(true), []);
 
   function useMyLocation() {
     if (!navigator.geolocation) {
@@ -234,16 +147,8 @@ export default function LocationPicker({
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setLocating(false);
-        const coordinates = {
-          latitude: Number(position.coords.latitude.toFixed(7)),
-          longitude: Number(position.coords.longitude.toFixed(7)),
-        };
-        if (markerRef.current && mapRef.current) {
-          markerRef.current.map = mapRef.current;
-          moveMarker(coordinates);
-          mapRef.current.setZoom(17);
-        }
-        emit({ coordinates, source: 'GEOLOCATION' });
+        const coordinates = toCoordinates(position.coords);
+        if (coordinates) emit({ coordinates, source: 'GEOLOCATION' });
       },
       () => {
         setLocating(false);
@@ -254,7 +159,7 @@ export default function LocationPicker({
     );
   }
 
-  if (status === 'unavailable') {
+  if (!configured) {
     return (
       <Alert tone="info" title="Mapa no disponible">
         Escribe la dirección a mano; podrás marcar el punto exacto más adelante.
@@ -264,26 +169,50 @@ export default function LocationPicker({
 
   return (
     <div className={cx('space-y-3', className)}>
-      <div>
-        <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-text">
-          <Search className="size-4 text-text-subtle" aria-hidden="true" />
-          Buscar dirección o lugar
-        </span>
-        {/* El buscador de Google se monta aquí dentro. */}
-        <div ref={searchNodeRef} className="[&_gmp-place-autocomplete]:w-full" />
-      </div>
+      <AddressAutocomplete bias={bias} countryCode={regionCode} onSelect={handleSuggestion} />
 
-      <div
-        ref={mapNodeRef}
-        className={cx('w-full overflow-hidden rounded-xl border border-border bg-surface-sunken', height)}
-        role="application"
-        aria-label="Mapa para elegir la ubicación"
-      />
+      {mapFailed ? (
+        <Alert tone="info" title="El mapa no cargó">
+          Puedes buscar la dirección arriba o escribirla a mano; la ubicación exacta se puede
+          marcar más adelante.
+        </Alert>
+      ) : (
+        <Suspense
+          fallback={
+            <div
+              className={cx(
+                'w-full animate-pulse rounded-xl border border-border bg-surface-sunken',
+                height,
+              )}
+            />
+          }
+        >
+          <MapCanvas
+            point={point}
+            center={center}
+            zoom={zoom}
+            height={height}
+            onPick={handlePick}
+            onUnavailable={handleMapUnavailable}
+          />
+        </Suspense>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-xs text-text-subtle">
-          <MapPin className="size-3.5" aria-hidden="true" />
-          {hasPoint ? 'Arrastra el pin hasta la puerta exacta.' : 'Toca el mapa para marcar el lugar.'}
+          {resolving ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              Buscando la dirección de ese punto…
+            </>
+          ) : (
+            <>
+              <MapPin className="size-3.5" aria-hidden="true" />
+              {point
+                ? 'Arrastra el pin hasta la puerta exacta.'
+                : 'Toca el mapa para marcar el lugar.'}
+            </>
+          )}
         </p>
 
         <Button type="button" variant="outline" size="sm" loading={locating} onClick={useMyLocation}>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { MapPin, Plus, Trash2, Star, Pencil } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { DoorOpen, MapPin, Plus, Trash2, Star, Pencil } from 'lucide-react';
 import { api } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
@@ -11,7 +12,7 @@ import AddressForm from './AddressForm';
  *
  * Cada dirección son dos cosas: un punto en el mapa y un texto que el cliente
  * escribe y corrige (ver `AddressForm`). El punto es lo que permite encontrar
- * la casa; el texto, lo que Google no sabe de las urbanizaciones de Quito.
+ * la casa; el texto, lo que ningún mapa sabe de las urbanizaciones de Quito.
  *
  * Si la ubicación cae fuera de las zonas donde trabajamos, la dirección se
  * guarda igual —puede ser la casa de un familiar— pero se avisa: reservar sobre
@@ -64,8 +65,9 @@ export default function AddressesPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
+        eyebrow="Mi cuenta"
         title="Tus direcciones"
-        description="Dónde prestamos el servicio o recogemos tu ropa."
+        description="Los lugares donde vas a recibirnos. Sirven para cualquier servicio: limpiar, recoger tu ropa y lo que venga."
         action={
           !editing && (
             <Button onClick={() => setEditing('new')}>
@@ -152,6 +154,22 @@ export default function AddressesPage() {
                         Sin punto en el mapa: edítala para marcarlo.
                       </p>
                     )}
+
+                    {/*
+                      Una dirección dice dónde. Lo que hay que saber para limpiar
+                      ahí —habitaciones, baños, cómo se entra— es de Limpieza y
+                      se edita en su pantalla: esto es la puerta, no un segundo
+                      formulario aquí.
+                    */}
+                    <Link
+                      to={`/limpieza/espacios?espacio=${address.id}`}
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-forest-700 hover:underline"
+                    >
+                      <DoorOpen className="size-3.5" aria-hidden="true" />
+                      {address.cleaningProfile?.complete
+                        ? 'Ver qué limpiamos aquí'
+                        : 'Añadir qué limpiamos aquí'}
+                    </Link>
                   </div>
                 </div>
 

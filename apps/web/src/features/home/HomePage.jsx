@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles,
-  Shirt,
-  Scissors,
-  Package,
   CalendarCheck,
   ShieldCheck,
   Clock,
@@ -25,14 +21,25 @@ import api from '@/shared/api/client';
 import Header from '@/features/home/components/Header';
 import { useTranslation } from '@/shared/i18n/I18nContext';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { ButtonLink, Card, SectionHeading, cx } from '@/shared/ui';
+import { useServiceExperiences } from '@/shared/services';
+import ServicePicker from '@/shared/services/ServicePicker';
+import { Button, ButtonLink, Card, SectionHeading, cx } from '@/shared/ui';
+
+/** Etiqueta corta de cada servicio en la portada; el resto viene del backend. */
+const BADGE_KEYS = {
+  CLEANING: 'services.badgeCleaning',
+  LAUNDRY: 'services.badgeLaundry',
+  ALTERATION: 'services.badgeRepair',
+};
 
 export default function HomePage() {
   const { t } = useTranslation();
   const { company } = useConfig();
+  const experiences = useServiceExperiences();
   const [banner, setBanner] = useState(null);
   const [showOverlay, setShowOverlay] = useState(true);
   const [openFaq, setOpenFaq] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     async function fetchBanner() {
@@ -50,42 +57,23 @@ export default function HomePage() {
     setOpenFaq(openFaq === index ? null : index);
   };
 
-  // El asistente de reserva vive en /reservar; /customer/booking no es una ruta
-  // real y caía en el comodín que devuelve a la portada.
-  const CATEGORIES = [
-    {
-      key: 'cleaning',
-      label: t('services.cleaningTitle'),
-      icon: Sparkles,
-      badge: t('services.badgeCleaning'),
-      description: t('services.cleaningDesc'),
-      link: '/reservar?service=CLEANING',
-    },
-    {
-      key: 'laundry',
-      label: t('services.laundryTitle'),
-      icon: Shirt,
-      badge: t('services.badgeLaundry'),
-      description: t('services.laundryDesc'),
-      link: '/reservar?service=LAUNDRY',
-    },
-    {
-      key: 'repair',
-      label: t('services.repairTitle'),
-      icon: Scissors,
-      badge: t('services.badgeRepair'),
-      description: t('services.repairDesc'),
-      link: '/reservar?service=ALTERATION',
-    },
-    {
-      key: 'kits',
-      label: t('services.kitsTitle'),
-      icon: Package,
-      badge: t('services.badgeKits'),
-      description: t('services.kitsDesc'),
-      link: '/reservar?service=KITS',
-    },
-  ];
+  /**
+   * Lo que se puede pedir, con su puerta de entrada.
+   *
+   * El texto de cada opción lo edita Operaciones y llega por
+   * `GET /api/catalog/config`; el enlace lo decide `shared/services`. Una opción
+   * sin ruta (Arreglos, mientras el dominio no sepa crear su orden) se muestra
+   * pero no promete una reserva que la siguiente pantalla no puede cumplir.
+   */
+  const CATEGORIES = experiences.map((experience) => ({
+    key: experience.code,
+    label: experience.label,
+    icon: experience.icon,
+    badge: BADGE_KEYS[experience.code] ? t(BADGE_KEYS[experience.code]) : null,
+    description: experience.description,
+    link: experience.path,
+    available: experience.available,
+  }));
 
   const STEPS = [
     { n: '01', title: t('howItWorks.step1Title'), desc: t('howItWorks.step1Desc') },
@@ -160,10 +148,20 @@ export default function HomePage() {
             </p>
 
             <div className="flex flex-col items-stretch gap-3.5 pt-2 sm:flex-row sm:items-center">
-              <ButtonLink as={Link} to="/reservar" variant="accent" size="lg" className="px-8">
+              {/*
+                Abre el selector en la propia portada en lugar de navegar a
+                /reservar. Un visitante sin sesión puede elegir servicio y
+                empezar a rellenar; la sesión se pide antes de confirmar.
+              */}
+              <Button
+                variant="accent"
+                size="lg"
+                className="px-8"
+                onClick={() => setPickerOpen(true)}
+              >
                 <CalendarCheck className="size-4.5" aria-hidden="true" />
                 {t('hero.ctaPrimary')}
-              </ButtonLink>
+              </Button>
               <WhatsAppButton
                 label={t('hero.ctaWhatsApp')}
                 message="Hola, me gustaría solicitar información sobre los servicios de Otterly Clean."
@@ -236,31 +234,42 @@ export default function HomePage() {
               return (
                 <div
                   key={cat.key}
-                  className="flex flex-col justify-between rounded-2xl border border-border bg-surface p-8 transition-all hover:border-forest-300 hover:bg-surface-raised hover:shadow-[var(--shadow-raised)]"
+                  data-service={cat.key}
+                  className="flex flex-col justify-between rounded-2xl border border-border bg-surface p-8 transition-all hover:border-service/40 hover:bg-surface-raised hover:shadow-[var(--shadow-raised)]"
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <div className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
+                      <div className="flex size-12 items-center justify-center rounded-xl bg-service-soft text-service-strong">
                         <Icon className="size-6" aria-hidden="true" />
                       </div>
-                      <span className="rounded-full bg-surface-sunken px-3 py-1 text-[11px] font-medium text-text-muted">
-                        {cat.badge}
-                      </span>
+                      {cat.badge && (
+                        <span className="rounded-full bg-surface-sunken px-3 py-1 text-[11px] font-medium text-text-muted">
+                          {cat.badge}
+                        </span>
+                      )}
                     </div>
                     <h3 className="mt-6 text-xl font-bold tracking-tight text-text">{cat.label}</h3>
                     <p className="mt-3 text-xs leading-relaxed text-text-muted">{cat.description}</p>
                   </div>
                   <div className="mt-8 border-t border-border pt-4">
-                    <Link
-                      to={cat.link}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest-700 transition-colors hover:text-forest-900"
-                    >
-                      <span>
-                        {t('services.bookAction')}
-                        {cat.label.toLowerCase()}
-                      </span>
-                      <ArrowRight className="size-3.5" aria-hidden="true" />
-                    </Link>
+                    {/*
+                      Sin ruta no hay enlace. Arreglos se anuncia porque existe
+                      como servicio, pero enlazarlo llevaría a una pantalla que
+                      no sabe crear su orden todavía.
+                    */}
+                    {cat.link ? (
+                      <Link
+                        to={cat.link}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-service-strong transition-colors hover:opacity-80"
+                      >
+                        <span>
+                          {t('services.bookAction')} {cat.label.toLowerCase()}
+                        </span>
+                        <ArrowRight className="size-3.5" aria-hidden="true" />
+                      </Link>
+                    ) : (
+                      <span className="text-xs font-medium text-text-subtle">Próximamente</span>
+                    )}
                   </div>
                 </div>
               );
@@ -358,6 +367,8 @@ export default function HomePage() {
          6. FOOTER
          ========================================================================= */}
       <CompanyFooter company={company} t={t} />
+
+      <ServicePicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </div>
   );
 }

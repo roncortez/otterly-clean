@@ -36,6 +36,19 @@ export function setSessionExpiredHandler(handler) {
   onSessionExpired = handler;
 }
 
+/**
+ * Distingue "la sesión terminó" de "no pudimos preguntar".
+ *
+ * Solo el servidor puede decir que una sesión dejó de valer. Un servidor caído,
+ * un timeout o el wifi del ascensor no son motivo para borrar el refresh token:
+ * hacerlo obligaba a volver a iniciar sesión por un fallo de red de dos
+ * segundos.
+ */
+function isSessionRejected(error) {
+  const status = error?.response?.status;
+  return status === 401 || status === 403;
+}
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   headers: { 'Content-Type': 'application/json' },
@@ -49,22 +62,52 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Evita una tormenta de refrescos cuando varias peticiones fallan a la vez.
+/**
+ * Refresco de sesión, uno a la vez.
+ *
+ * La promesa vive en el módulo, no en un componente: es lo que hace que dos
+ * peticiones que reciben 401 a la vez —o el efecto de arranque de React, que en
+ * modo estricto se ejecuta dos veces— compartan una sola llamada. Cada refresco
+ * rota el token en el servidor, así que dos llamadas en paralelo con el mismo
+ * token acababan con una de las dos recibiendo "sesión expirada" y cerrando la
+ * sesión de alguien que acababa de recargar la página.
+ */
 let refreshPromise = null;
 
-async function refreshSession() {
-  const refreshToken = tokenStore.getRefresh();
-  if (!refreshToken) throw new Error('NO_REFRESH_TOKEN');
+export function refreshSession() {
+  refreshPromise =
+    refreshPromise ??
+    (async () => {
+      const refreshToken = tokenStore.getRefresh();
+      if (!refreshToken) {
+        const error = new Error('NO_REFRESH_TOKEN');
+        error.code = 'NO_REFRESH_TOKEN';
+        throw error;
+      }
 
-  const { data } = await axios.post(
-    `${api.defaults.baseURL}/auth/refresh`,
-    { refreshToken },
-    { headers: { 'Content-Type': 'application/json' } },
-  );
+      const { data } = await axios.post(
+        `${api.defaults.baseURL}/auth/refresh`,
+        { refreshToken },
+        { headers: { 'Content-Type': 'application/json' } },
+      );
 
-  tokenStore.setAccess(data.accessToken);
-  tokenStore.setRefresh(data.refreshToken);
-  return data.accessToken;
+      tokenStore.setAccess(data.accessToken);
+      tokenStore.setRefresh(data.refreshToken);
+      return data;
+    })().finally(() => {
+      // Se libera cuando la llamada termina, no antes: si se limpiara al
+      // resolver el primer `await`, una tercera petición arrancaría otro
+      // refresco con el token que se acaba de rotar.
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+
+/** Cierra la sesión local. Solo cuando el servidor dice que ya no vale. */
+function endSession() {
+  tokenStore.clear();
+  onSessionExpired?.();
 }
 
 api.interceptors.response.use(
@@ -79,15 +122,16 @@ api.interceptors.response.use(
     if (status === 401 && !original?._retried && !isRefreshCall && !isLoginCall) {
       original._retried = true;
       try {
-        refreshPromise = refreshPromise ?? refreshSession();
-        const token = await refreshPromise;
-        refreshPromise = null;
-        original.headers.Authorization = `Bearer ${token}`;
+        const session = await refreshSession();
+        original.headers.Authorization = `Bearer ${session.accessToken}`;
         return api(original);
-      } catch {
-        refreshPromise = null;
-        tokenStore.clear();
-        onSessionExpired?.();
+      } catch (refreshError) {
+        // Sin token guardado o con el servidor diciendo que no vale, la sesión
+        // termina. Si solo falló la red, se conserva: reintentar más tarde
+        // tiene que ser posible sin volver a escribir la contraseña.
+        if (refreshError?.code === 'NO_REFRESH_TOKEN' || isSessionRejected(refreshError)) {
+          endSession();
+        }
       }
     }
 
@@ -144,5 +188,7 @@ export function errorMessage(error, fallback = 'Algo salió mal. Vuelve a intent
 export function errorCode(error) {
   return error?.response?.data?.error?.code ?? null;
 }
+
+export { isSessionRejected };
 
 export default api;

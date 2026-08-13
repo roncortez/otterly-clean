@@ -14,6 +14,7 @@ const notifications = require('../notifications');
 const { encrypt, decrypt } = require('./crypto');
 const { getRegion } = require('../config/regions');
 const { getStateMachine } = require('../domain/shared/serviceTypes');
+const { ACCESS_SECRET, needsAccessSecret, resolvePlaceFields } = require('../domain/cleaning/placeProfile');
 const { calculatePrice } = require('../domain/pricing/pricing');
 const { buildTimeline } = require('../domain/shared/timeline');
 const {
@@ -72,26 +73,31 @@ async function createOrder({ serviceType, customer, payload, request }) {
   const address = await addressRepo.findByIdForUser(payload.addressId, customer.id);
   if (!address) throw new NotFoundError('Direccion', payload.addressId);
 
-  // El inmueble (cuando hay) da trazabilidad a la orden: "este servicio fue de
-  // este inmueble". Se acepta un `propertyId` explícito (validado: del cliente
-  // y de la direccion de la orden) o se vincula el que la direccion ya tenga.
-  // La identidad del espacio viaja igual en el snapshot de `cleaning`; esto no
-  // reemplaza el detalle, lo enlaza.
+  // El lugar (cuando hay) hace dos cosas. Da trazabilidad a la orden -"este
+  // servicio fue de este lugar"- y es la fuente de los datos estables
+  // (habitaciones, banos, como se entra, mascotas) cuando la reserva no los
+  // repite, que es el caso normal desde que el cliente puede describirlos una
+  // vez: ver `insertCleaningDetail` y domain/cleaning/placeProfile.
+  //
+  // Se acepta un `propertyId` explicito (validado: del cliente y de la direccion
+  // de la orden) o se vincula el que la direccion ya tenga. El snapshot de
+  // `cleaning` se sigue guardando entero; esto no reemplaza el detalle, lo
+  // enlaza.
   let property = null;
   if (payload.propertyId) {
     property = await propertyRepo.findPropertyById(payload.propertyId, customer.id);
-    if (!property) throw new NotFoundError('Inmueble', payload.propertyId);
+    if (!property) throw new NotFoundError('Lugar', payload.propertyId);
     if (property.address_id !== address.id) {
       throw new DomainError(
         'PROPERTY_MISMATCH',
-        'El inmueble indicado no corresponde a la dirección de la reserva.',
+        'El lugar indicado no corresponde a la dirección de la reserva.',
       );
     }
   } else {
     property = await propertyRepo.findByAddress(address.id, customer.id);
   }
 
-  // Que Google devuelva un punto valido no significa que lo atendamos. Se
+  // Que el mapa devuelva un punto valido no significa que lo atendamos. Se
   // comprueba aqui, en el servidor, y no solo al guardar la direccion: la
   // cobertura pudo cambiar entre que se registro la casa y se reserva.
   const serviceArea = await addressService.assertServiceable(address);
@@ -216,45 +222,61 @@ async function createOrder({ serviceType, customer, payload, request }) {
   });
 }
 
-async function insertCleaningDetail(orderId, payload, region, property, tx) {
+/**
+ * Detalle de limpieza de ESTA reserva.
+ *
+ * Es una foto del acuerdo, no una referencia: aunque el cliente cambie despues
+ * los datos de su lugar, la orden conserva lo que se pidio el dia que se pidio.
+ *
+ * Los datos del lugar los resuelve el dominio (`placeProfile.resolvePlaceFields`):
+ * lo que llega en la peticion manda, y lo que no llega sale del lugar guardado.
+ * Antes se rellenaban con ceros cuando la peticion no los mencionaba, de modo que
+ * "no repetir lo que ya dije" solo funcionaba si el navegador se acordaba de
+ * reenviarlo todo. Eso no era una reserva que reutiliza datos: era un formulario
+ * duplicado con los huecos ya escritos.
+ */
+function insertCleaningDetail(orderId, payload, region, place, tx) {
   const d = payload.cleaning ?? {};
+  const stable = resolvePlaceFields({ payload: d, place, areaUnit: region.units.area });
 
-  let accessSecretEncrypted = null;
-  if (d.accessSecret) {
-    accessSecretEncrypted = encrypt(d.accessSecret);
-  } else if (property?.access_code) {
-    accessSecretEncrypted = property.access_code;
-  }
+  // El codigo guardado se hereda solo si esta reserva entra por una via que lo
+  // necesita, y se mira el metodo YA RESUELTO: quien no volvio a elegir como se
+  // entra sigue entrando como dijo la ultima vez. El texto cifrado se copia tal
+  // cual, sin descifrarlo por el camino.
+  const inheritedSecret = needsAccessSecret(stable.accessMethod)
+    ? (place?.[ACCESS_SECRET.column] ?? null)
+    : null;
 
   return orderRepo.insertCleaningDetails(
     {
       orderId,
+      ...stable,
+      // Codigos y ubicacion de llaves se cifran antes de tocar la base.
+      accessSecretEncrypted: d.accessSecret ? encrypt(d.accessSecret) : inheritedSecret,
+      // De la visita: se pregunta cada vez y no se hereda de nada.
       cleaningType: d.cleaningType ?? 'STANDARD',
-      propertyType: d.propertyType ?? 'APARTMENT',
-      bedrooms: d.bedrooms ?? 0,
-      bathrooms: d.bathrooms ?? 0,
-      areaValue: d.areaValue ?? null,
-      areaUnit: d.areaUnit ?? region.units.area,
       sizeTier: d.sizeTier ?? null,
       priorityAreas: d.priorityAreas ?? [],
       suppliesProvidedBy: d.suppliesProvidedBy ?? 'COMPANY',
       productPreferences: d.productPreferences ?? [],
       fragrancePreference: d.fragrancePreference ?? null,
       customerPresent: d.customerPresent ?? true,
-      accessMethod: d.accessMethod ?? 'CUSTOMER_OPENS',
-      accessInstructions: d.accessInstructions ?? null,
-      accessSecretEncrypted,
-      parkingInstructions: d.parkingInstructions ?? null,
-      hasPets: d.hasPets ?? false,
-      pets: d.pets ?? [],
       petsSecured: d.petsSecured ?? null,
-      petInstructions: d.petInstructions ?? null,
-      delicateItems: d.delicateItems ?? null,
-      specialInstructions: d.specialInstructions ?? null,
     },
     tx,
   );
 }
+
+/*
+ * NOTA DE INTEGRACION: aqui vivia `rememberHome`, que al confirmar la reserva
+ * volcaba en la ficha del espacio lo que el cliente hubiera corregido. Se ha
+ * retirado porque en el flujo que se conserva (`fix/booking-flow`) el propio
+ * paso "Dónde y cómo" ya guarda el lugar con un PATCH explicito antes de
+ * continuar: mantener las dos cosas dejaria dos escritores del mismo dato, uno
+ * de ellos invisible, y el orden entre ambos decidiria que valor gana. La
+ * intencion -que lo corregido al reservar no se pierda- la cumple el paso del
+ * asistente, que ademas puede mostrar el resultado.
+ */
 
 async function insertLaundryDetail(orderId, payload, region, window, tx) {
   const d = payload.laundry ?? {};
@@ -356,21 +378,46 @@ async function getOrderForActor(orderId, actor) {
   const stateMachine = getStateMachine(order.service_type);
   const timeline = buildTimeline({ stateMachine, currentStatus: order.status, history });
 
-  // El trabajador solo puede actuar mientras su asignacion siga viva.
-  const hasActiveAssignment = ['OFFERED', 'ACCEPTED'].includes(assignment?.status);
+  // El trabajador solo tiene un compromiso real con el servicio cuando lo ha
+  // confirmado, y de ahi cuelga lo que puede ver y hacer.
+  const accepted = assignment?.status === 'ACCEPTED';
 
   return {
-    order: projectOrder(order, actor),
-    details: projectDetails(details, order.service_type, actor, hasActiveAssignment),
+    order: projectOrder(order, actor, { accepted }),
+    details: projectDetails(details, order.service_type, actor, accepted),
     timeline,
     statusLabel: stateMachine.states[order.status]?.label ?? order.status,
     availableTransitions: stateMachine.allowedTransitions(order.status, actor.role),
     assignedStaff: assignments.map((a) => projectStaff(a, actor)),
     history: actor.role === ROLES.CUSTOMER ? undefined : history,
+    /**
+     * Estado del compromiso del trabajador con este servicio.
+     *
+     * Es el dato del que cuelgan las reglas del trabajador —ver el telefono del
+     * cliente, reportar una incidencia, avanzar el estado—, y viaja porque la
+     * pantalla necesita saber si ofrecer esas acciones. Las reglas en si se
+     * aplican en el backend: esto solo evita pintar un boton que va a fallar.
+     */
+    assignment:
+      actor.role === ROLES.STAFF && assignment
+        ? { status: assignment.status, accepted }
+        : undefined,
   };
 }
 
-function projectOrder(order, actor) {
+/**
+ * La coordenada llega de PostgreSQL como cadena (NUMERIC). Se emite como numero
+ * o no se emite: un `"−0.1807"` obliga a cada consumidor a acordarse de
+ * convertirlo, y quien se olvide pondra el pin en otro sitio.
+ */
+function projectCoordinates(order) {
+  const latitude = Number(order.latitude);
+  const longitude = Number(order.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
+}
+
+function projectOrder(order, actor, { accepted = false } = {}) {
   const base = {
     id: order.id,
     reference: order.reference,
@@ -393,6 +440,15 @@ function projectOrder(order, actor) {
       administrativeArea: order.administrative_area,
       postalCode: order.postal_code,
       reference: order.address_reference,
+      /**
+       * El punto que el cliente marco en el mapa, tal cual se guardo.
+       *
+       * Viaja con la direccion porque son dos mitades del mismo dato y ninguna
+       * sustituye a la otra: el texto describe la casa, la coordenada dice
+       * donde esta. Sin ella, quien tiene que llegar acaba buscando el texto en
+       * un mapa y aterrizando en la manzana de al lado.
+       */
+      coordinates: projectCoordinates(order),
     },
     propertyId: order.property_id ?? null,
     property: order.property_name
@@ -401,13 +457,26 @@ function projectOrder(order, actor) {
   };
 
   // El trabajador no necesita saber cuanto pago el cliente ni sus datos de
-  // contacto completos: solo el nombre y el telefono para coordinar el acceso.
+  // contacto completos: solo el nombre, y el telefono cuando ya se comprometio.
   if (actor.role === ROLES.STAFF) {
     return {
       ...base,
       customer: {
         firstName: order.customer_first_name,
-        phone: order.customer_phone,
+        /**
+         * El telefono del cliente aparece al CONFIRMAR el trabajo, no al
+         * recibir la asignacion.
+         *
+         * Que Operaciones ofrezca un servicio a alguien no significa que vaya a
+         * hacerlo: puede rechazarlo o reasignarse. Entregar el contacto antes
+         * de que exista compromiso reparte datos personales entre gente que
+         * quiza nunca pise esa casa. Al completar el servicio la asignacion
+         * pasa a COMPLETED y el telefono deja de viajar, igual que el codigo de
+         * acceso.
+         */
+        phone: accepted ? order.customer_phone : undefined,
+        // Para poder explicar la ausencia en lugar de mostrar un hueco.
+        phoneAvailable: accepted,
       },
     };
   }
@@ -449,7 +518,7 @@ function projectOrder(order, actor) {
  * la respuesta normal. Se entrega solo bajo peticion explicita del trabajador
  * asignado, y esa consulta queda auditada. Ver revealAccessSecret().
  */
-function projectDetails(details, serviceType, actor, hasActiveAssignment = false) {
+function projectDetails(details, serviceType, actor, hasAcceptedAssignment = false) {
   if (!details) return null;
 
   const { access_secret_encrypted: secret, ...rest } = details;
@@ -458,9 +527,9 @@ function projectDetails(details, serviceType, actor, hasActiveAssignment = false
     return {
       ...rest,
       hasAccessSecret: Boolean(secret),
-      // Solo el trabajador con asignacion viva puede pedirlo. El cliente ya
+      // Solo el trabajador que confirmo el trabajo puede pedirlo. El cliente ya
       // conoce su propio codigo y a Operaciones no le hace falta.
-      canRevealAccessSecret: actor.role === ROLES.STAFF && hasActiveAssignment && Boolean(secret),
+      canRevealAccessSecret: actor.role === ROLES.STAFF && hasAcceptedAssignment && Boolean(secret),
     };
   }
 
@@ -492,9 +561,9 @@ function projectStaff(assignment, actor) {
 }
 
 /**
- * Entrega el codigo de acceso al trabajador asignado y deja rastro de quien lo
- * consulto y cuando. Es informacion que abre la puerta de una casa: el acceso
- * tiene que ser trazable.
+ * Entrega el codigo de acceso al trabajador que confirmo el trabajo y deja
+ * rastro de quien lo consulto y cuando. Es informacion que abre la puerta de
+ * una casa: el acceso tiene que ser trazable y llegar lo mas tarde posible.
  */
 async function revealAccessSecret(orderId, actor, request) {
   const order = await orderRepo.findById(orderId);
@@ -503,6 +572,9 @@ async function revealAccessSecret(orderId, actor, request) {
   if (actor.role === ROLES.STAFF) {
     const assignment = await assignmentRepo.findActiveForStaff(orderId, actor.id);
     if (!assignment) throw new NotFoundError('Orden', orderId);
+    if (assignment.status !== 'ACCEPTED') {
+      throw new ForbiddenError('Confirma el trabajo antes de consultar el acceso al domicilio');
+    }
   } else if (actor.role !== ROLES.ADMIN) {
     throw new ForbiddenError('No puedes consultar esta informacion');
   }

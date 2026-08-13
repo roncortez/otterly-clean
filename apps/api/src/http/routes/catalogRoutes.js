@@ -52,8 +52,9 @@ router.get(
        *
        * Sale de las zonas de cobertura activas, no de una constante escrita a
        * mano: abrir una ciudad nueva es darle cobertura a su zona desde
-       * Operaciones, sin tocar codigo. `regionCode` en minusculas es lo que
-       * espera `includedRegionCodes` de Google.
+       * Operaciones, sin tocar codigo. `regionCode` va en minusculas porque es
+       * el formato ISO 3166-1 alfa-2 que esperan los geocodificadores para
+       * filtrar por pais.
        *
        * Es una preferencia, no una carcel: sesga los resultados hacia donde
        * trabajamos, y quien decide si atendemos un punto es el backend.

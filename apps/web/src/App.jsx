@@ -1,5 +1,6 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth, homePathForRoles, landingPathFor } from '@/shared/auth/AuthContext';
+import { bookingPath } from '@/shared/services';
 import { Spinner } from '@/shared/ui';
 
 import LoginPage from '@/features/auth/LoginPage';
@@ -11,11 +12,12 @@ import HomePage from '@/features/home/HomePage';
 
 import CustomerLayout from '@/features/customer/CustomerLayout';
 import CustomerDashboard from '@/features/customer/DashboardPage';
+import ServiceOverviewPage from '@/features/customer/ServiceOverviewPage';
 import BookingWizard from '@/features/customer/booking/BookingWizard';
 import CustomerOrderDetail from '@/features/customer/OrderDetailPage';
 import CustomerOrders from '@/features/customer/OrdersPage';
 import AddressesPage from '@/features/customer/AddressesPage';
-import PropertyManager from '@/features/customer/properties/PropertyManager';
+import SpacesPage from '@/features/customer/cleaning/SpacesPage';
 
 import OperationsLayout from '@/features/operations/OperationsLayout';
 import OperationsDashboard from '@/features/operations/DashboardPage';
@@ -76,6 +78,21 @@ function RequireSession({ children }) {
   return children;
 }
 
+/**
+ * `/reservar` era la única puerta al asistente cuando todos los servicios
+ * compartían pantalla. Ahora cada uno reserva en la suya, así que esta ruta
+ * traduce: con servicio indicado lleva a su asistente, y sin él, al inicio,
+ * donde se elige. Los enlaces antiguos —incluidos los `?service=` de la
+ * portada— siguen funcionando.
+ */
+function BookingRedirect() {
+  const [searchParams] = useSearchParams();
+  const requested = (searchParams.get('servicio') ?? searchParams.get('service') ?? '').toUpperCase();
+  const target = bookingPath(requested);
+
+  return <Navigate to={target ?? '/inicio'} replace />;
+}
+
 function RootRedirect() {
   const { user, isAuthenticated, isLoading } = useAuth();
 
@@ -112,7 +129,14 @@ function AppRoutes({ location }) {
         }
       />
 
-      {/* Cliente */}
+      {/*
+        Cliente: una sola aplicación con tres experiencias dentro.
+
+        Cada servicio tiene su rama de rutas y su color; lo común —direcciones,
+        historial completo, perfil— vive fuera de ellas y se comparte. El
+        enrutado por audiencia no cambia: todo esto sigue exigiendo CUSTOMER y
+        el backend revalida cada petición.
+      */}
       <Route
         element={
           <RequireRole role="CUSTOMER">
@@ -121,11 +145,39 @@ function AppRoutes({ location }) {
         }
       >
         <Route path="/inicio" element={<CustomerDashboard />} />
-        <Route path="/reservar" element={<BookingWizard />} />
+
+        {/* Limpieza */}
+        <Route path="/limpieza" element={<ServiceOverviewPage serviceType="CLEANING" />} />
+        <Route path="/limpieza/reservar" element={<BookingWizard serviceType="CLEANING" />} />
+        <Route path="/limpieza/reservas" element={<CustomerOrders serviceType="CLEANING" />} />
+        <Route path="/limpieza/espacios" element={<SpacesPage />} />
+
+        {/* Lavandería */}
+        <Route path="/lavanderia" element={<ServiceOverviewPage serviceType="LAUNDRY" />} />
+        <Route path="/lavanderia/recogida" element={<BookingWizard serviceType="LAUNDRY" />} />
+        <Route path="/lavanderia/pedidos" element={<CustomerOrders serviceType="LAUNDRY" />} />
+
+        {/*
+          Arreglo de prendas: existe la experiencia, no el flujo de reserva. No
+          se declara `/arreglos/reservar` porque el dominio no sabe crear esa
+          orden todavía, y una pantalla que promete lo que la API rechaza es
+          peor que no tenerla.
+        */}
+        <Route path="/arreglos" element={<ServiceOverviewPage serviceType="ALTERATION" />} />
+
+        {/* Común a los tres */}
         <Route path="/servicios" element={<CustomerOrders />} />
         <Route path="/servicios/:id" element={<CustomerOrderDetail />} />
         <Route path="/direcciones" element={<AddressesPage />} />
-        <Route path="/inmuebles" element={<PropertyManager />} />
+
+        {/*
+          Compatibilidad: las rutas que existían antes de separar las
+          experiencias siguen llevando a donde ahora viven esos contenidos.
+          Enlaces guardados, correos ya enviados y la portada no se rompen.
+        */}
+        <Route path="/reservar" element={<BookingRedirect />} />
+        <Route path="/inmuebles" element={<Navigate to="/limpieza/espacios" replace />} />
+        <Route path="/limpieza/hogar" element={<Navigate to="/limpieza/espacios" replace />} />
       </Route>
 
       {/* Operaciones */}

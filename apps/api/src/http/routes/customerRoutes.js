@@ -65,6 +65,29 @@ router.delete(
   }),
 );
 
+/**
+ * PATCH /api/customer/addresses/:id/cleaning-profile
+ *
+ * Datos del hogar para limpieza: cuantas habitaciones, como se entra, si hay
+ * mascotas. Cuelgan de la direccion —la unica entidad que comparten todos los
+ * servicios— en lugar de vivir en una lista de "inmuebles" aparte que nadie
+ * miraba al reservar. Los mantiene la propia reserva y se pueden corregir
+ * desde la pantalla del servicio de limpieza.
+ */
+router.patch(
+  '/addresses/:id/cleaning-profile',
+  validate({ params: schemas.idParamSchema, body: schemas.cleaningProfileSchema }),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await addressService.saveCleaningProfile({
+        user: req.user,
+        addressId: req.validatedParams.id,
+        payload: req.body,
+      }),
+    );
+  }),
+);
+
 // ---------------------------------------------------------------------------
 // Cotizacion
 // ---------------------------------------------------------------------------
@@ -210,11 +233,14 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// Propiedades e Inmuebles
+// Lugares de limpieza
+//
+// El lugar (`properties`) es el perfil de lo que limpiamos: cuantas
+// habitaciones, como se entra, si hay mascotas. Vive en una direccion y no
+// duplica su texto ni sus coordenadas (ver migracion 005).
 // ---------------------------------------------------------------------------
 
 const propertyService = require('../../services/propertyService');
-const couponService = require('../../services/couponService');
 
 router.get(
   '/properties',
@@ -252,6 +278,8 @@ router.delete(
 // ---------------------------------------------------------------------------
 // Cupones (Validacion por el cliente)
 // ---------------------------------------------------------------------------
+
+const couponService = require('../../services/couponService');
 
 router.post(
   '/coupons/validate',

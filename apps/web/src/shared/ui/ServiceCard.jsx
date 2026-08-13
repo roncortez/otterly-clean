@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Sparkles, Shirt, Scissors, MapPin, ChevronRight } from 'lucide-react';
-import { Card, StatusBadge, cx } from '@/shared/ui';
+import { Card, StatusBadge } from '@/shared/ui';
 import { formatLongDate, formatTimeWindow, isToday } from '@/shared/format';
 
 export const SERVICE_ICONS = {
@@ -31,13 +31,14 @@ export function ServiceCard({ order, to, showPrice = true, money }) {
       className="group block transition-shadow hover:shadow-[var(--shadow-raised)]"
     >
       <div className="flex items-start gap-4 p-4 sm:p-5">
+        {/*
+          El icono lleva el acento del servicio del pedido, no el de la pantalla
+          en la que se dibuja: en una lista mezclada es lo que permite distinguir
+          una limpieza de una recogida de un vistazo.
+        */}
         <span
-          className={cx(
-            'flex size-11 shrink-0 items-center justify-center rounded-xl',
-            order.serviceType === 'CLEANING'
-              ? 'bg-forest-50 text-forest-600'
-              : 'bg-sage-100 text-sage-700',
-          )}
+          data-service={order.serviceType}
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-service-soft text-service-strong"
         >
           <Icon className="size-5" aria-hidden="true" />
         </span>

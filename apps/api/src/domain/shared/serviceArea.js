@@ -101,9 +101,9 @@ function locateZone(point, zones = []) {
 /**
  * Circulo que envuelve toda la operacion de una region.
  *
- * Lo usa el frontend para orientar el buscador de Google hacia donde la empresa
- * trabaja de verdad, en lugar de llevar una restriccion escrita a mano que
- * impediria abrir una ciudad nueva desde la pantalla de zonas.
+ * Lo usa el frontend para orientar el buscador de direcciones hacia donde la
+ * empresa trabaja de verdad, en lugar de llevar una restriccion escrita a mano
+ * que impediria abrir una ciudad nueva desde la pantalla de zonas.
  *
  * @returns {{center:{latitude:number, longitude:number}, radiusKm:number}|null}
  */
