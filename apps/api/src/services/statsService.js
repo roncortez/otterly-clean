@@ -43,4 +43,65 @@ async function getOperationsOverview() {
   };
 }
 
-module.exports = { getOperationsOverview };
+/**
+ * Resumen del cliente para su pantalla de inicio.
+ *
+ * Pocas cifras y todas calculables: cuantos servicios tiene en marcha, cuantos
+ * ha completado, cuando es el proximo y cuanto lleva gastado en los que
+ * terminaron. No hay medias, ni tendencias, ni comparativas con el mes pasado:
+ * eso exigiria decidir que cuenta como "mes" y de que sirve, y hoy no sirve de
+ * nada.
+ *
+ * "Activo" es lo contrario de terminal, y los estados terminales los declara el
+ * dominio (`stateMachine.isTerminal`). Aqui se enumeran los tres que lo son en
+ * las tres maquinas -COMPLETED, DELIVERED y CANCELLED- porque una consulta SQL
+ * no puede llamar al dominio; si se anade un estado final nuevo hay que tocar
+ * esta lista, y por eso esta escrita en un solo sitio.
+ *
+ * El gasto sale de `total_amount` de las ordenes COMPLETED: lo acordado en
+ * ordenes que se prestaron. Las canceladas no cuentan y las que siguen en curso
+ * tampoco, porque su precio todavia puede cambiar.
+ */
+const TERMINAL_STATUSES = ['COMPLETED', 'DELIVERED', 'CANCELLED'];
+
+async function getCustomerOverview(customerId) {
+  const [counts, next] = await Promise.all([
+    db.one(
+      `SELECT
+         COUNT(*) FILTER (WHERE status <> ALL($2))          AS active,
+         COUNT(*) FILTER (WHERE status IN ('COMPLETED', 'DELIVERED')) AS completed,
+         COALESCE(SUM(total_amount) FILTER (WHERE status = 'COMPLETED'), 0) AS spent,
+         COUNT(*) FILTER (WHERE service_type = 'LAUNDRY')   AS laundry
+       FROM orders WHERE customer_id = $1`,
+      [customerId, TERMINAL_STATUSES],
+    ),
+    db.oneOrNone(
+      `SELECT id, reference, service_type, scheduled_date
+         FROM orders
+        WHERE customer_id = $1
+          AND status <> ALL($2)
+          AND scheduled_date >= CURRENT_DATE
+        ORDER BY scheduled_date, scheduled_window_start
+        LIMIT 1`,
+      [customerId, TERMINAL_STATUSES],
+    ),
+  ]);
+
+  return {
+    activeOrders: Number(counts.active),
+    completedOrders: Number(counts.completed),
+    laundryOrders: Number(counts.laundry),
+    // En centavos, como todo importe: la interfaz lo formatea con su moneda.
+    totalSpent: Number(counts.spent),
+    nextOrder: next
+      ? {
+          id: next.id,
+          reference: next.reference,
+          serviceType: next.service_type,
+          scheduledDate: next.scheduled_date,
+        }
+      : null,
+  };
+}
+
+module.exports = { getOperationsOverview, getCustomerOverview };

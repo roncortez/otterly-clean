@@ -22,15 +22,15 @@ const {
 } = require('../src/domain/shared/availability');
 const {
   ACCESS_SECRET,
-  HOME_KEYS,
-  HOME_DETAIL_KEYS,
+  PLACE_KEYS,
+  PLACE_DETAIL_KEYS,
   VISIT_FIELDS,
   needsAccessSecret,
-  homeFieldsToColumns,
-  resolveHomeFields,
-  projectHomeProfile,
-  isHomeProfileComplete,
-} = require('../src/domain/cleaning/homeProfile');
+  placeFieldsToColumns,
+  resolvePlaceFields,
+  isPlaceProfileComplete,
+} = require('../src/domain/cleaning/placeProfile');
+const { projectProperty } = require('../src/services/propertyService');
 const schemas = require('../src/http/schemas');
 const { getRegion } = require('../src/config/regions');
 const { ROLES, hasRole, hasAnyRole, primaryRole, normalizeRoles } = require('../src/domain/shared/roles');
@@ -520,8 +520,8 @@ describe('Configuracion regional', () => {
  * sigan hablando del mismo conjunto de campos. Si alguien anade un campo a la
  * reserva y se olvida de clasificarlo, esto falla.
  */
-describe('Perfil de limpieza de un espacio', () => {
-  const profile = {
+describe('Perfil de limpieza de un lugar', () => {
+  const place = {
     property_type: 'HOUSE',
     bedrooms: 3,
     bathrooms: 2,
@@ -533,13 +533,13 @@ describe('Perfil de limpieza de un espacio', () => {
     access_method: 'DOOR_CODE',
     access_instructions: 'Timbre 5B',
     parking_instructions: 'Subsuelo 1',
+    delicate_items: 'El jarron de la entrada',
     notes: 'El timbre no funciona',
-    access_secret_encrypted: 'v1:aa:bb:cc',
-    updated_at: new Date('2026-08-01T10:00:00Z'),
+    access_code: 'v1:aa:bb:cc',
   };
 
   it('una reserva que no repite nada del lugar lo hereda entero', () => {
-    const resolved = resolveHomeFields({ payload: {}, profile, areaUnit: 'm2' });
+    const resolved = resolvePlaceFields({ payload: {}, place, areaUnit: 'm2' });
 
     expect(resolved.bedrooms).toBe(3);
     expect(resolved.bathrooms).toBe(2);
@@ -553,20 +553,20 @@ describe('Perfil de limpieza de un espacio', () => {
   });
 
   it('lo que la reserva si dice manda sobre lo guardado', () => {
-    const resolved = resolveHomeFields({
+    const resolved = resolvePlaceFields({
       payload: { bathrooms: 3, hasPets: false },
-      profile,
+      place,
       areaUnit: 'm2',
     });
 
     expect(resolved.bathrooms).toBe(3);
     expect(resolved.hasPets).toBe(false);
-    // Y lo que no menciona sigue viniendo del espacio.
+    // Y lo que no menciona sigue viniendo del lugar.
     expect(resolved.bedrooms).toBe(3);
   });
 
-  it('sin ficha usa valores por defecto, no ceros inventados a medias', () => {
-    const resolved = resolveHomeFields({ payload: { bedrooms: 2 }, areaUnit: 'm2' });
+  it('sin lugar usa valores por defecto, no ceros inventados a medias', () => {
+    const resolved = resolvePlaceFields({ payload: { bedrooms: 2 }, areaUnit: 'm2' });
 
     expect(resolved.bedrooms).toBe(2);
     expect(resolved.bathrooms).toBe(0);
@@ -576,51 +576,50 @@ describe('Perfil de limpieza de un espacio', () => {
   });
 
   it('la unidad de area la pone la region cuando hay medida y nadie la dijo', () => {
-    const resolved = resolveHomeFields({ payload: { areaValue: 80 }, areaUnit: 'sqft' });
+    const resolved = resolvePlaceFields({ payload: { areaValue: 80 }, areaUnit: 'sqft' });
     expect(resolved.areaUnit).toBe('sqft');
 
     // Sin medida no hay unidad que guardar.
-    expect(resolveHomeFields({ payload: {}, areaUnit: 'sqft' }).areaUnit).toBeNull();
+    expect(resolvePlaceFields({ payload: {}, areaUnit: 'sqft' }).areaUnit).toBeNull();
   });
 
   it('solo se escriben los campos que vienen: una reserva no borra lo que no menciona', () => {
-    const columns = homeFieldsToColumns({ bathrooms: 3 });
+    const columns = placeFieldsToColumns({ bathrooms: 3 });
 
     expect(columns).toEqual({ bathrooms: 3 });
     expect(columns.pets).toBeUndefined();
     expect(columns.pet_instructions).toBeUndefined();
   });
 
-  it('los datos de la visita nunca se guardan en el espacio', () => {
-    const columns = homeFieldsToColumns({
+  it('los datos de la visita nunca se guardan en el lugar', () => {
+    const columns = placeFieldsToColumns({
       bedrooms: 2,
       cleaningType: 'DEEP',
       priorityAreas: ['Cocina'],
       customerPresent: false,
       petsSecured: true,
-      delicateItems: 'Cuadros',
       suppliesProvidedBy: 'CUSTOMER',
-      fragrancePreference: 'Lavanda',
+      fragrancePreference: 'LAVENDER',
     });
 
     expect(Object.keys(columns)).toEqual(['bedrooms']);
   });
 
-  it('la ficha que sale al cliente no lleva el secreto, solo si existe', () => {
-    const projected = projectHomeProfile(profile);
+  it('el lugar que sale al cliente no lleva el codigo, solo si existe', () => {
+    const projected = projectProperty({ ...place, id: 1, name: 'Casa', address_id: 9 });
 
-    expect(projected.hasAccessSecret).toBe(true);
+    expect(projected.hasAccessCode).toBe(true);
+    expect(projected.accessCode).toBeNull();
     expect(JSON.stringify(projected)).not.toContain('v1:aa:bb:cc');
     // Y los numericos salen como numeros, no como cadenas de PostgreSQL.
     expect(projected.areaValue).toBe(120);
-    expect(projected.bathrooms).toBe(2);
   });
 
-  it('una ficha sin banos esta incompleta: nadie la ha descrito todavia', () => {
-    expect(isHomeProfileComplete(null)).toBe(false);
-    expect(isHomeProfileComplete({ bathrooms: 0, bedrooms: 3 })).toBe(false);
-    expect(isHomeProfileComplete({ bathrooms: 1, bedrooms: 0 })).toBe(true);
-    expect(projectHomeProfile(profile).complete).toBe(true);
+  it('un lugar sin banos esta incompleto: nadie lo ha descrito todavia', () => {
+    expect(isPlaceProfileComplete(null)).toBe(false);
+    expect(isPlaceProfileComplete({ bathrooms: 0, bedrooms: 3 })).toBe(false);
+    expect(isPlaceProfileComplete({ bathrooms: 1, bedrooms: 0 })).toBe(true);
+    expect(isPlaceProfileComplete(place)).toBe(true);
   });
 
   it('la clave de la puerta solo se hereda si asi se entra esta vez', () => {
@@ -633,30 +632,37 @@ describe('Perfil de limpieza de un espacio', () => {
 
   /**
    * La prueba que evita que el concepto se vuelva a partir: los campos del
-   * detalle de una reserva son exactamente los del espacio mas los de la visita,
-   * sin solapes ni huerfanos, y la ficha admite justo los del espacio (mas la
-   * clave de acceso, que se escribe pero no se lee).
+   * detalle de una reserva son exactamente los del lugar mas los de la visita,
+   * sin solapes ni huerfanos, y el lugar sabe guardar todos los suyos.
    */
-  it('reserva, ficha y validacion hablan del mismo conjunto de campos', () => {
+  it('reserva, lugar y validacion hablan del mismo conjunto de campos', () => {
     const detailKeys = Object.keys(schemas.createCleaningOrderSchema.shape.cleaning.def.innerType.shape);
-    const profileKeys = Object.keys(schemas.cleaningProfileSchema.shape);
+    const placeKeys = Object.keys(schemas.updatePropertySchema.shape);
 
-    const home = new Set(HOME_DETAIL_KEYS);
+    const stable = new Set(PLACE_DETAIL_KEYS);
     const visit = new Set(VISIT_FIELDS);
 
     // Ni un campo del detalle sin clasificar.
     for (const key of detailKeys) {
       if (key === ACCESS_SECRET.key) continue;
-      expect(home.has(key) || visit.has(key), `${key} no esta clasificado`).toBe(true);
+      expect(stable.has(key) || visit.has(key), `${key} no esta clasificado`).toBe(true);
     }
     // Ni un campo clasificado que el detalle no acepte.
-    for (const key of [...home, ...visit]) {
+    for (const key of [...stable, ...visit]) {
       expect(detailKeys, `${key} no llega en la reserva`).toContain(key);
     }
     // Los dos conjuntos son disjuntos: nada es de la visita y del lugar a la vez.
-    expect([...home].filter((key) => visit.has(key))).toEqual([]);
+    expect([...stable].filter((key) => visit.has(key))).toEqual([]);
 
-    // La ficha del espacio: los campos del lugar y la clave, nada mas.
-    expect(profileKeys.sort()).toEqual([...HOME_KEYS, ACCESS_SECRET.key].sort());
+    /*
+     * Todo dato estable del lugar tiene que poder guardarse EN el lugar. Si no,
+     * la reserva lo heredaria de algo que el cliente no puede editar.
+     * `updatePropertySchema` acepta ademas cosas que no son del perfil (el
+     * nombre, cual es el predeterminado), y por eso la comprobacion es de
+     * inclusion y no de igualdad.
+     */
+    for (const key of PLACE_KEYS) {
+      expect(placeKeys, `${key} no se puede guardar en el lugar`).toContain(key);
+    }
   });
 });

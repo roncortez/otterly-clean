@@ -271,6 +271,9 @@ describe('Leer inmuebles y direcciones', () => {
       petsSecured: null,
       petInstructions: null,
       delicateItems: null,
+      // Cual es el lugar predeterminado: lo que permite preseleccionarlo al
+      // reservar sin desempatar por fecha de creacion (migracion 012).
+      isDefault: true,
     });
   });
 

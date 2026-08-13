@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { I18nProvider } from '@/shared/i18n/I18nContext';
@@ -148,6 +148,10 @@ function renderAt(path) {
 
 beforeEach(() => {
   mockAuth.current = null;
+  // El borrador de reserva vive en localStorage y sobrevive entre pruebas: sin
+  // esto, una que empieza una reserva deja a la siguiente con el asistente ya
+  // relleno en vez de con el selector.
+  window.localStorage.clear();
 });
 
 describe('Acceso por roles', () => {
@@ -170,14 +174,14 @@ describe('Acceso por roles', () => {
     renderAt('/operaciones');
 
     expect(screen.queryByText('Solicitudes')).not.toBeInTheDocument();
-    expect(screen.getAllByText('Direcciones').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Servicios').length).toBeGreaterThan(0);
   });
 
   it('CUSTOMER tampoco entra a Trabajo', () => {
     signedInAs(['CUSTOMER']);
     renderAt('/trabajo');
 
-    expect(screen.getAllByText('Direcciones').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Servicios').length).toBeGreaterThan(0);
   });
 
   it('STAFF no entra a Operaciones', () => {
@@ -254,118 +258,146 @@ describe('Acceso por roles', () => {
 });
 
 /**
- * Cuatro contextos, una sola aplicación.
+ * Navegación del cliente.
  *
- * Lo que se comprueba aquí es la jerarquía de la navegación: en qué contexto
- * estás, qué se puede hacer dentro de él, y que nada aparezca en dos niveles a
- * la vez. Más lo más importante del catálogo: que un servicio sin flujo de
- * reserva no ofrezca reservar.
+ * NOTA DE INTEGRACION: `feat/maplibre-geoapify` separaba la aplicación en cuatro
+ * contextos con navegación propia por servicio (`/limpieza`, `/lavanderia`...).
+ * La integración conserva la barra de `fix/booking-flow`, con un cambio:
+ * Direcciones y Lugares salen de la navegación principal y pasan a Perfil,
+ * porque son configuración de la cuenta y ocupaban dos de los cuatro huecos de
+ * la barra inferior. Lo que se comprueba aquí es esa frontera —qué se ve a
+ * diario y qué se configura una vez— y que los enlaces antiguos sigan llevando
+ * a donde ahora vive cada cosa.
  */
-describe('Experiencias por servicio', () => {
-  it('cada servicio tiene su pantalla con su navegación', async () => {
+describe('Navegación del cliente', () => {
+  it('la barra principal es lo de cada día, sin configuración de la cuenta', async () => {
     signedInAs(['CUSTOMER']);
-    const limpieza = renderAt('/limpieza');
+    renderAt('/inicio');
 
-    // Aparece en la banda de escritorio y en la barra de móvil: las dos son la
-    // misma lista, pintada donde el pulgar la alcanza.
-    expect((await screen.findAllByRole('link', { name: 'Mis espacios' })).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Reservar').length).toBeGreaterThan(0);
-    limpieza.unmount();
-
-    renderAt('/lavanderia');
-    expect((await screen.findAllByRole('link', { name: 'Mis pedidos' })).length).toBeGreaterThan(0);
-    // La navegación es la del servicio en el que estás, no una lista común.
-    expect(screen.queryAllByRole('link', { name: 'Mis espacios' })).toHaveLength(0);
-  });
-
-  it('se puede cambiar de servicio desde cualquier pantalla', async () => {
-    signedInAs(['CUSTOMER']);
-    renderAt('/limpieza');
-
-    // El conmutador lleva a los tres servicios y a la cuenta, estés donde estés.
-    for (const label of ['Mi cuenta', 'Limpieza', 'Lavandería', 'Arreglos']) {
+    for (const label of ['Inicio', 'Servicios', 'Productos']) {
       expect((await screen.findAllByRole('link', { name: label })).length).toBeGreaterThan(0);
     }
+    // Direcciones y Lugares ya no compiten con lo que se usa a diario.
+    expect(screen.queryByRole('link', { name: 'Direcciones' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Lugares/ })).not.toBeInTheDocument();
   });
 
   /**
-   * La jerarquía: el servicio en el que estás manda sobre sus opciones, y sus
-   * opciones cuelgan de él. Se mide por lo que la interfaz declara —qué está
-   * marcado como página actual y qué agrupa a qué—, no por clases de CSS.
+   * El botón principal abre el selector ahí mismo. Antes navegaba a una
+   * pantalla intermedia cuyo único contenido era otro botón para abrir este
+   * mismo modal.
    */
-  it('el contexto está por encima de sus opciones, no al lado', async () => {
+  it('«¿Qué necesitas?» abre el selector sin cambiar de pantalla', async () => {
     signedInAs(['CUSTOMER']);
-    renderAt('/limpieza/reservar');
+    renderAt('/inicio');
 
-    // Uno solo de los cuatro contextos está marcado como el actual, y es Limpieza.
-    const switcher = (await screen.findAllByRole('navigation', { name: 'Servicios' }))[0];
-    const activo = within(switcher).getAllByRole('link', { current: 'page' });
-    expect(activo).toHaveLength(1);
-    expect(activo[0]).toHaveTextContent('Limpieza');
+    fireEvent.click((await screen.findAllByRole('button', { name: /¿Qué necesitas\?/ }))[0]);
 
-    // Y las opciones de Limpieza van agrupadas bajo su nombre, en su propia
-    // navegación, no en un menú global suelto.
-    const sections = screen.getAllByRole('navigation', { name: 'Secciones de Limpieza' });
-    expect(sections.length).toBeGreaterThan(0);
-    expect(sections[0]).toHaveTextContent('Reservar');
-    // El conmutador y las secciones son dos niveles distintos, no la misma barra.
-    expect(sections[0]).not.toContainElement(switcher);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Limpieza')).toBeInTheDocument();
+    expect(within(dialog).getByText('Lavandería')).toBeInTheDocument();
+    // Kits se llamaba así y llevaba al asistente de reserva de otro servicio.
+    expect(within(dialog).getByText('Productos')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Kits')).not.toBeInTheDocument();
+    // Arreglos no se ofrece: el dominio no sabe crear esa orden todavía.
+    expect(within(dialog).queryByText('Arreglos')).not.toBeInTheDocument();
   });
 
-  it('lo de la cuenta no se repite dentro de cada servicio', async () => {
+  it('el perfil tiene su propia navegación, en el orden en que se usa', async () => {
     signedInAs(['CUSTOMER']);
-    const limpieza = renderAt('/limpieza');
+    renderAt('/mi-perfil');
 
-    // Direcciones es de la cuenta: sirve para los tres servicios y no aparece
-    // en la navegación de ninguno.
-    const secciones = (await screen.findAllByRole('navigation', { name: 'Secciones de Limpieza' }))[0];
-    expect(secciones.textContent).not.toContain('Direcciones');
-    limpieza.unmount();
+    const nav = await screen.findByRole('navigation', { name: 'Secciones del perfil' });
+    const links = within(nav).getAllByRole('link');
 
-    // Pero está a un clic desde cualquier sitio, en el contexto de la cuenta.
-    renderAt('/direcciones');
-    const cuenta = (await screen.findAllByRole('navigation', { name: 'Secciones de Mi cuenta' }))[0];
-    expect(cuenta.textContent).toContain('Direcciones');
-    expect(cuenta.textContent).toContain('Mis servicios');
+    // Primero existe una dirección; después el lugar que hay en ella.
+    expect(links.map((link) => link.textContent)).toEqual([
+      'Datos personales',
+      'Direcciones',
+      'Lugares para limpieza',
+    ]);
   });
 
-  it('arreglo de prendas se presenta, pero no ofrece reservar', async () => {
-    signedInAs(['CUSTOMER']);
-    renderAt('/arreglos');
+  it('quien no es cliente no ve pestañas que no le corresponden', async () => {
+    signedInAs(['STAFF']);
+    renderAt('/mi-perfil');
 
-    expect(await screen.findByText(/Todavía no se puede reservar aquí/)).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Reservar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Direcciones' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Lugares para limpieza' })).not.toBeInTheDocument();
   });
 
   it('las rutas antiguas siguen llevando a donde ahora vive cada cosa', async () => {
     signedInAs(['CUSTOMER']);
 
-    const reservar = renderAt('/reservar?servicio=LAUNDRY');
-    // El asistente de lavandería, con el servicio ya fijado.
-    expect((await screen.findAllByRole('link', { name: 'Mis pedidos' })).length).toBeGreaterThan(0);
-    reservar.unmount();
+    const direcciones = renderAt('/direcciones');
+    expect(await screen.findByRole('navigation', { name: 'Secciones del perfil' })).toBeInTheDocument();
+    expect(screen.getAllByText('Tus direcciones').length).toBeGreaterThan(0);
+    direcciones.unmount();
 
-    renderAt('/inmuebles');
-    expect((await screen.findAllByText('Mis espacios')).length).toBeGreaterThan(0);
+    // `/inmuebles` y la ruta de espacios de la otra rama acaban en la misma
+    // pantalla: un cliente tiene lugares, y son los mismos se llegue por donde
+    // se llegue.
+    const inmuebles = renderAt('/inmuebles');
+    expect(await screen.findByRole('navigation', { name: 'Secciones del perfil' })).toBeInTheDocument();
+    inmuebles.unmount();
+
+    renderAt('/limpieza/espacios');
+    expect(await screen.findByRole('navigation', { name: 'Secciones del perfil' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * Reservar no exige cuenta hasta el final.
+ *
+ * Un visitante de la portada puede elegir servicio y rellenar la reserva; la
+ * sesión se pide justo antes de confirmar. El backend sigue exigiendo CUSTOMER
+ * autenticado para crear la orden: esto abre el formulario, no la API.
+ */
+describe('Reservar sin sesión', () => {
+  function anonymous() {
+    mockAuth.current = {
+      user: null,
+      roles: [],
+      status: 'anonymous',
+      isAuthenticated: false,
+      isLoading: false,
+      hasRole: () => false,
+      needsOnboarding: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+      applyExternalSession: vi.fn(),
+    };
+  }
+
+  it('un visitante entra al asistente sin que lo manden a iniciar sesión', async () => {
+    anonymous();
+    renderAt('/reservar?servicio=CLEANING');
+
+    // No hay panel de acceso: hay asistente.
+    expect(screen.queryByRole('dialog', { name: 'Entra a tu cuenta' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Tu servicio')).toBeInTheDocument();
+    // Y se le ofrece entrar, sin obligarle.
+    expect(screen.getAllByRole('link', { name: 'Entrar' }).length).toBeGreaterThan(0);
   });
 
-  it('la pantalla del hogar en singular ahora lleva a los espacios', async () => {
-    signedInAs(['CUSTOMER']);
-    renderAt('/limpieza/hogar');
+  it('el catálogo de productos también es público', async () => {
+    anonymous();
+    renderAt('/productos');
 
-    // Una persona puede tener varias viviendas: el enlace guardado sigue
-    // funcionando, pero llega a la lista.
-    expect((await screen.findAllByText('Mis espacios')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('Los productos que usamos')).toBeInTheDocument();
   });
 
-  it('el inicio ofrece los tres servicios y solo deja reservar los que existen', async () => {
-    signedInAs(['CUSTOMER']);
-    renderAt('/inicio');
+  it('sin servicio elegido, /reservar pregunta cuál en lugar de una pantalla intermedia', async () => {
+    anonymous();
+    renderAt('/reservar');
 
-    expect(await screen.findByText('Nuestros servicios')).toBeInTheDocument();
-    // Dos reservables, uno todavía no.
-    expect(screen.getAllByRole('link', { name: 'Reservar' })).toHaveLength(2);
-    expect(screen.getByText('Muy pronto')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Limpieza')).toBeInTheDocument();
+    // El paso que se elimina: ya no hay un botón "Comenzar reserva" que abra
+    // este mismo modal desde otra pantalla.
+    expect(screen.queryByRole('button', { name: 'Comenzar reserva' })).not.toBeInTheDocument();
   });
 });
 
@@ -398,6 +430,6 @@ describe('Guarda de onboarding', () => {
     signedInAs(['CUSTOMER'], { pending: false, scope: null });
     renderAt('/onboarding');
 
-    expect((await screen.findAllByText('Direcciones')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Servicios')).length).toBeGreaterThan(0);
   });
 });

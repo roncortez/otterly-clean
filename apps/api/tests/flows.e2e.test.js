@@ -249,7 +249,8 @@ describe('Flujo completo de limpieza', () => {
           areaValue: 95,
           priorityAreas: ['cocina', 'baños'],
           suppliesProvidedBy: 'COMPANY',
-          fragrancePreference: 'sin fragancia',
+          // Codigo del catalogo, no texto libre: ver migracion 014.
+          fragrancePreference: 'NONE',
           customerPresent: false,
           accessMethod: 'DOOR_CODE',
           accessInstructions: 'Puerta principal del edificio, luego departamento 4B',
@@ -985,11 +986,31 @@ describe('Vinculo con el inmueble', () => {
         ...payload,
       });
 
-  it('rechaza una limpieza sin la identidad del espacio', async () => {
+  /**
+   * Esta prueba exigia antes que la reserva repitiera SIEMPRE la identidad del
+   * espacio (tipo, habitaciones, banos), y se rechazaba con 400 si faltaba.
+   *
+   * Ya no: los datos estables son del lugar y la reserva los hereda cuando no
+   * los menciona (ver domain/cleaning/placeProfile). Repetirlos en cada reserva
+   * era justamente el formulario duplicado que se venia a quitar.
+   *
+   * Lo que se comprueba ahora es que omitirlos no inventa nada: sin lugar
+   * guardado, la orden se crea con los valores por defecto del dominio y no con
+   * datos de otra casa. Que HEREDE del lugar cuando existe lo cubre
+   * addresses.e2e.test.js.
+   */
+  it('sin lugar guardado, omitir los datos del espacio no inventa otros', async () => {
     const res = await reservar({ cleaning: {} });
 
-    expect(res.status, JSON.stringify(res.body)).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    const detalle = await db.one(
+      'SELECT property_type, bedrooms, bathrooms FROM cleaning_details WHERE order_id = $1',
+      [res.body.order.id],
+    );
+    expect(detalle.property_type).toBe('APARTMENT');
+    expect(detalle.bedrooms).toBe(0);
+    expect(detalle.bathrooms).toBe(0);
   });
 
   it('vincula el inmueble que la direccion ya tiene', async () => {

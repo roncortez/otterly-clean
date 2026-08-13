@@ -1,38 +1,60 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CalendarPlus } from 'lucide-react';
+import {
+  ArrowRight,
+  CalendarPlus,
+  CalendarCheck,
+  CheckCircle2,
+  Shirt,
+  Sparkles,
+  Wallet,
+} from 'lucide-react';
 import { useApiQuery } from '@/shared/api/useApiQuery';
 import { useAuth } from '@/shared/auth/AuthContext';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { Alert, ButtonLink, Card, EmptyState, Eyebrow, Spinner, StatusBadge, cx } from '@/shared/ui';
+import {
+  Alert,
+  Button,
+  ButtonLink,
+  Card,
+  EmptyState,
+  Eyebrow,
+  Spinner,
+  StatusBadge,
+} from '@/shared/ui';
 import { StatusTimeline } from '@/shared/ui/StatusTimeline';
 import { ServiceCard } from '@/shared/ui/ServiceCard';
-import { useServiceExperiences } from '@/shared/services';
+import ServicePicker from '@/shared/services/ServicePicker';
 import { formatLongDate, formatTimeWindow, isToday } from '@/shared/format';
 
 /**
  * Inicio del cliente.
  *
- * Responde dos preguntas en este orden: "¿qué está pasando ahora?" y "¿qué
- * puedo pedir?". Lo segundo se presenta como tres puertas —limpieza, lavandería
- * y arreglos—, porque para el cliente son servicios distintos aunque compartan
- * cuenta, direcciones e historial.
+ * Dos bloques, y el reparto no es estético: a la izquierda lo que resume su
+ * relación con nosotros (unas pocas cifras), a la derecha lo que está pasando
+ * ahora mismo. Lo segundo pesa más porque es lo que se viene a mirar; las
+ * cifras contestan «¿cómo voy?» de un vistazo y no piden acción.
  *
- * Un servicio que el dominio todavía no sabe crear se muestra, pero no ofrece
- * una acción de reserva que iba a fallar: quien decide si hay botón es el
- * backend (`bookable`), no esta pantalla.
+ * Las métricas salen de `GET /api/customer/summary`, que las cuenta en la base.
+ * No hay ninguna que el backend no sepa calcular: nada de medias mensuales ni
+ * comparativas que habría que inventarse en el navegador.
+ *
+ * En móvil los dos bloques se apilan y el servicio en curso va primero: en una
+ * pantalla estrecha, lo urgente no puede quedar debajo del resumen.
  */
 export default function DashboardPage() {
   const { user } = useAuth();
   const { money } = useConfig();
-  const experiences = useServiceExperiences();
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const activeParams = useMemo(() => ({ activeOnly: true, limit: 10 }), []);
   const historyParams = useMemo(() => ({ limit: 5 }), []);
 
+  const summaryQuery = useApiQuery('/customer/summary');
   const activeQuery = useApiQuery('/customer/orders', { params: activeParams });
   const historyQuery = useApiQuery('/customer/orders', { params: historyParams });
 
+  const summary = summaryQuery.data?.summary ?? null;
   const active = activeQuery.data?.data ?? [];
   const past = (historyQuery.data?.data ?? []).filter((order) => order.isTerminal);
 
@@ -42,99 +64,61 @@ export default function DashboardPage() {
   const liveDetail = liveQuery.data;
 
   const loading = activeQuery.loading || historyQuery.loading;
-  const error = activeQuery.error ?? historyQuery.error;
+  const error = activeQuery.error ?? historyQuery.error ?? summaryQuery.error;
 
   if (loading) return <Spinner label="Cargando tus servicios" />;
 
   return (
     <div className="space-y-8">
-      <header>
-        <p className="text-sm text-text-muted">Hola, {user?.firstName}</p>
-        <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight text-text sm:text-3xl">
-          {active.length > 0 ? 'Tus servicios en curso' : '¿Qué necesitas hoy?'}
-        </h1>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm text-text-muted">Hola, {user?.firstName}</p>
+          <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight text-text sm:text-3xl">
+            {active.length > 0 ? 'Tus servicios en curso' : '¿Qué necesitas hoy?'}
+          </h1>
+        </div>
+        <Button variant="accent" onClick={() => setPickerOpen(true)}>
+          <Sparkles className="size-4" aria-hidden="true" />
+          ¿Qué necesitas?
+        </Button>
       </header>
 
       {error && <Alert tone="danger">{error}</Alert>}
 
-      {/* Servicio activo con timeline: el corazón de la pantalla */}
-      {liveDetail && (
-        <Card className="overflow-hidden" data-service={liveDetail.order.serviceType}>
-          <div className="border-b border-border bg-forest-800 px-5 py-4 text-text-inverse sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold tracking-[0.14em] text-forest-200 uppercase">
-                  {isToday(liveDetail.order.scheduledDate) ? 'Hoy' : 'Próximo servicio'}
-                </p>
-                <p className="mt-1 text-lg font-bold tracking-tight">{liveDetail.order.planName}</p>
-                <p className="text-sm text-forest-200">
-                  {formatLongDate(liveDetail.order.scheduledDate)} ·{' '}
-                  {formatTimeWindow(
-                    liveDetail.order.scheduledWindowStart,
-                    liveDetail.order.scheduledWindowEnd,
-                  )}
-                </p>
-              </div>
-              <StatusBadge status={liveDetail.order.status} label={liveDetail.statusLabel} />
-            </div>
-          </div>
+      {/*
+        `order-*` invierte el orden en móvil: el servicio en curso primero. En
+        escritorio vuelve a la izquierda-derecha que describe el comentario de
+        arriba.
+      */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
+        <section className="order-2 lg:order-1">
+          <Eyebrow className="mb-3 block">Tu resumen</Eyebrow>
+          <SummaryMetrics summary={summary} money={money} />
+        </section>
 
-          <div className="grid gap-6 p-5 sm:p-6 md:grid-cols-[1fr_260px]">
-            <StatusTimeline steps={liveDetail.timeline} />
-
-            <div className="space-y-4 md:border-l md:border-border md:pl-6">
-              {liveDetail.assignedStaff?.[0] ? (
-                <div>
-                  <Eyebrow className="mb-2 block">Quién lo atiende</Eyebrow>
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-11 items-center justify-center rounded-full bg-service-soft font-semibold text-service-strong">
-                      {liveDetail.assignedStaff[0].displayName?.[0]}
-                    </span>
-                    <div>
-                      <p className="font-medium text-text">
-                        {liveDetail.assignedStaff[0].displayName}
-                      </p>
-                      {liveDetail.assignedStaff[0].isVerified && (
-                        <p className="text-xs text-success">Profesional verificado</p>
-                      )}
-                    </div>
-                  </div>
-                  {liveDetail.assignedStaff[0].bio && (
-                    <p className="mt-3 text-sm text-text-muted">{liveDetail.assignedStaff[0].bio}</p>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-xl bg-surface-sunken p-4">
-                  <p className="text-sm font-medium text-text">Asignando profesional</p>
-                  <p className="mt-1 text-sm text-text-muted">
-                    Te avisamos en cuanto tengamos a alguien confirmado para tu servicio.
-                  </p>
-                </div>
-              )}
-
-              <ButtonLink
-                as={Link}
-                to={`/servicios/${liveDetail.order.id}`}
-                variant="outline"
-                size="sm"
-                className="w-full"
-              >
-                Ver todos los detalles
-              </ButtonLink>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Las tres puertas */}
-      <section>
-        <Eyebrow className="mb-3 block">Nuestros servicios</Eyebrow>
-        <div className="grid gap-4 md:grid-cols-3">
-          {experiences.map((experience) => (
-            <ServiceEntry key={experience.code} experience={experience} />
-          ))}
-        </div>
-      </section>
+        <section className="order-1 lg:order-2">
+          <Eyebrow className="mb-3 block">
+            {liveDetail && isToday(liveDetail.order.scheduledDate) ? 'Hoy' : 'Próximo servicio'}
+          </Eyebrow>
+          {liveDetail ? (
+            <LiveServiceCard detail={liveDetail} />
+          ) : (
+            <Card className="p-6">
+              <EmptyState
+                icon={CalendarPlus}
+                title="No tienes nada agendado"
+                description="Cuando reserves un servicio lo verás aquí, con su estado al día."
+                action={
+                  <Button variant="accent" onClick={() => setPickerOpen(true)}>
+                    <Sparkles className="size-4" aria-hidden="true" />
+                    ¿Qué necesitas?
+                  </Button>
+                }
+              />
+            </Card>
+          )}
+        </section>
+      </div>
 
       {/* Próximos */}
       {active.length > (liveDetail ? 1 : 0) && (
@@ -177,54 +161,114 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      <ServicePicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </div>
   );
 }
 
 /**
- * Puerta de entrada a un servicio.
+ * Las cifras del cliente.
  *
- * Siempre se puede entrar a ver de qué va; reservar solo aparece si el backend
- * dice que ese servicio es reservable hoy. Un servicio apagado por Operaciones
- * y uno que el dominio aún no implementa se explican distinto, porque para el
- * cliente son cosas distintas: uno vuelve pronto, el otro todavía no existe.
+ * Cuatro y ninguna más. Cada una contesta algo que se pregunta de verdad:
+ * cuántos servicios tengo en marcha, cuántos han salido bien, cuánto llevo
+ * gastado y cuántas veces he usado lavandería —el segundo servicio, el que dice
+ * si la cuenta es de limpieza o de las dos cosas—.
+ *
+ * Los pedidos de lavandería se ocultan si son cero: una métrica en cero no
+ * informa de nada y ocupa el sitio de las que sí.
  */
-function ServiceEntry({ experience }) {
-  const Icon = experience.icon;
+function SummaryMetrics({ summary, money }) {
+  if (!summary) return null;
+
+  const metrics = [
+    { label: 'Servicios activos', value: summary.activeOrders, icon: CalendarCheck },
+    { label: 'Servicios completados', value: summary.completedOrders, icon: CheckCircle2 },
+    { label: 'Total en servicios', value: money(summary.totalSpent), icon: Wallet },
+  ];
+
+  if (summary.laundryOrders > 0) {
+    metrics.push({ label: 'Pedidos de lavandería', value: summary.laundryOrders, icon: Shirt });
+  }
 
   return (
-    <Card
-      data-service={experience.code}
-      className={cx(
-        'flex flex-col gap-4 p-5 transition-shadow hover:shadow-[var(--shadow-raised)]',
-        !experience.bookable && 'opacity-95',
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span className="flex size-11 items-center justify-center rounded-xl bg-service-soft text-service-strong">
-          <Icon className="size-5" aria-hidden="true" />
-        </span>
-        {!experience.bookable && (
-          <span className="rounded-full bg-surface-sunken px-2.5 py-1 text-[11px] font-medium text-text-muted">
-            {experience.implemented ? 'No disponible ahora' : 'Muy pronto'}
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+      {metrics.map(({ label, value, icon: Icon }) => (
+        <Card key={label} className="flex items-center gap-3.5 p-4">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
+            <Icon className="size-5" aria-hidden="true" />
           </span>
-        )}
+          <div className="min-w-0">
+            <p className="text-xl font-extrabold tracking-tight text-text tnum">{value}</p>
+            <p className="text-xs text-text-muted">{label}</p>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/** El servicio que está en marcha, con su progreso. Es la pieza principal. */
+function LiveServiceCard({ detail }) {
+  return (
+    <Card className="overflow-hidden" data-service={detail.order.serviceType}>
+      <div className="border-b border-border bg-forest-800 px-5 py-4 text-text-inverse sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-lg font-bold tracking-tight">{detail.order.planName}</p>
+            <p className="text-sm text-forest-200">
+              {formatLongDate(detail.order.scheduledDate)} ·{' '}
+              {formatTimeWindow(
+                detail.order.scheduledWindowStart,
+                detail.order.scheduledWindowEnd,
+              )}
+            </p>
+          </div>
+          <StatusBadge status={detail.order.status} label={detail.statusLabel} />
+        </div>
       </div>
 
-      <div className="min-w-0 flex-1">
-        <h3 className="font-bold tracking-tight text-text">{experience.label}</h3>
-        <p className="mt-1 text-sm text-text-muted">{experience.description}</p>
-      </div>
+      <div className="grid gap-6 p-5 sm:p-6 md:grid-cols-[1fr_240px]">
+        <StatusTimeline steps={detail.timeline} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <ButtonLink as={Link} to={experience.path} variant="outline" size="sm">
-          Ver {experience.label.toLowerCase()}
-        </ButtonLink>
-        {experience.bookingPath && (
-          <ButtonLink as={Link} to={experience.bookingPath} variant="accent" size="sm">
-            Reservar
+        <div className="space-y-4 md:border-l md:border-border md:pl-6">
+          {detail.assignedStaff?.[0] ? (
+            <div>
+              <Eyebrow className="mb-2 block">Quién lo atiende</Eyebrow>
+              <div className="flex items-center gap-3">
+                <span className="flex size-11 items-center justify-center rounded-full bg-forest-50 font-semibold text-forest-700">
+                  {detail.assignedStaff[0].displayName?.[0]}
+                </span>
+                <div>
+                  <p className="font-medium text-text">{detail.assignedStaff[0].displayName}</p>
+                  {detail.assignedStaff[0].isVerified && (
+                    <p className="text-xs text-success">Profesional verificado</p>
+                  )}
+                </div>
+              </div>
+              {detail.assignedStaff[0].bio && (
+                <p className="mt-3 text-sm text-text-muted">{detail.assignedStaff[0].bio}</p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-surface-sunken p-4">
+              <p className="text-sm font-medium text-text">Asignando profesional</p>
+              <p className="mt-1 text-sm text-text-muted">
+                Te avisamos en cuanto tengamos a alguien confirmado para tu servicio.
+              </p>
+            </div>
+          )}
+
+          <ButtonLink
+            as={Link}
+            to={`/servicios/${detail.order.id}`}
+            variant="outline"
+            size="sm"
+            className="w-full"
+          >
+            Ver todos los detalles
           </ButtonLink>
-        )}
+        </div>
       </div>
     </Card>
   );

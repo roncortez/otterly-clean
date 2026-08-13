@@ -8,7 +8,8 @@
     "apps/web"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
+    "dev": "npm run db:migrate && npm run dev:services",
+    "dev:services": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm run dev --workspace @otterly-clean/api",
     "dev:web": "npm run dev --workspace @otterly-clean/web",
     "build": "npm run build --workspace @otterly-clean/web",

@@ -149,6 +149,15 @@ const petSchema = z.object({
 const propertyAccessFields = {
   // Se cifra antes de guardarse. Ver services/crypto.js
   accessCode: z.string().trim().max(200).optional().nullable(),
+  /**
+   * Instrucciones fijas del lugar ("el timbre no funciona, llamar al llegar").
+   *
+   * Se llama igual que en el detalle de la reserva a proposito: es el mismo dato
+   * y tener dos nombres para el es lo que hacia que el que escribia el cliente
+   * al reservar se perdiera. La columna sigue siendo `properties.notes`; `notes`
+   * se acepta como alias heredado por los clientes que aun lo envian.
+   */
+  specialInstructions: z.string().trim().max(1000).optional().nullable(),
   notes: z.string().trim().max(1000).optional().nullable(),
   accessMethod: z
     .enum(['CUSTOMER_OPENS', 'KEY', 'DOOR_CODE', 'CONCIERGE', 'LOCKBOX', 'OTHER'])

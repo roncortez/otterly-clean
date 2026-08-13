@@ -35,7 +35,11 @@ const PROPERTY_COLUMN_MAP = {
   areaValue: 'area_value',
   areaUnit: 'area_unit',
   accessCode: 'access_code',
+  // Los dos escriben la misma columna. `specialInstructions` es el nombre
+  // canonico (el mismo que usa el detalle de la reserva) y va despues para que
+  // gane si por lo que sea llegasen los dos.
   notes: 'notes',
+  specialInstructions: 'notes',
   accessMethod: 'access_method',
   accessInstructions: 'access_instructions',
   parkingInstructions: 'parking_instructions',
@@ -68,6 +72,9 @@ function projectProperty(prop) {
     accessCode: null,
     hasAccessCode: prop.access_code ? true : false,
     notes: prop.notes,
+    // Mismo dato con el nombre que usa el detalle de la reserva. Ver el mapa de
+    // columnas de arriba.
+    specialInstructions: prop.notes,
     accessMethod: prop.access_method,
     accessInstructions: prop.access_instructions,
     parkingInstructions: prop.parking_instructions,
@@ -111,6 +118,10 @@ async function createProperty(user, data) {
       {
         ...data,
         addressId,
+        // `specialInstructions` es el nombre canonico y `notes` el heredado; los
+        // dos escriben la misma columna. Se resuelve aqui para que el
+        // repositorio reciba un solo campo y no tenga que saber del alias.
+        notes: data.specialInstructions ?? data.notes ?? null,
         accessCode: data.accessCode ? encrypt(data.accessCode) : null,
         isDefault: isFirst || (data.isDefault ?? false),
       },

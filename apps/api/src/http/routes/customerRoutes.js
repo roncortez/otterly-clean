@@ -6,6 +6,7 @@ const addressService = require('../../services/addressService');
 const notifications = require('../../notifications');
 const incidentService = require('../../services/incidentService');
 const laundryBagService = require('../../services/laundryBagService');
+const statsService = require('../../services/statsService');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { validate, asyncHandler } = require('../middleware/validate');
 const { ROLES } = require('../../domain/shared/roles');
@@ -158,6 +159,21 @@ router.get(
   validate({ query: schemas.orderQuerySchema }),
   asyncHandler(async (req, res) => {
     res.json(await orderService.listForCustomer(req.user.id, req.validatedQuery));
+  }),
+);
+
+/**
+ * GET /api/customer/summary
+ *
+ * Las cifras de la pantalla de inicio. Van en su propia peticion y no dentro
+ * del listado de ordenes porque son un COUNT sobre todo el historial: pedirlas
+ * con el listado obligaria a traerse ese historial entero para contarlo en el
+ * navegador, que es justo lo que no hay que hacer.
+ */
+router.get(
+  '/summary',
+  asyncHandler(async (req, res) => {
+    res.json({ summary: await statsService.getCustomerOverview(req.user.id) });
   }),
 );
 

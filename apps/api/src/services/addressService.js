@@ -129,6 +129,7 @@ async function list(userId, tx = db) {
       property_pets_secured,
       property_pet_instructions,
       property_delicate_items,
+      property_is_default,
       ...address
     }) => ({
       ...address,
@@ -154,6 +155,7 @@ async function list(userId, tx = db) {
             petsSecured: property_pets_secured,
             petInstructions: property_pet_instructions,
             delicateItems: property_delicate_items,
+            isDefault: Boolean(property_is_default),
           }
         : null,
     }),
