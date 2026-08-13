@@ -257,10 +257,28 @@ Reglas de manejo:
   del trabajo.
 - Cada consulta se registra en `audit_log` con la acción
   `ACCESS_SECRET_VIEWED`.
-- El mismo tratamiento se aplica al código guardado en la ficha del hogar
-  (`address_cleaning_profiles.access_secret_encrypted`): se cifra igual, no sale
-  nunca en una respuesta, y al reservar se copia **ya cifrado** al detalle de la
-  orden, sin descifrarlo por el camino.
+- El mismo tratamiento se aplica al código guardado en el lugar de limpieza
+  (`properties.access_code`): se cifra igual, no sale nunca en una respuesta —lo
+  que viaja es `hasAccessCode`, no su valor— y al reservar se copia **ya
+  cifrado** al detalle de la orden, sin descifrarlo por el camino.
+
+### El borrador de reserva no guarda secretos
+
+Rellenar una reserva de limpieza son más de veinte datos, así que el formulario
+se guarda en `localStorage` para que recargar, cambiar de pantalla o tener que
+iniciar sesión a mitad no lo pierda (`shared/booking/draft.js`).
+
+**`accessSecret` se excluye siempre**, a cualquier profundidad del objeto. Es el
+único campo del formulario que abre una puerta: el código, la clave de la alarma
+o dónde está escondida la llave. Escribirlo en claro en el disco del navegador
+—donde cualquier XSS lo leería y donde sobreviviría al cierre de sesión en un
+ordenador compartido— anularía el cifrado del que habla el apartado anterior.
+
+`accessInstructions` sí se conserva. No es lo mismo: es la explicación que lee el
+trabajador ("es la puerta verde, tocar el timbre dos veces"), viaja sin cifrar y
+se muestra en la orden. El sistema ya la trata como texto normal.
+
+El borrador caduca a las 24 horas y se borra al confirmar la reserva.
 
 ### Rotación de `ENCRYPTION_KEY`
 

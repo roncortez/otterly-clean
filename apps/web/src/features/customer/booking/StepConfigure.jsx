@@ -1,4 +1,4 @@
-import { useApiQuery } from '@/shared/api/useApiQuery';
+import { useFragrances } from '@/shared/catalog/options';
 import { Field, Input, Select, Textarea, Checkbox, OptionCard, Divider, cx } from '@/shared/ui';
 
 /**
@@ -36,8 +36,7 @@ export default function StepConfigure(props) {
  * desplegable vacío: la fragancia es opcional y la reserva puede seguir.
  */
 function FragranceField({ value, onChange, className }) {
-  const { data, loading } = useApiQuery('/catalog/fragrances');
-  const fragrances = data?.fragrances ?? [];
+  const { fragrances, loading } = useFragrances();
 
   if (loading || fragrances.length === 0) return null;
 

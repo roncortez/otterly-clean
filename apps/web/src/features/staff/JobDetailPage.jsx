@@ -31,6 +31,17 @@ import {
 import { StatusTimeline } from '@/shared/ui/StatusTimeline';
 import { SERVICE_LABELS } from '@/shared/ui/ServiceCard';
 import { formatLongDate, formatTimeWindow } from '@/shared/format';
+import { useFragranceLabel } from '@/shared/catalog/options';
+
+/**
+ * La fragancia llega como codigo del catalogo; el trabajador necesita el nombre
+ * del producto, no el identificador.
+ */
+function FragranceRow({ code }) {
+  const label = useFragranceLabel(code);
+  if (!label) return null;
+  return <DataRow label="Fragancia">{label}</DataRow>;
+}
 
 /**
  * Detalle del trabajo.
@@ -291,9 +302,7 @@ export default function JobDetailPage() {
             <DataRow label="Productos">
               {details.supplies_provided_by === 'COMPANY' ? 'Los llevas tú' : 'Los pone el cliente'}
             </DataRow>
-            {details.fragrance_preference && (
-              <DataRow label="Fragancia">{details.fragrance_preference}</DataRow>
-            )}
+            <FragranceRow code={details.fragrance_preference} />
             <DataRow label="Cliente en casa">{details.customer_present ? 'Sí' : 'No'}</DataRow>
             {details.access_instructions && (
               <DataRow label="Cómo entrar">{details.access_instructions}</DataRow>
@@ -335,6 +344,7 @@ export default function JobDetailPage() {
           <dl className="divide-y divide-border px-4 pb-2">
             <DataRow label="Temperatura">{details.wash_temperature}</DataRow>
             <DataRow label="Detergente">{details.detergent_preference}</DataRow>
+            <FragranceRow code={details.fragrance_code} />
             <DataRow label="Suavizante">{details.use_fabric_softener ? 'Sí' : 'No'}</DataRow>
             <DataRow label="Cloro">{details.use_bleach ? 'Permitido' : 'No usar'}</DataRow>
             <DataRow label="Separar colores">{details.separate_colors ? 'Sí' : 'No'}</DataRow>

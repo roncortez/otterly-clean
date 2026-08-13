@@ -22,6 +22,18 @@ import { MAX_VISIBLE_STEPS } from '@/shared/ui/timelineWindow';
 import { SERVICE_LABELS } from '@/shared/ui/ServiceCard';
 import WhatsAppButton from '@/shared/ui/WhatsAppButton';
 import { counted, formatLongDate, formatTimeWindow } from '@/shared/format';
+import { useFragranceLabel } from '@/shared/catalog/options';
+
+/**
+ * La fragancia se guarda por codigo (`LAVENDER`), no por su etiqueta, para que
+ * renombrarla no reescriba ordenes pasadas. Aqui se traduce; si el catalogo ya
+ * no la conoce se muestra el codigo, que es feo pero no pierde el dato.
+ */
+function FragranceRow({ code }) {
+  const label = useFragranceLabel(code);
+  if (!label) return null;
+  return <DataRow label="Fragancia">{label}</DataRow>;
+}
 
 /**
  * Detalle del servicio para el cliente.
@@ -353,9 +365,7 @@ function ServiceDetails({ serviceType, details }) {
           <DataRow label="Productos">
             {details.supplies_provided_by === 'COMPANY' ? 'Los llevamos nosotros' : 'Los tuyos'}
           </DataRow>
-          {details.fragrance_preference && (
-            <DataRow label="Fragancia">{details.fragrance_preference}</DataRow>
-          )}
+          <FragranceRow code={details.fragrance_preference} />
           <DataRow label="Estarás en casa">{details.customer_present ? 'Sí' : 'No'}</DataRow>
           <DataRow label="Acceso">{ACCESS_LABELS[details.access_method]}</DataRow>
           {details.hasAccessSecret && (
@@ -414,6 +424,7 @@ function ServiceDetails({ serviceType, details }) {
         )}
         <DataRow label="Lavado">{TEMPERATURE[details.wash_temperature]}</DataRow>
         <DataRow label="Detergente">{DETERGENT[details.detergent_preference]}</DataRow>
+        <FragranceRow code={details.fragrance_code} />
         <DataRow label="Suavizante">{details.use_fabric_softener ? 'Sí' : 'No'}</DataRow>
         <DataRow label="Separar colores">{details.separate_colors ? 'Sí' : 'No'}</DataRow>
         <DataRow label="Secado">{DRYING[details.drying_preference]}</DataRow>

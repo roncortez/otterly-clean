@@ -21,21 +21,20 @@ su tabla de detalle. Lo que Operaciones administra desde la aplicación es su
 capa comercial —si se ofrecen, cómo se presentan y a qué precio—, no cómo
 funcionan. Ver [Configuración administrable](docs/ARCHITECTURE.md#configuración-administrable).
 
-Para el cliente cada uno es una **experiencia propia**, con su navegación y su
-color, dentro de la misma aplicación y la misma sesión:
+El cliente los pide desde un solo sitio —el botón **¿Qué necesitas?**, que abre
+el selector— y la navegación se queda con lo que se usa a diario:
 
 ```text
-/inicio        elegir servicio y ver qué está pasando ahora
-/limpieza      resumen · reservar · mis reservas · mi hogar
-/lavanderia    resumen · pedir recogida · mis pedidos
-/arreglos      presentación (sin reserva todavía: el dominio aún no la crea)
+/inicio        tus cifras y el servicio que está en marcha
 /servicios     todas las reservas, de todos los servicios
-/direcciones   las direcciones, compartidas por todos
+/productos     catálogo de insumos de limpieza
+/reservar      el asistente (no exige cuenta hasta confirmar)
+/mi-perfil     datos personales · direcciones · lugares para limpieza
 ```
 
-No son tres aplicaciones: comparten sesión, cliente HTTP, direcciones,
-componentes y asistente de reserva. Ver
-[Tres experiencias, una aplicación](docs/ARCHITECTURE.md#tres-experiencias-una-aplicación).
+Direcciones y Lugares viven en el perfil porque son configuración de la cuenta:
+se tocan una vez y se olvidan. Ver
+[Lo de cada día arriba, la configuración en el perfil](docs/ARCHITECTURE.md#lo-de-cada-día-arriba-la-configuración-en-el-perfil).
 
 ## Stack
 
@@ -69,10 +68,15 @@ createdb otterly_clean          # o: psql -U postgres -c "CREATE DATABASE otterl
 npm run db:migrate
 npm run db:seed
 
-# 6. Arrancar (en dos terminales)
-npm run dev:api                 # http://localhost:10000
-npm run dev:web                 # http://localhost:5173
+# 6. Arrancar backend y frontend
+npm run dev                     # http://localhost:10000 y http://localhost:5173
 ```
+
+`npm run dev` comprueba y aplica las migraciones pendientes **antes** de levantar
+nada. Si alguna falla no arranca: una aplicación contra un esquema a medias da
+errores de columna inexistente en pantallas al azar, que cuestan mucho más de
+diagnosticar. No siembra datos ni recrea la base; para eso están `db:seed` y
+`db:reset`, que siguen siendo explícitos.
 
 ### Imágenes (opcional)
 
@@ -138,8 +142,9 @@ para probar ese caso: la misma sesión abre las dos consolas.
 ## Comandos
 
 ```bash
-npm run dev:api        # API con recarga automática
-npm run dev:web        # frontend
+npm run dev            # migra lo pendiente y levanta API + frontend
+npm run dev:api        # solo la API, con recarga automática (no migra)
+npm run dev:web        # solo el frontend
 npm run build          # build de producción del frontend
 npm run lint           # lint de ambos paquetes
 npm test               # pruebas de ambos paquetes
@@ -214,12 +219,18 @@ de Quito. El backend valida contra las zonas de cobertura antes de aceptar una
 reserva. Esa misma coordenada es la que ve el trabajador para llegar: no se
 vuelve a buscar el texto en ningún mapa.
 
-**Espacios**: una dirección más lo que hay que saber para limpiarla —cuántas
+**Lugares**: una dirección más lo que hay que saber para limpiarla —cuántas
 habitaciones, cuántos baños, cómo se entra, si hay mascotas—. Se describe una vez
-en `/limpieza/espacios`, con el nombre que le dé el cliente ("Mi departamento",
-"Casa de mis padres"), y **al reservar solo se elige**: la reserva pregunta lo que
-cambia ese día, no lo que ya sabemos del lugar. Las direcciones siguen siendo de
-la cuenta, porque lavandería usa las mismas.
+en `/mi-perfil/lugares`, con el nombre que le dé el cliente ("Mi departamento",
+"Casa de mis padres"), y **al reservar solo se elige**: el predeterminado viene
+preseleccionado y la reserva pregunta lo que cambia ese día, no lo que ya sabemos
+del lugar. Las direcciones siguen siendo de la cuenta, porque lavandería usa las
+mismas.
+
+**Reservar sin cuenta**: un visitante de la portada elige servicio y rellena la
+reserva entera; la sesión se pide justo antes de confirmar, y lo escrito no se
+pierde porque se guarda un borrador. Los códigos de acceso nunca entran en ese
+borrador: ver [SECURITY.md](docs/SECURITY.md).
 
 **Privacidad del trabajador y del cliente**: recibir una asignación no es
 aceptarla. El teléfono del cliente y el código de acceso al domicilio aparecen

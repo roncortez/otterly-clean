@@ -506,49 +506,71 @@ corrigió a mano.
 No se añadieron columnas de número, edificio o departamento: `street_line1` y
 `street_line2` ya lo cubren, y duplicarlas obligaría a decidir cuál manda.
 
-### Un espacio es una dirección con su ficha de limpieza
+### Un lugar es una dirección más lo que hay que saber para limpiarla
 
-Existía una tabla `properties` con su propia calle, ciudad y provincia, editable
-desde una pantalla "Inmuebles". No la miraba ninguna reserva: el cliente escribía
-la misma casa dos veces y el trabajador no veía ninguno de esos datos. Dos
-modelos de dirección en paralelo, uno de ellos inútil.
+`properties` tenía su propia calle, ciudad y provincia, editable desde una
+pantalla "Inmuebles". No la miraba ninguna reserva: el cliente escribía la misma
+casa dos veces y el trabajador no veía ninguno de esos datos. Dos modelos de
+dirección en paralelo, uno de ellos inútil.
 
-Lo que sí aportaba —cuántas habitaciones, cuántos baños, cómo se entra, si hay
-mascotas— describe **el lugar** y solo lo usa limpieza. Vive en
-`address_cleaning_profiles`, que cuelga de la dirección igual que
-`cleaning_details` cuelga de la orden:
+La corrección no fue borrar la tabla sino quitarle lo que no era suyo. La
+dirección (calle, coordenadas, cobertura) se queda en `addresses` y el lugar la
+referencia por `address_id`; el lugar conserva lo que sí describe **qué
+limpiamos ahí**: nombre, tipo, habitaciones, baños, tamaño, cómo se entra, si hay
+mascotas.
 
 ```
-addresses ──┬── address_cleaning_profiles   (la ficha: qué limpiamos ahí)
-            └── orders                      (cada reserva, con su propio detalle)
+addresses ──┬── properties   (el lugar: qué limpiamos ahí, con nombre propio)
+            └── orders       (cada reserva, con su propio detalle)
 ```
 
-De cara al cliente esas dos mitades juntas son **un espacio**, y así se llaman en
-la interfaz (`/limpieza/espacios`). La dirección responde *dónde*; la ficha, *qué
-limpiamos ahí*. El nombre del espacio es el `label` de la dirección —el mismo que
-elige quien la guarda— y no hay un segundo nombre en paralelo.
+> **Por qué el lugar es una entidad y no una ficha 1:1 con la dirección.** La
+> rama `feat/maplibre-geoapify` resolvió el mismo problema al revés: una tabla
+> `address_cleaning_profiles` con `address_id` como clave primaria. Es más
+> simple, pero no puede representar dos cosas que el producto necesita: que un
+> lugar tenga **nombre propio** distinto de la etiqueta de la dirección, y que
+> uno de ellos sea **el predeterminado** con independencia de cuál sea la
+> dirección predeterminada —alguien recibe la ropa en la oficina y quiere que la
+> limpieza empiece siempre en su casa—. La integración conserva `properties`; ver
+> la nota en la migración 011 y la reconciliación en la 005 y la 015.
 
 Cuatro consecuencias que son el motivo del cambio:
 
 - **La dirección es lo único que comparten los servicios.** Lavandería usa la
   misma sin arrastrar datos que no le importan, y un servicio futuro también.
-- **No hay formulario duplicado.** El mismo componente
-  (`cleaning/HomeProfileForm`) se usa en "Mis espacios" y dentro del asistente de
-  reserva, y los dos guardan en `PATCH /customer/addresses/:id/cleaning-profile`.
+- **No hay formulario duplicado.** El mismo componente (`PropertyForm`) se usa en
+  Perfil → Lugares y dentro del asistente de reserva (`StepPlace`), y los dos
+  guardan en `POST`/`PATCH /customer/properties`.
 - **Reservar no vuelve a preguntar lo del lugar.** El detalle de la orden se
-  resuelve en el backend con `homeProfile.resolveHomeFields`: lo que la petición
-  dice manda, y lo que no dice sale de la ficha. Antes se rellenaba con ceros
+  resuelve en el backend con `placeProfile.resolvePlaceFields`: lo que la petición
+  dice manda, y lo que no dice sale del lugar. Antes se rellenaba con ceros
   cuando la petición no lo mencionaba, así que "no repetir datos" dependía de que
   el navegador se acordara de reenviarlos todos —es decir, de volver a
   preguntarlos para tener algo que enviar—.
 - **La orden sigue guardando su propia foto.** `cleaning_details` no referencia
-  la ficha: si el cliente cambia mañana los datos de su espacio, lo que se acordó
-  en una reserva pasada no se reescribe.
+  el lugar: si el cliente cambia mañana sus datos, lo que se acordó en una
+  reserva pasada no se reescribe. `orders.property_id` es solo trazabilidad y
+  admite quedarse a null si el lugar se borra.
+
+#### Exactamente un predeterminado
+
+Vale igual para direcciones y para lugares, y se hace cumplir en el backend
+porque de otro modo "la dirección del cliente" dependería del `ORDER BY`:
+
+| Regla                | Quién la garantiza                                          |
+| -------------------- | ----------------------------------------------------------- |
+| como mucho uno       | índice único parcial (migración 012)                        |
+| al menos uno         | el servicio: crear el primero lo marca, borrar el marcado asciende a otro |
+| desmarcar            | se rechaza (`DEFAULT_ADDRESS_REQUIRED` / `DEFAULT_PLACE_REQUIRED`); se cambia marcando otro |
+
+Un CHECK no puede expresar "existe al menos una fila del mismo usuario", así que
+esa mitad vive en `addressService` y `propertyService`, con sus pruebas en
+`tests/addresses.e2e.test.js`.
 
 #### Qué es del lugar y qué es de la visita
 
-La frontera se declara una sola vez, en `domain/cleaning/homeProfile.js`, y de
-ahí la leen los tres sitios que la necesitan: la ficha, la creación de la orden y
+La frontera se declara una sola vez, en `domain/cleaning/placeProfile.js`, y de
+ahí la leen los tres sitios que la necesitan: el lugar, la creación de la orden y
 la validación (`http/schemas.js`). Una prueba comprueba que los tres conjuntos
 siguen coincidiendo, así que un campo nuevo no puede quedarse a medio clasificar.
 
@@ -701,8 +723,8 @@ distintas.
 Enrutado **por audiencia**, no por entidad:
 
 ```
-/inicio, /limpieza/*, /lavanderia/*, /arreglos,
-/servicios, /direcciones                        → CUSTOMER
+/inicio, /servicios, /mi-perfil/*                → CUSTOMER
+/reservar, /productos                           → público (ver abajo)
 /operaciones/*                                  → ADMIN
 /trabajo/*                                      → STAFF
 ```
@@ -713,83 +735,80 @@ cada consola ofrece un enlace a la otra solo si la persona tiene el rol. El
 backend revalida todo: el enrutado solo evita mostrar pantallas que no
 corresponden.
 
-### Cuatro contextos, una aplicación
+### Lo de cada día arriba, la configuración en el perfil
 
-Para el cliente, limpieza, lavandería y arreglo de prendas son servicios
-distintos: se contratan por motivos distintos y se preguntan cosas distintas. En
-la primera versión compartían una sola pantalla con todo mezclado, y el
-resultado era que nada parecía diseñado para lo que la persona venía a hacer.
+La barra del cliente tiene tres opciones —Inicio, Servicios, Productos— y un
+botón: **¿Qué necesitas?**. Direcciones y Lugares estaban ahí y se han movido a
+Perfil.
 
-Ahora cada uno tiene su rama de rutas, su navegación y su acento de color. Lo
-que **no** se duplicó: la sesión, el cliente HTTP, las direcciones, el detalle
-de pedido, el historial global ni los componentes. No hay tres aplicaciones,
-tres backends ni tres sistemas de sesión; hay un contexto de servicio.
+El motivo es qué se hace con cada cosa. Una dirección se guarda una vez y se
+olvida; el historial se mira cada semana. Con cuatro huecos en la barra inferior
+de móvil, dos los ocupaban pantallas de configuración. En Perfil, además, pueden
+ordenarse de forma que la relación entre ellas se lea sola:
 
-Ese contexto es una tabla, `shared/services/index.js`:
+```
+Datos personales  →  quién eres
+Direcciones       →  dónde estás
+Lugares           →  qué limpiamos en esa dirección
+```
+
+Primero existe una dirección; después se puede describir el lugar que hay en
+ella. Antes eran dos entradas paralelas en el menú principal y nada indicaba que
+una depende de la otra.
+
+#### Un solo selector de servicio
+
+`shared/services/index.js` declara qué puede pedir el cliente y por dónde entra:
 
 ```js
-{ code: 'LAUNDRY', slug: 'lavanderia', path: '/lavanderia', label: 'Lavandería',
-  icon: Shirt, nav: [ … ] }
+{ code: 'LAUNDRY', serviceType: 'LAUNDRY', slug: 'lavanderia',
+  label: 'Lavandería', icon: Shirt, path: '/reservar?servicio=LAUNDRY' }
 ```
 
-De ahí salen la navegación (escritorio y móvil), el conmutador de servicio, los
-enlaces de la portada y el color. Añadir una pantalla a un servicio es añadir
-una fila; **ninguna pantalla escribe su propia lista de enlaces**.
+De ahí salen la portada, el botón de la cabecera y el modal
+(`shared/services/ServicePicker`). Antes cada uno llevaba su propia lista escrita
+a mano, y así es como "Kits" acabó navegando al asistente de reserva de otro
+servicio.
 
-Junto a los tres servicios hay un cuarto contexto: **Mi cuenta**
-(`ACCOUNT_CONTEXT`). "Fuera de un servicio" tiene nombre y navegación propios en
-lugar de ser la ausencia de contexto, y eso es lo que permite dibujar un solo
-sistema de navegación en vez de dos barras que se pisan.
+**PRODUCTS es la excepción y conviene entender por qué.** No es un tipo de
+servicio del dominio ni crea una orden: es un catálogo que se navega. Aparece en
+la tabla porque para el cliente es una opción más del mismo menú, pero lleva
+`serviceType: null`, y eso es lo que impide que el asistente intente tratarlo
+como reservable.
 
-#### La jerarquía del encabezado
+Dos decisiones que lo mantienen simple:
 
-```
-OTTERLY CLEAN                                    ← marca y sesión
-     ↓
-[Mi cuenta] [LIMPIEZA] [Lavandería] [Arreglos]   ← en qué estás (relleno = actual)
-     ↓
-Resumen · Reservar · Mis reservas · Mis espacios  ← qué se puede hacer ahí
-```
-
-El orden es el arreglo: antes la navegación del servicio iba arriba y el
-conmutador debajo, así que lo que representaba el contexto entero parecía un menú
-secundario colgado de sus propias opciones. Ahora el contexto va primero, lleva su
-acento de color relleno, y sus opciones cuelgan de él en una banda con ese mismo
-acento —la única con fondo sólido es la pestaña activa; si las opciones también lo
-tuvieran, volverían a pesar lo mismo—.
-
-En móvil son los mismos tres niveles repartidos para no apilar barras: marca y
-sesión arriba, el conmutador justo debajo (desplazable), y las opciones del
-contexto en la barra inferior, donde llega el pulgar. La banda de escritorio no se
-repite ahí.
-
-**Cuenta o servicio, nunca las dos cosas.** Ninguna opción aparece en dos
-niveles: Direcciones y el historial completo son de la cuenta —una dirección sirve
-para limpiar, para recoger ropa y para lo que venga—; Mis espacios es de limpieza,
-porque solo limpieza necesita saber cuántos baños tiene un lugar. Un contexto con
-una sola pantalla (Arreglos) no dibuja banda: la pantalla ya se titula.
-
-Tres decisiones que lo mantienen simple:
-
-- **Los tipos siguen siendo tres, fijos y conocidos.** La tabla les da nombre y
-  ruta, no los inventa: sigue mandando `domain/shared/serviceTypes.js`.
+- **Los tipos siguen siendo los del dominio.** La tabla les da nombre y ruta, no
+  los inventa: sigue mandando `domain/shared/serviceTypes.js`.
 - **Quién decide si se puede reservar es el backend.** `useServiceExperiences`
   cruza la tabla con `GET /api/catalog/config` (`implemented` + `active` →
-  `bookable`) y solo entonces aparece un botón de reservar. Arreglo de prendas
-  tiene su pantalla y su color, pero no ofrece una reserva que el dominio no
-  sabe crear.
-- **El asistente de reserva es uno.** `BookingWizard` recibe el servicio de la
-  ruta (`serviceType`) y oculta el paso de elegirlo; el resto del flujo es el
-  mismo código. Lo único que cambia es el segundo paso: limpieza elige un espacio
-  (`StepSpace`) y lavandería una dirección (`StepAddress`), porque lavandería no
-  entra en la casa.
-- **Nadie sale del asistente para volver a entrar.** Si no hay espacio o no hay
-  dirección, se crea ahí mismo con los mismos formularios de siempre
-  (`SpaceSetup` encadena `AddressForm` y `HomeProfileForm`); no hay una segunda
-  implementación del formulario dentro del wizard.
+  `bookable`). Arreglo de prendas se anuncia, pero no ofrece una reserva que el
+  dominio no sabe crear.
 
-Las rutas anteriores (`/reservar`, `/reservar?servicio=…`, `/inmuebles`,
-`/limpieza/hogar`) siguen existiendo como redirecciones: no se rompe ningún enlace
+#### Reservar sin cuenta, identificarse antes de confirmar
+
+`/reservar` y `/productos` no exigen sesión. Un visitante de la portada elige
+servicio y rellena la reserva entera; en el último paso, el botón cambia de
+*Confirmar reserva* a *Inicia sesión para reservar*.
+
+No se crea ninguna orden anónima. El backend sigue exigiendo CUSTOMER autenticado
+en `POST /customer/orders/*`: lo que se abre es el formulario, no la API.
+
+Lo escrito no se pierde porque se guarda un **borrador**
+(`shared/booking/draft.js`): `localStorage`, con caducidad de un día y un aviso
+—no una restauración silenciosa— al volver, con la opción de descartarlo. Cubre
+los dos casos: el visitante que va a identificarse y el cliente que recarga,
+navega a otra pantalla o vuelve al día siguiente.
+
+**Lo que el borrador nunca guarda es el código de acceso.** El código de la
+puerta, la clave de la alarma o dónde está la llave se cifran en el servidor y no
+vuelven jamás en una respuesta (ver `docs/SECURITY.md`); escribirlos en claro en
+`localStorage` solo para no repreguntarlos tiraría por tierra esa garantía
+entera. El precio es que quien retoma una reserva vuelve a escribir ese dato, y
+es el precio correcto: es el único campo del formulario que abre una puerta.
+
+Las rutas anteriores (`/direcciones`, `/inmuebles`, `/limpieza/*`,
+`/lavanderia/*`) siguen existiendo como redirecciones: no se rompe ningún enlace
 guardado.
 
 ### El seguimiento muestra cinco estados
