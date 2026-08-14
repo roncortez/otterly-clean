@@ -12,7 +12,6 @@ export default function StepSummary({
   booking,
   service,
   addresses,
-  propertyDraft,
   pricing,
   money,
   timeWindows,
@@ -23,7 +22,15 @@ export default function StepSummary({
   const plan = service?.plans.find((entry) => entry.id === booking.planId);
   const address = addresses.find((entry) => entry.id === booking.addressId);
   const window = timeWindows.find((entry) => entry.code === booking.windowCode);
-  const propertyName = address?.property?.name ?? propertyDraft?.name;
+
+  /*
+    La línea base del motor de precios ("3 h de servicio", "8 kg") no se
+    enseña: repite palabra por palabra lo que ya dicen Servicio y Duración, y
+    cuando no hay adicionales su importe es exactamente el subtotal que viene
+    dos filas más abajo. Los adicionales sí se listan, porque son lo único que
+    explica por qué el total no coincide con el precio del plan.
+  */
+  const extraLines = pricing?.lines.filter((line) => line.code !== 'BASE') ?? [];
 
   return (
     <div className="space-y-6">
@@ -59,11 +66,6 @@ export default function StepSummary({
         />
         {booking.serviceType === 'CLEANING' && (
           <>
-            <Row label="Lugar" value={propertyName} />
-            <Row
-              label="Espacio"
-              value={`${booking.cleaning.bedrooms} hab · ${booking.cleaning.bathrooms} baños`}
-            />
             <Row label="Duración" value={`${booking.durationMinutes / 60} horas`} />
             <Row
               label="Estarás en casa"
@@ -97,7 +99,7 @@ export default function StepSummary({
       ) : (
         <div className="rounded-xl bg-surface-sunken p-5">
           <dl className="space-y-2">
-            {pricing.lines.map((line, index) => (
+            {extraLines.map((line, index) => (
               <div key={`${line.code}-${index}`} className="flex justify-between gap-4 text-sm">
                 <dt className="text-text-muted">{line.label}</dt>
                 <dd className="font-medium text-text tnum">{money(line.amount)}</dd>

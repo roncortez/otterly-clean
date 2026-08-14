@@ -6,7 +6,7 @@ import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useAuth } from '@/shared/auth/AuthContext';
 import { useConfig } from '@/shared/config/ConfigContext';
 import ServicePicker from '@/shared/services/ServicePicker';
-import { clearDraft, loadDraft, saveDraft } from '@/shared/booking/draft';
+import { clearDraft, hasProgress, loadDraft, saveDraft } from '@/shared/booking/draft';
 import { Alert, Button, Card, Modal, Spinner, cx } from '@/shared/ui';
 import { toDateInput, addDays, formatRelative } from '@/shared/format';
 
@@ -87,6 +87,27 @@ const INITIAL_KITS = {
   specialInstructions: '',
 };
 
+/**
+ * Rehidrata un borrador sobre una reserva nueva.
+ *
+ * La mezcla tiene que entrar en `cleaning`, `laundry` y `kits`, no quedarse en
+ * el primer nivel: un borrador guardado ayer no conoce los campos que se
+ * añadieron hoy, y sustituir el objeto entero dejaba la reserva sin ellos
+ * —`priorityAreas` sin array, `pets` sin lista— hasta reventar al pintar el
+ * paso. Lo guardado manda sobre el valor inicial; lo que no guardó, lo pone el
+ * inicial.
+ */
+function restoreBooking(saved) {
+  const base = emptyBooking(saved.serviceType);
+  const merged = { ...base, ...saved };
+
+  for (const key of ['cleaning', 'laundry', 'kits']) {
+    merged[key] = { ...base[key], ...(saved[key] ?? {}) };
+  }
+
+  return merged;
+}
+
 function emptyBooking(serviceType) {
   return {
     serviceType,
@@ -110,7 +131,6 @@ export default function BookingWizard() {
   const { money, timeWindows, weightUnit, areaUnit } = useConfig();
   const { isAuthenticated } = useAuth();
 
-  const [stepIndex, setStepIndex] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pricing, setPricing] = useState(null);
   const onNextHandlerRef = useRef(null);
@@ -145,38 +165,56 @@ export default function BookingWizard() {
     return upper && KNOWN_SERVICE_TYPES.includes(upper) ? upper : null;
   }, [searchParams]);
 
-  // Se lee una sola vez, al montar: si se releyera en cada render, guardar el
-  // borrador provocaría recargarlo y el formulario se pelearía consigo mismo.
-  const [savedDraft] = useState(() => loadDraft());
-
-  const [booking, setBooking] = useState(() => {
+  /**
+   * El borrador recuperado, si lo hay y si sirve para lo que se ha venido a
+   * hacer.
+   *
+   * Se lee una sola vez, al montar: si se releyera en cada render, guardar el
+   * borrador provocaría recargarlo y el formulario se pelearía consigo mismo.
+   *
+   * «Sirve» es dos cosas. Que no contradiga el servicio pedido por la URL
+   * —pulsar Lavandería no puede devolver una limpieza a medias— y que tenga
+   * algo dentro: un borrador que no se distingue de una reserva recién
+   * empezada no es progreso, y anunciarlo era lo que hacía salir el aviso cada
+   * vez que alguien empezaba a reservar.
+   */
+  const [savedDraft] = useState(() => {
     const draft = loadDraft();
-    // Solo se restaura solo cuando no contradice lo que se acaba de pedir. Si
-    // hay conflicto se pregunta (ver el aviso de más abajo).
-    if (draft && (!requestedService || draft.booking.serviceType === requestedService)) {
-      return { ...emptyBooking(draft.booking.serviceType), ...draft.booking };
+    if (!draft) return null;
+    if (requestedService && draft.booking.serviceType !== requestedService) return null;
+    if (!hasProgress(draft.booking, emptyBooking(draft.booking.serviceType))) {
+      clearDraft();
+      return null;
     }
-    return emptyBooking(requestedService);
+    return draft;
   });
+
+  const [booking, setBooking] = useState(() =>
+    savedDraft ? restoreBooking(savedDraft.booking) : emptyBooking(requestedService),
+  );
+
+  // Retomar de verdad es volver al paso en que se quedó, no al primero.
+  const [stepIndex, setStepIndex] = useState(() => savedDraft?.stepIndex ?? 0);
 
   // Abierto de entrada: llegar a /reservar sin servicio es justamente venir a
   // elegirlo.
   const [showServiceModal, setShowServiceModal] = useState(true);
-  const [draftNotice, setDraftNotice] = useState(() => {
-    const draft = loadDraft();
-    return Boolean(draft && (!requestedService || draft.booking.serviceType === requestedService));
-  });
+  const [draftNotice, setDraftNotice] = useState(Boolean(savedDraft));
 
   /**
-   * El borrador se guarda solo, en cuanto hay servicio elegido.
+   * El borrador se guarda solo, en cuanto hay algo que guardar.
    *
    * Cubre los dos casos: el visitante que va a iniciar sesión antes de
    * confirmar, y el cliente que recarga, navega a otra pantalla o vuelve al día
    * siguiente. Los secretos de acceso no entran; de eso se encarga `saveDraft`.
+   *
+   * Una reserva intacta no se guarda. Guardarla no salvaba nada —no hay nada
+   * escrito que perder— y a cambio dejaba en el navegador un borrador que la
+   * siguiente visita tenía que ofrecerse a descartar.
    */
   useEffect(() => {
-    if (booking.serviceType) saveDraft(booking);
-  }, [booking]);
+    if (hasProgress(booking, emptyBooking(booking.serviceType))) saveDraft(booking, stepIndex);
+  }, [booking, stepIndex]);
 
   const update = (patch) => setBooking((current) => ({ ...current, ...patch }));
   const updateDetail = (key, patch) =>
@@ -322,7 +360,7 @@ export default function BookingWizard() {
    * formulario se recompone solo.
    */
   function goToLogin() {
-    saveDraft(booking);
+    saveDraft(booking, stepIndex);
     navigate('/entrar', {
       state: { background: location, redirectTo: `${location.pathname}${location.search}` },
     });

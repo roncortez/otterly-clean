@@ -12,6 +12,9 @@ const { db } = require('../index');
  */
 
 const ACCESS_COLUMNS = [
+  // Mudar el lugar a otra direccion ya guardada. Quien valida que sea del
+  // cliente y que no este ocupada es propertyService, antes de llegar aqui.
+  'address_id',
   'name',
   'property_type',
   'bedrooms',

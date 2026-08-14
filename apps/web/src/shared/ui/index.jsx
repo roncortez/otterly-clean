@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, Star, X } from 'lucide-react';
 
 /**
  * Componentes base.
@@ -420,6 +420,45 @@ export function Checkbox({ label, description, className, ...props }) {
         {description && <span className="block text-xs text-text-muted">{description}</span>}
       </span>
     </label>
+  );
+}
+
+/**
+ * La estrella de «predeterminada».
+ *
+ * Marca cuál es la dirección —o el lugar— que se usa por defecto, y es la misma
+ * pieza en las dos pantallas porque es la misma regla: hay exactamente una, se
+ * cambia marcando otra, y desmarcar no existe (lo impone el backend; ver
+ * `addressService` y `propertyService`).
+ *
+ * La estrella de la predeterminada se pinta y se queda. Antes desaparecía justo
+ * al marcarla —el botón solo se dibujaba en las demás—, así que la única fila
+ * sin estrella era precisamente la que estaba elegida: se leía como que ahí no
+ * había nada marcado. Ahora la elegida es la llena, y sobre ella el botón queda
+ * inerte porque no hay ninguna acción que ofrecer.
+ */
+export function DefaultStar({ isDefault, onSelect, label }) {
+  return (
+    <button
+      type="button"
+      onClick={isDefault ? undefined : onSelect}
+      disabled={isDefault}
+      aria-pressed={isDefault}
+      className={cx(
+        'rounded-full p-2 transition-colors',
+        isDefault
+          ? 'cursor-default text-accent-500'
+          : 'cursor-pointer text-text-subtle hover:bg-surface-sunken hover:text-accent-500',
+      )}
+      aria-label={
+        isDefault
+          ? `${label} es la predeterminada`
+          : `Marcar ${label} como predeterminada`
+      }
+      title={isDefault ? 'Predeterminada' : 'Marcar como predeterminada'}
+    >
+      <Star className={cx('size-4', isDefault && 'fill-current')} aria-hidden="true" />
+    </button>
   );
 }
 

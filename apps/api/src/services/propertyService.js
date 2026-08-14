@@ -50,6 +50,7 @@ const PROPERTY_COLUMN_MAP = {
   petInstructions: 'pet_instructions',
   delicateItems: 'delicate_items',
   isDefault: 'is_default',
+  addressId: 'address_id',
 };
 
 /**
@@ -134,13 +135,33 @@ async function createProperty(user, data) {
 
 /**
  * Actualizacion parcial del lugar propio. Solo se aplican los campos que vienen
- * en el payload (PATCH); la direccion no se cambia aqui, porque el lugar vive en
- * una direccion y eso es fuente de verdad aparte.
+ * en el payload (PATCH).
+ *
+ * Con `addressId` el lugar se muda a otra direccion ya guardada. El texto de la
+ * direccion no se toca desde aqui —sigue siendo fuente de verdad aparte—: lo
+ * unico que cambia es a cual apunta.
  */
 async function updateProperty(user, propertyId, payload) {
   return db.tx(async (tx) => {
     const current = await propertyRepo.findPropertyById(propertyId, user.id, tx);
     if (!current) throw new NotFoundError('Lugar', propertyId);
+
+    // Mudar el lugar. Las dos comprobaciones son las que impiden que un PATCH
+    // acabe en un error de base de datos: la direccion tiene que ser suya, y
+    // solo cabe un lugar por direccion (indice unico, migracion 005).
+    if (payload.addressId !== undefined && payload.addressId !== current.address_id) {
+      const address = await addressRepo.findByIdForUser(payload.addressId, user.id, tx);
+      if (!address) throw new NotFoundError('Direccion', payload.addressId);
+
+      const occupant = await propertyRepo.findByAddress(payload.addressId, user.id, tx);
+      if (occupant && occupant.id !== propertyId) {
+        throw new DomainError(
+          'ADDRESS_ALREADY_HAS_PLACE',
+          `Esa dirección ya tiene un lugar registrado ("${occupant.name}"). Edita ese o elige otra dirección.`,
+          { addressId: payload.addressId, propertyId: occupant.id },
+        );
+      }
+    }
 
     const fields = {};
     for (const [key, column] of Object.entries(PROPERTY_COLUMN_MAP)) {

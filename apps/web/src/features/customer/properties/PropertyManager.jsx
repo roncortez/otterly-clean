@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Trash2, Edit2, MapPin, Building, ShieldCheck } from 'lucide-react';
 import api from '@/shared/api/client';
 import { useApiQuery } from '@/shared/api/useApiQuery';
 import {
   Alert,
   Button,
+  ButtonLink,
   Card,
+  DefaultStar,
   EmptyState,
   Modal,
   PageHeader,
@@ -27,7 +30,16 @@ export default function PropertyManager() {
   const addressesQuery = useApiQuery('/customer/addresses');
 
   const properties = propertiesQuery.data?.properties ?? [];
+  const addresses = addressesQuery.data?.addresses ?? [];
   const loading = propertiesQuery.loading || addressesQuery.loading;
+
+  /*
+    Un lugar vive en una dirección, y solo cabe uno por dirección. Si todas las
+    que tiene están ya ocupadas —o no tiene ninguna—, no hay dónde poner otro
+    lugar, así que en vez de abrir un formulario que no se va a poder guardar se
+    dice lo que falta.
+  */
+  const freeAddresses = addresses.filter((address) => !address.property);
 
   const [isOpen, setIsOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState(null);
@@ -49,25 +61,24 @@ export default function PropertyManager() {
     setIsOpen(true);
   }
 
-  async function handleSave(propertyPayload, addressPayload) {
+  /**
+   * Guardar el lugar.
+   *
+   * La dirección ya no se escribe aquí, se elige: llega su id y el lugar se
+   * ata a ella. Antes esta función editaba de paso el texto de la dirección
+   * (`PATCH /customer/addresses/...`), y eso hacía que corregir el número de
+   * baños de un lugar reescribiese una dirección que se usa también para
+   * lavandería. Cada cosa se edita donde vive.
+   */
+  async function handleSave(propertyPayload, addressId) {
     setSaving(true);
     setError('');
     try {
+      const payload = { ...propertyPayload, addressId };
       if (selectedProperty) {
-        // Edit mode:
-        // 1. PATCH property
-        // 2. PATCH address
-        await Promise.all([
-          api.patch(`/customer/properties/${selectedProperty.id}`, propertyPayload),
-          api.patch(`/customer/addresses/${selectedProperty.addressId}`, addressPayload),
-        ]);
+        await api.patch(`/customer/properties/${selectedProperty.id}`, payload);
       } else {
-        // Create mode:
-        // POST property with embedded address
-        await api.post('/customer/properties', {
-          ...propertyPayload,
-          address: addressPayload,
-        });
+        await api.post('/customer/properties', payload);
       }
       setIsOpen(false);
       loadProperties();
@@ -76,6 +87,23 @@ export default function PropertyManager() {
       setError(err.response?.data?.error?.message || 'Error guardando lugar.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** Alta de dirección desde el formulario de lugar. Misma API que Direcciones. */
+  async function handleCreateAddress(payload) {
+    const res = await api.post('/customer/addresses', payload);
+    await loadAddresses();
+    return res.data.address;
+  }
+
+  async function handleSetDefault(id) {
+    setError('');
+    try {
+      await api.patch(`/customer/properties/${id}`, { isDefault: true });
+      loadProperties();
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'No se pudo cambiar el lugar predeterminado.');
     }
   }
 
@@ -99,10 +127,12 @@ export default function PropertyManager() {
         title="Mis lugares"
         description="Gestiona la configuración física, dirección, mascotas y accesos de tus inmuebles de forma segura."
         action={
-          <Button variant="accent" onClick={openCreateModal}>
-            <Plus className="size-4" aria-hidden="true" />
-            Añadir lugar
-          </Button>
+          freeAddresses.length > 0 && (
+            <Button variant="accent" onClick={openCreateModal}>
+              <Plus className="size-4" aria-hidden="true" />
+              Añadir lugar
+            </Button>
+          )
         }
       />
 
@@ -112,16 +142,41 @@ export default function PropertyManager() {
         </div>
       )}
 
+      {freeAddresses.length === 0 && (
+        <div className="mb-5">
+          <Alert
+            tone="info"
+            title={
+              addresses.length === 0
+                ? 'Primero registra una dirección'
+                : 'Todas tus direcciones ya tienen lugar'
+            }
+          >
+            {addresses.length === 0
+              ? 'Un lugar describe lo que limpiamos —habitaciones, acceso, mascotas— y vive en una dirección tuya. Registra la dirección y vuelve aquí para describir el lugar.'
+              : 'Cada dirección admite un lugar y las tuyas ya lo tienen. Agrega otra dirección si quieres registrar un inmueble más.'}
+            <span className="mt-3 block">
+              <ButtonLink as={Link} to="/mi-perfil/direcciones" size="sm">
+                <MapPin className="size-4" aria-hidden="true" />
+                Ir a Direcciones
+              </ButtonLink>
+            </span>
+          </Alert>
+        </div>
+      )}
+
       {properties.length === 0 ? (
         <EmptyState
           icon={Building}
           title="No tienes lugares registrados"
           description="Agrega uno para dejar configurada tu dirección y detalles de acceso de una sola vez."
           action={
-            <Button variant="accent" onClick={openCreateModal}>
-              <Plus className="size-4" aria-hidden="true" />
-              Añadir lugar
-            </Button>
+            freeAddresses.length > 0 && (
+              <Button variant="accent" onClick={openCreateModal}>
+                <Plus className="size-4" aria-hidden="true" />
+                Añadir lugar
+              </Button>
+            )
           }
         />
       ) : (
@@ -138,6 +193,11 @@ export default function PropertyManager() {
                 >
                   <Edit2 className="size-4" aria-hidden="true" />
                 </button>
+                <DefaultStar
+                  isDefault={prop.isDefault}
+                  onSelect={() => handleSetDefault(prop.id)}
+                  label={prop.name}
+                />
                 <button
                   type="button"
                   onClick={() => handleDelete(prop.id)}
@@ -149,7 +209,14 @@ export default function PropertyManager() {
                 </button>
               </div>
 
-              <h3 className="pr-16 text-sm font-bold tracking-tight text-text">{prop.name}</h3>
+              <h3 className="flex flex-wrap items-center gap-2 pr-24 text-sm font-bold tracking-tight text-text">
+                {prop.name}
+                {prop.isDefault && (
+                  <span className="rounded-full bg-forest-50 px-2 py-0.5 text-[11px] font-medium text-forest-700">
+                    Predeterminado
+                  </span>
+                )}
+              </h3>
               <p className="mt-0.5 text-xs text-text-muted">
                 {TYPE_LABELS[prop.propertyType] ?? prop.propertyType} · {prop.bedrooms} hab. ·{' '}
                 {prop.bathrooms} {prop.bathrooms === 1 ? 'baño' : 'baños'}
@@ -190,9 +257,11 @@ export default function PropertyManager() {
       >
         <PropertyForm
           property={selectedProperty}
+          addresses={addresses}
           submitting={saving}
           error={error}
           onSubmit={handleSave}
+          onCreateAddress={handleCreateAddress}
           onCancel={() => setIsOpen(false)}
         />
       </Modal>

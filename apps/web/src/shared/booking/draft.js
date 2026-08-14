@@ -51,6 +51,41 @@ function isBrowser() {
   return typeof window !== 'undefined' && Boolean(window.localStorage);
 }
 
+/** Igualdad estructural. Los valores del borrador son JSON, nada más. */
+function sameValue(a, b) {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, index) => sameValue(item, b[index]));
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    return [...keys].every((key) => sameValue(a[key], b[key]));
+  }
+  // '' y null son el mismo "no ha escrito nada" en este formulario: los
+  // desplegables devuelven cadena vacía donde el estado inicial pone null.
+  const empty = (value) => value === '' || value === null || value === undefined;
+  return empty(a) && empty(b);
+}
+
+/**
+ * ¿Ha llegado a escribir algo?
+ *
+ * La pregunta importa porque el aviso de "retomamos donde lo dejaste" solo
+ * tiene sentido si hay algo que retomar. Antes se guardaba un borrador en
+ * cuanto se elegía servicio —es decir, siempre—, así que el aviso salía al
+ * empezar cada reserva: prometía un progreso que no existía y obligaba a
+ * descartar algo que nadie había escrito.
+ *
+ * `baseline` es la reserva recién creada para ese servicio. Si lo guardado no
+ * se distingue de ella, no hay progreso, por mucho que exista la entrada en
+ * `localStorage`.
+ */
+export function hasProgress(booking, baseline) {
+  if (!booking?.serviceType) return false;
+  if (!baseline) return true;
+  return !sameValue(redact(booking), redact(baseline));
+}
+
 /** Copia sin los campos sensibles, a cualquier profundidad. */
 function redact(value) {
   if (Array.isArray(value)) return value.map(redact);
@@ -71,13 +106,13 @@ function redact(value) {
  * llegar a la cuota, y que reservar reviente por no poder guardar un borrador
  * sería cambiar una molestia por un error.
  */
-export function saveDraft(booking) {
+export function saveDraft(booking, stepIndex = 0) {
   if (!isBrowser() || !booking?.serviceType) return;
 
   try {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ savedAt: Date.now(), booking: redact(booking) }),
+      JSON.stringify({ savedAt: Date.now(), stepIndex, booking: redact(booking) }),
     );
   } catch {
     // Sin espacio o sin permiso: se sigue sin borrador.
@@ -105,7 +140,13 @@ export function loadDraft() {
       return null;
     }
 
-    return { savedAt: parsed.savedAt, booking: parsed.booking };
+    return {
+      savedAt: parsed.savedAt,
+      // El paso en que se quedó. Sin él, "retomamos donde lo dejaste"
+      // devolvía al principio del asistente, que es justo donde no lo dejó.
+      stepIndex: Number.isInteger(parsed.stepIndex) ? parsed.stepIndex : 0,
+      booking: parsed.booking,
+    };
   } catch {
     clearDraft();
     return null;

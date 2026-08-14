@@ -196,8 +196,17 @@ const propertySchema = z
 
 /**
  * Actualizacion parcial del lugar (PATCH): los mismos campos descriptivos y de
- * acceso, sin `addressId`/`address`. El lugar vive en una direccion y esa
- * pertenencia no se cambia aqui; si hay que moverlo, se crea otro.
+ * acceso, mas la direccion en la que vive.
+ *
+ * `addressId` mueve el lugar a otra direccion ya guardada del cliente. Antes no
+ * se podia y la unica salida era crear otro lugar: quien se mudaba acababa con
+ * dos fichas del mismo hogar y tenia que volver a describir mascotas, acceso y
+ * habitaciones. La direccion sigue siendo fuente de verdad aparte —aqui solo se
+ * cambia a cual apunta, nunca su texto—, y tiene que ser del propio cliente y
+ * no tener ya otro lugar (ver `propertyService`).
+ *
+ * `address` (crear una direccion al vuelo) sigue siendo cosa del alta: en una
+ * edicion, una direccion nueva se guarda por su camino y luego se elige.
  */
 const updatePropertySchema = z
   .object({
@@ -207,6 +216,7 @@ const updatePropertySchema = z
     bathrooms: z.number().int().min(0).max(20).optional(),
     ...propertyAccessFields,
     isDefault: z.boolean().optional(),
+    addressId: id.optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, {

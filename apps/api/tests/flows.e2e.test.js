@@ -186,7 +186,7 @@ describe('Flujo completo de limpieza', () => {
 
   it('cotiza limpieza por hora con IVA de Ecuador', async () => {
     const plans = await request(app).get('/api/catalog/services/CLEANING/plans');
-    const standard = plans.body.plans.find((p) => p.code === 'EC-CLEAN-STANDARD');
+    const standard = plans.body.plans.find((p) => p.code === 'EC-CLN-STANDARD');
     created.cleaningPlanId = standard.id;
 
     const res = await request(app)
@@ -194,17 +194,39 @@ describe('Flujo completo de limpieza', () => {
       .set('Authorization', `Bearer ${auth.customer}`)
       .send({
         planId: standard.id,
-        pricingInput: { durationMinutes: 180 },
+        pricingInput: { durationMinutes: 240 },
         extraCodes: ['CLEAN-OVEN'],
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    // 3 horas x $11.00 = $33.00, mas horno $8.00 = $41.00
-    expect(res.body.pricing.subtotal).toBe(4100);
-    // IVA 15% sobre 41.00 = 6.15
-    expect(res.body.pricing.tax).toBe(615);
-    expect(res.body.pricing.total).toBe(4715);
+    // 4 horas x $11.00 = $44.00, mas horno $8.00 = $52.00
+    expect(res.body.pricing.subtotal).toBe(5200);
+    // IVA 15% sobre 52.00 = 7.80
+    expect(res.body.pricing.tax).toBe(780);
+    expect(res.body.pricing.total).toBe(5980);
     expect(res.body.pricing.currency).toBe('USD');
+  });
+
+  /**
+   * El catalogo ofrece un plan de cada cosa, no dos.
+   *
+   * Convivieron dos familias de planes —la del seed y la de la migracion 008— y
+   * el cliente veia "Limpieza estándar" y "Limpieza Estándar" seguidos, a
+   * precios distintos. La 016 retira los del seed; esto vigila que no vuelvan,
+   * porque el sintoma solo se ve en la pantalla de reservar.
+   */
+  it('no ofrece planes duplicados del catalogo antiguo', async () => {
+    const res = await request(app).get('/api/catalog/services/CLEANING/plans');
+    const codes = res.body.plans.map((plan) => plan.code);
+
+    expect(codes).toContain('EC-CLN-STANDARD');
+    expect(codes).not.toContain('EC-CLEAN-STANDARD');
+    expect(codes).not.toContain('EC-CLEAN-DEEP');
+    expect(codes).not.toContain('EC-CLEAN-MOVE');
+
+    // Y ningun nombre aparece dos veces, se llame como se llame el codigo.
+    const names = res.body.plans.map((plan) => plan.name.toLowerCase());
+    expect(new Set(names).size).toBe(names.length);
   });
 
   it('rechaza una reserva que no respeta la antelacion minima', async () => {
@@ -543,7 +565,7 @@ describe('Flujo completo de limpieza', () => {
 describe('Flujo completo de lavanderia', () => {
   it('el cliente solicita la recogida', async () => {
     const plans = await request(app).get('/api/catalog/services/LAUNDRY/plans');
-    const washFold = plans.body.plans.find((p) => p.code === 'EC-LAUNDRY-WASHFOLD');
+    const washFold = plans.body.plans.find((p) => p.code === 'EC-LAU-WASHFOLD');
     created.laundryPlanId = washFold.id;
 
     const res = await request(app)
@@ -880,7 +902,7 @@ describe('Incidencias y cancelacion', () => {
     });
 
     const plans = await request(app).get('/api/catalog/services/LAUNDRY/plans');
-    const plan = plans.body.plans.find((p) => p.code === 'EC-LAUNDRY-WASHFOLD');
+    const plan = plans.body.plans.find((p) => p.code === 'EC-LAU-WASHFOLD');
 
     const propia = await request(app)
       .post('/api/customer/addresses')

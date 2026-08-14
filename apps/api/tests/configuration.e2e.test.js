@@ -91,11 +91,11 @@ beforeAll(async () => {
   created.addressId = address.body.address.id;
 
   // Estado inicial que hay que devolver tal cual al terminar.
-  const plan = await db.one("SELECT * FROM service_plans WHERE code = 'EC-CLEAN-STANDARD'");
+  const plan = await db.one("SELECT * FROM service_plans WHERE code = 'EC-CLN-STANDARD'");
   created.cleaningPlanId = plan.id;
   original.plan = { base_amount: plan.base_amount, config: plan.config, active: plan.active };
 
-  const laundryPlan = await db.one("SELECT id FROM service_plans WHERE code = 'EC-LAUNDRY-WASHFOLD'");
+  const laundryPlan = await db.one("SELECT id FROM service_plans WHERE code = 'EC-LAU-WASHFOLD'");
   created.laundryPlanId = laundryPlan.id;
 
   original.services = await db.any('SELECT service_type, active FROM service_settings');

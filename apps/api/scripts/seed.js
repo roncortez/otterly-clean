@@ -3,13 +3,13 @@
 /**
  * Datos iniciales.
  *
- * Los precios reflejan el mercado real de Quito investigado antes de
- * implementar: la limpieza doméstica se cobra por hora (~$11/h) o en bloques
- * ("$16 por 2 horas"), no plano por tamaño como en EE.UU. Por eso el plan de
- * Ecuador usa PER_HOUR con mínimo de horas, y se deja un plan de ejemplo con
- * FLAT_BY_SIZE en la región US para demostrar que el motor soporta ambos.
+ * Zonas de cobertura, adicionales y cuentas de prueba. Importes en centavos.
  *
- * Importes en centavos.
+ * LOS PLANES NO ESTÁN AQUÍ. El catálogo comercial lo crea la migración 008 y lo
+ * ajusta la 009, y tenerlo además en el seed fue exactamente el problema que
+ * arregla la 016: los códigos de los dos sitios no chocaban, así que ninguno
+ * sustituía al otro y el cliente acababa viendo "Limpieza estándar" y "Limpieza
+ * Estándar" seguidos a precios distintos. El catálogo tiene un solo dueño.
  */
 
 const bcrypt = require('bcryptjs');
@@ -38,144 +38,6 @@ async function seedZones(tx) {
     );
   }
   return tx.any("SELECT * FROM service_zones WHERE region_code = 'EC'");
-}
-
-async function seedPlans(tx) {
-  const plans = [
-    // --- Ecuador: limpieza por hora -------------------------------------
-    {
-      service_type: 'CLEANING',
-      code: 'EC-CLEAN-STANDARD',
-      name: 'Limpieza estándar',
-      description:
-        'Limpieza de mantenimiento: pisos, baños, cocina, dormitorios y áreas comunes.',
-      region_code: 'EC',
-      pricing_model: 'PER_HOUR',
-      base_amount: 1100, // $11.00 por hora
-      config: { minimumHours: 2 },
-      estimated_duration_minutes: 180,
-      display_order: 1,
-    },
-    {
-      service_type: 'CLEANING',
-      code: 'EC-CLEAN-DEEP',
-      name: 'Limpieza profunda',
-      description:
-        'Incluye interior de electrodomésticos, zócalos, ventanas por dentro y acumulación difícil.',
-      region_code: 'EC',
-      // La investigación muestra que la limpieza profunda cuesta 50-100% más.
-      pricing_model: 'PER_HOUR',
-      base_amount: 1650, // $16.50 por hora (+50%)
-      config: { minimumHours: 3 },
-      estimated_duration_minutes: 300,
-      display_order: 2,
-    },
-    {
-      service_type: 'CLEANING',
-      code: 'EC-CLEAN-MOVE',
-      name: 'Limpieza de mudanza',
-      description: 'Limpieza intensiva para entrega o recepción de vivienda vacía.',
-      region_code: 'EC',
-      pricing_model: 'PER_HOUR',
-      base_amount: 1800,
-      config: { minimumHours: 4 },
-      estimated_duration_minutes: 360,
-      display_order: 3,
-    },
-
-    // --- Ecuador: lavandería --------------------------------------------
-    {
-      service_type: 'LAUNDRY',
-      code: 'EC-LAUNDRY-WASHFOLD',
-      name: 'Lavado y doblado',
-      description: 'Recogemos, lavamos, secamos, doblamos y entregamos en 48 horas.',
-      region_code: 'EC',
-      pricing_model: 'PER_WEIGHT',
-      base_amount: 250, // $2.50 por kg
-      config: { unit: 'kg', minimumUnits: 4 },
-      estimated_duration_minutes: null,
-      display_order: 1,
-    },
-    {
-      service_type: 'LAUNDRY',
-      code: 'EC-LAUNDRY-BAG',
-      name: 'Bolsa completa',
-      description: 'Precio fijo por bolsa estándar, sin importar el peso exacto.',
-      region_code: 'EC',
-      pricing_model: 'PER_BAG',
-      base_amount: 1400, // $14.00 por bolsa
-      config: { bagCapacityKg: 7 },
-      display_order: 2,
-    },
-    {
-      service_type: 'LAUNDRY',
-      code: 'EC-LAUNDRY-IRON',
-      name: 'Planchado',
-      description: 'Planchado profesional por prenda.',
-      region_code: 'EC',
-      pricing_model: 'PER_ITEM',
-      base_amount: 90, // $0.90 por prenda
-      config: {},
-      display_order: 3,
-    },
-
-    // --- Arreglo de prendas: definido pero no ofrecido todavía -----------
-    {
-      service_type: 'ALTERATION',
-      code: 'EC-ALTERATION-QUOTE',
-      name: 'Arreglo de prendas',
-      description: 'Reparación, ajuste y cambio de cierres. Requiere revisión previa.',
-      region_code: 'EC',
-      pricing_model: 'QUOTE',
-      base_amount: 0,
-      config: {},
-      active: false,
-      display_order: 1,
-    },
-
-    // --- EE.UU.: demuestra que el motor soporta el otro modelo -----------
-    {
-      service_type: 'CLEANING',
-      code: 'US-CLEAN-STANDARD',
-      name: 'Standard cleaning',
-      description: 'Flat rate based on home size.',
-      region_code: 'US',
-      pricing_model: 'FLAT_BY_SIZE',
-      base_amount: 0,
-      config: {
-        tiers: { STUDIO: 9000, '1BR': 11000, '2BR': 14000, '3BR': 18000, '4BR_PLUS': 22000 },
-      },
-      estimated_duration_minutes: 180,
-      display_order: 1,
-    },
-    {
-      service_type: 'LAUNDRY',
-      code: 'US-LAUNDRY-WASHFOLD',
-      name: 'Wash & fold',
-      description: 'Pickup and delivery, priced per pound.',
-      region_code: 'US',
-      pricing_model: 'PER_WEIGHT',
-      base_amount: 199, // $1.99/lb
-      config: { unit: 'lb', minimumUnits: 15 },
-      display_order: 1,
-    },
-  ];
-
-  for (const plan of plans) {
-    await tx.none(
-      `INSERT INTO service_plans
-         (service_type, code, name, description, region_code, pricing_model,
-          base_amount, config, estimated_duration_minutes, active, display_order)
-       VALUES ($[service_type], $[code], $[name], $[description], $[region_code], $[pricing_model],
-               $[base_amount], $[config:json], $[estimated_duration_minutes], $[active], $[display_order])
-       ON CONFLICT (region_code, code) DO NOTHING`,
-      {
-        estimated_duration_minutes: null,
-        active: true,
-        ...plan,
-      },
-    );
-  }
 }
 
 async function seedExtras(tx) {
@@ -354,7 +216,6 @@ async function seedUsers(tx, zones) {
 async function run() {
   await db.tx(async (tx) => {
     const zones = await seedZones(tx);
-    await seedPlans(tx);
     await seedExtras(tx);
     await seedUsers(tx, zones);
   });

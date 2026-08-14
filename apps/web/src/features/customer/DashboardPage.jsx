@@ -70,17 +70,16 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-text-muted">Hola, {user?.firstName}</p>
-          <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight text-text sm:text-3xl">
-            {active.length > 0 ? 'Tus servicios en curso' : '¿Qué necesitas hoy?'}
-          </h1>
-        </div>
-        <Button variant="accent" onClick={() => setPickerOpen(true)}>
-          <Sparkles className="size-4" aria-hidden="true" />
-          ¿Qué necesitas?
-        </Button>
+      {/*
+        Sin botón de reserva aquí: la barra superior ya lleva «¿Qué necesitas?»
+        y estaba a dos dedos de este, repitiendo la misma llamada dos veces en
+        la misma pantalla.
+      */}
+      <header>
+        <p className="text-sm text-text-muted">Hola, {user?.firstName}</p>
+        <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight text-text sm:text-3xl">
+          {active.length > 0 ? 'Tus servicios en curso' : '¿Qué necesitas hoy?'}
+        </h1>
       </header>
 
       {error && <Alert tone="danger">{error}</Alert>}

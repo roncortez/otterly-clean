@@ -352,12 +352,55 @@ describe('Actualizar un inmueble (PATCH)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rechaza mover la direccion: la pertenencia no se edita aqui', async () => {
+  /**
+   * Mudarse.
+   *
+   * Antes la direccion de un inmueble era inamovible y la unica salida era
+   * crear otro: quien se mudaba acababa con dos fichas del mismo hogar y tenia
+   * que volver a describir acceso, mascotas y habitaciones. Se mueve el enlace,
+   * nunca el texto de la direccion, que se sigue editando en su pantalla.
+   */
+  it('mueve el inmueble a otra direccion propia que este libre', async () => {
+    const destino = await createAddress(auth.customer, { label: 'Casa nueva' });
+
+    const res = await request(app)
+      .patch(`/api/customer/properties/${created.accessPropertyId}`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({ addressId: destino.body.address.id });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.property.addressId).toBe(destino.body.address.id);
+
+    // Y el perfil sigue intacto: mudarse no es volver a empezar.
+    expect(res.body.property.accessMethod).toBe('DOOR_CODE');
+
+    // Se devuelve a su sitio para no alterar lo que comprueban las de despues.
+    await request(app)
+      .patch(`/api/customer/properties/${created.accessPropertyId}`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({ addressId: created.accessAddressId });
+  });
+
+  it('rechaza mover el inmueble a una direccion que ya tiene otro', async () => {
     const res = await request(app)
       .patch(`/api/customer/properties/${created.accessPropertyId}`)
       .set('Authorization', `Bearer ${auth.customer}`)
       .send({ addressId: created.secondAddressId });
+
     expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('ADDRESS_ALREADY_HAS_PLACE');
+  });
+
+  it('no permite mover el inmueble a la direccion de otro cliente', async () => {
+    const ajena = await createAddress(auth.otherCustomer, { label: 'Ajena' });
+
+    const res = await request(app)
+      .patch(`/api/customer/properties/${created.accessPropertyId}`)
+      .set('Authorization', `Bearer ${auth.customer}`)
+      .send({ addressId: ajena.body.address.id });
+
+    // 404 y no 403: no se confirma que esa direccion exista.
+    expect(res.status).toBe(404);
   });
 
   it('no permite actualizar el inmueble de otro cliente', async () => {

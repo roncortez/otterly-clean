@@ -10,6 +10,11 @@ const DEFAULT_LOCALE = 'es-EC';
 export function toLocalDate(value) {
   if (!value) return null;
   if (value instanceof Date) return value;
+  // Marca de tiempo en milisegundos (`Date.now()`, como la del borrador de
+  // reserva). Sin esto acababa en `new Date("1755130000000")`, que es fecha
+  // inválida, y quien la formateaba se quedaba sin texto: el aviso de borrador
+  // decía "Guardamos lo que habías empezado ." con el hueco a la vista.
+  if (typeof value === 'number') return new Date(value);
 
   const iso = String(value);
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(iso);

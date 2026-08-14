@@ -185,6 +185,31 @@ describe('Borrador de reserva', () => {
     expect(loadDraft()?.booking.cleaning.bedrooms).not.toBe(4);
   });
 
+  /**
+   * Lo que hacía salir el aviso en cada reserva.
+   *
+   * Antes se guardaba un borrador en cuanto había servicio elegido —o sea,
+   * siempre— y a la visita siguiente el asistente encontraba esa entrada y
+   * anunciaba un progreso inexistente. Un borrador es lo que se ha escrito; si
+   * no se ha escrito nada, no hay borrador.
+   */
+  it('empezar una reserva y no tocar nada no deja borrador ni aviso', async () => {
+    renderWizard();
+
+    expect(await screen.findByText('Tu servicio')).toBeInTheDocument();
+    expect(screen.queryByText('Retomamos donde lo dejaste')).not.toBeInTheDocument();
+    expect(loadDraft()).toBeNull();
+  });
+
+  it('retoma en el paso donde se quedó, no al principio', async () => {
+    saveDraft({ serviceType: 'CLEANING', planId: 10, cleaning: { bedrooms: 4 } }, 1);
+
+    renderWizard();
+
+    expect(await screen.findByText('Retomamos donde lo dejaste')).toBeInTheDocument();
+    expect(screen.getByText('Cómo quieres tu limpieza')).toBeInTheDocument();
+  });
+
   it('pedir otro servicio no devuelve la reserva a medias del anterior', async () => {
     saveDraft({ serviceType: 'LAUNDRY', planId: 99, laundry: { estimatedBags: 3 } });
 
@@ -204,9 +229,13 @@ describe('Reservar sin sesión', () => {
     // El asistente se abre sin exigir cuenta.
     expect(await screen.findByText('Tu servicio')).toBeInTheDocument();
 
-    // Y el borrador se va guardando por el camino, que es lo que permite volver.
+    // Y el borrador se va guardando por el camino —desde lo primero que
+    // elige—, que es lo que permite volver después de identificarse.
+    fireEvent.click(screen.getByRole('button', { name: /Limpieza estándar/ }));
+
     await waitFor(() => expect(loadDraft()).not.toBeNull());
     expect(loadDraft().booking.serviceType).toBe('CLEANING');
+    expect(loadDraft().booking.planId).toBe(10);
   });
 
   it('con sesión, el paso de identificarse no aparece', async () => {

@@ -171,6 +171,7 @@ function CleaningPlaceSection({
   update,
   updateDetail,
   registerOnNext,
+  addresses,
   reloadAddresses,
 }) {
   const { isAuthenticated } = useAuth();
@@ -377,39 +378,32 @@ function CleaningPlaceSection({
     setReplaceModalOpen(false);
   }
 
-  async function handleFormSubmit(
-    propertyPayload,
-    addressPayload,
-  ) {
+  /** Alta de dirección desde el formulario de lugar. Misma API que Direcciones. */
+  async function handleCreateAddress(payload) {
+    const res = await api.post('/customer/addresses', payload);
+    await reloadAddresses();
+    return res.data.address;
+  }
+
+  /**
+   * Guardar el lugar.
+   *
+   * La dirección llega elegida (su id), no escrita: el formulario ya no tiene
+   * su propia copia de los campos de calle y ciudad. Ver `PropertyForm`.
+   */
+  async function handleFormSubmit(propertyPayload, addressId) {
     setSubmitting(true);
     setError('');
 
     try {
       let propId;
+      const payload = { ...propertyPayload, addressId };
 
       if (editingProperty) {
         propId = editingProperty.id;
-
-        await Promise.all([
-          api.patch(
-            `/customer/properties/${editingProperty.id}`,
-            propertyPayload,
-          ),
-
-          api.patch(
-            `/customer/addresses/${editingProperty.addressId}`,
-            addressPayload,
-          ),
-        ]);
+        await api.patch(`/customer/properties/${editingProperty.id}`, payload);
       } else {
-        const res = await api.post(
-          '/customer/properties',
-          {
-            ...propertyPayload,
-            address: addressPayload,
-          },
-        );
-
+        const res = await api.post('/customer/properties', payload);
         propId = res.data.property.id;
       }
 
@@ -507,6 +501,8 @@ function CleaningPlaceSection({
         >
           <PropertyForm
             property={null}
+            addresses={addresses}
+            onCreateAddress={handleCreateAddress}
             submitting={submitting}
             error={error}
             onSubmit={handleFormSubmit}
@@ -575,6 +571,8 @@ function CleaningPlaceSection({
         >
           <PropertyForm
             property={null}
+            addresses={addresses}
+            onCreateAddress={handleCreateAddress}
             submitting={submitting}
             error={error}
             onSubmit={handleFormSubmit}
@@ -936,6 +934,8 @@ function CleaningPlaceSection({
       >
         <PropertyForm
           property={editingProperty}
+          addresses={addresses}
+          onCreateAddress={handleCreateAddress}
           submitting={submitting}
           error={error}
           onSubmit={handleFormSubmit}

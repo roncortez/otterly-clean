@@ -1,6 +1,5 @@
-import { useState } from 'react';
-import { PawPrint, ShieldCheck } from 'lucide-react';
-import { useConfig } from '@/shared/config/ConfigContext';
+import { useMemo, useState } from 'react';
+import { MapPin, Plus, ShieldCheck } from 'lucide-react';
 import {
   Alert,
   Button,
@@ -11,7 +10,9 @@ import {
   Select,
   Textarea,
   Divider,
+  cx,
 } from '@/shared/ui';
+import AddressForm from './AddressForm';
 
 const PROPERTY_TYPES = [
   { value: 'HOUSE', label: 'Casa' },
@@ -28,14 +29,150 @@ const ACCESS_METHODS = [
   { value: 'OTHER', label: 'Otro', needsSecret: false },
 ];
 
+/**
+ * En qué dirección está este lugar.
+ *
+ * Se elige entre las que el cliente ya tiene guardadas. Cuando no tiene
+ * ninguna disponible no se le enseña un formulario de dirección disfrazado: se
+ * le dice lo que falta —una dirección— y se le da el camino para registrarla.
+ */
+function AddressPicker({ addresses, selectedId, onSelect, onCreate }) {
+  if (addresses.length === 0) {
+    return (
+      <Alert tone="info" title="Primero necesitas una dirección">
+        Un lugar es lo que limpiamos —habitaciones, acceso, mascotas— y vive en una dirección
+        tuya. Registra la dirección y podrás describir el lugar sobre ella.
+        {onCreate && (
+          <span className="mt-3 block">
+            <Button type="button" size="sm" onClick={onCreate}>
+              <Plus className="size-4" aria-hidden="true" />
+              Registrar dirección
+            </Button>
+          </span>
+        )}
+      </Alert>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <p className="text-xs font-semibold tracking-wider text-text-subtle uppercase">Dirección</p>
+
+      {addresses.map((address) => {
+        const selected = address.id === selectedId;
+        return (
+          <button
+            key={address.id}
+            type="button"
+            onClick={() => onSelect(address.id)}
+            aria-pressed={selected}
+            className={cx(
+              'flex w-full cursor-pointer items-start gap-3.5 rounded-xl border p-4 text-left transition-all',
+              selected
+                ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
+                : 'border-border hover:border-border-strong hover:bg-surface-sunken',
+            )}
+          >
+            <span
+              className={cx(
+                'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg',
+                selected ? 'bg-forest-600 text-white' : 'bg-surface-sunken text-text-muted',
+              )}
+            >
+              <MapPin className="size-4.5" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-text">{address.label}</span>
+                {address.is_default && (
+                  <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-text-muted">
+                    Predeterminada
+                  </span>
+                )}
+              </span>
+              <span className="mt-0.5 block text-sm text-text-muted">
+                {[address.street_line1, address.street_line2].filter(Boolean).join(' y ')}
+              </span>
+              <span className="block text-sm text-text-subtle">
+                {[address.neighborhood, address.city, address.administrative_area]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+              {!address.latitude && (
+                <span className="mt-1 block text-xs text-warning-700">
+                  Sin punto en el mapa: edítala en Direcciones para marcarlo.
+                </span>
+              )}
+            </span>
+          </button>
+        );
+      })}
+
+      {onCreate && (
+        <button
+          type="button"
+          onClick={onCreate}
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong py-3 text-sm font-medium text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          Registrar otra dirección
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Un lugar del cliente: qué es el inmueble, cómo se entra y en qué dirección
+ * está.
+ *
+ * LA DIRECCIÓN SE ELIGE, NO SE ESCRIBE. Este formulario tenía dentro su propia
+ * copia del formulario de direcciones —calle, sector, ciudad, provincia—, sin
+ * mapa y sin las reglas regionales. El resultado era que la misma casa se
+ * tecleaba dos veces, en dos pantallas que no se parecían, y la del lugar salía
+ * siempre peor: sin coordenada, el profesional no tiene con qué llegar. Ahora se
+ * escoge una de las direcciones ya guardadas, y registrar una nueva abre el
+ * formulario de direcciones de verdad (`AddressForm`, con su mapa), no una
+ * imitación.
+ *
+ * @param {Array}    addresses        direcciones del cliente (`/customer/addresses`)
+ * @param {Function} onSubmit         (propertyPayload, addressId)
+ * @param {Function} onCreateAddress  (payload) => dirección creada; sin ella no
+ *                                    se ofrece dar de alta una desde aquí
+ */
 export default function PropertyForm({
   property = null,
+  addresses = [],
   submitting = false,
   error = null,
   onSubmit,
+  onCreateAddress,
   onCancel,
 }) {
-  const { addressLabel, isAddressFieldRequired, region } = useConfig();
+  /**
+   * Las direcciones donde cabe este lugar.
+   *
+   * Solo hay un lugar por dirección (índice único, migración 005), así que las
+   * que ya tienen otro no se ofrecen: elegirlas fallaría al guardar. La del
+   * lugar que se está editando sí, claro.
+   */
+  const available = useMemo(
+    () => addresses.filter((entry) => !entry.property || entry.property.id === property?.id),
+    [addresses, property?.id],
+  );
+
+  const [addressId, setAddressId] = useState(
+    () =>
+      property?.addressId ??
+      (available.find((entry) => entry.is_default) ?? available[0])?.id ??
+      null,
+  );
+
+  // Alta de dirección sin salir de aquí. Sustituye a este formulario en lugar
+  // de anidarse: dos <form> uno dentro de otro no es HTML válido.
+  const [creatingAddress, setCreatingAddress] = useState(false);
+  const [addressError, setAddressError] = useState('');
+  const [savingAddress, setSavingAddress] = useState(false);
 
   const [propForm, setPropForm] = useState(() => ({
     name: property?.name ?? '',
@@ -59,17 +196,6 @@ export default function PropertyForm({
     notes: property?.notes ?? '',
   }));
 
-  const [addressForm, setAddressForm] = useState(() => ({
-    streetLine1: property?.address?.streetLine1 ?? '',
-    streetLine2: property?.address?.streetLine2 ?? '',
-    unit: property?.address?.unit ?? '',
-    neighborhood: property?.address?.neighborhood ?? '',
-    city: property?.address?.city ?? '',
-    administrativeArea: property?.address?.administrativeArea ?? '',
-    postalCode: property?.address?.postalCode ?? '',
-    reference: property?.address?.reference ?? '',
-  }));
-
   const updateProp = (key, value) => {
     setPropForm((current) => ({
       ...current,
@@ -77,12 +203,21 @@ export default function PropertyForm({
     }));
   };
 
-  const updateAddress = (key, value) => {
-    setAddressForm((current) => ({
-      ...current,
-      [key]: value,
-    }));
-  };
+  async function handleCreateAddress(payload) {
+    setSavingAddress(true);
+    setAddressError('');
+    try {
+      const created = await onCreateAddress(payload);
+      if (created?.id) setAddressId(created.id);
+      setCreatingAddress(false);
+    } catch (err) {
+      setAddressError(
+        err.response?.data?.error?.message || 'No se pudo guardar la dirección.',
+      );
+    } finally {
+      setSavingAddress(false);
+    }
+  }
 
   function handlePresenceChange(customerPresent) {
     setPropForm((current) => ({
@@ -107,6 +242,10 @@ export default function PropertyForm({
 
   function handleSubmit(event) {
     event.preventDefault();
+
+    // Sin dirección no hay lugar: el backend lo rechaza igual, y aquí se nota
+    // antes y con el botón, no con un error rojo después de rellenarlo todo.
+    if (!addressId) return;
 
     const accessCodeValue = propForm.accessCode.trim();
 
@@ -150,43 +289,38 @@ export default function PropertyForm({
       }),
     };
 
-    const addressPayload = {
-      label: propForm.name.trim() || 'Mi lugar',
-
-      streetLine1: addressForm.streetLine1.trim(),
-      streetLine2: addressForm.streetLine2.trim() || null,
-      unit: addressForm.unit.trim() || null,
-
-      neighborhood:
-        addressForm.neighborhood.trim() || null,
-
-      city: addressForm.city.trim(),
-
-      administrativeArea:
-        addressForm.administrativeArea.trim() || null,
-
-      postalCode:
-        addressForm.postalCode.trim() || null,
-
-      reference:
-        addressForm.reference.trim() || null,
-
-      isDefault:
-        property?.address?.isDefault ??
-        property?.address?.is_default ??
-        false,
-    };
-
-    onSubmit(propertyPayload, addressPayload);
+    onSubmit(propertyPayload, addressId);
   }
 
   const selectedMethod = ACCESS_METHODS.find(
     (method) => method.value === propForm.accessMethod,
   );
 
-  const showPostalCode =
-    region?.address?.postalCodeRequired ||
-    Boolean(addressForm.postalCode);
+  /*
+    Dar de alta la dirección ocupa la pantalla entera en vez de convivir con el
+    resto del formulario: es el mismo `AddressForm` de la pestaña Direcciones,
+    con su buscador y su mapa, y necesita el sitio. Al guardar se vuelve aquí
+    con la nueva ya elegida.
+  */
+  if (creatingAddress) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <h3 className="text-sm font-semibold text-text">Nueva dirección</h3>
+          <p className="mt-0.5 text-xs text-text-muted">
+            Se guardará en tus direcciones y quedará elegida para este lugar.
+          </p>
+        </div>
+
+        <AddressForm
+          submitting={savingAddress}
+          error={addressError}
+          onSubmit={handleCreateAddress}
+          onCancel={available.length > 0 ? () => setCreatingAddress(false) : onCancel}
+        />
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -278,166 +412,12 @@ export default function PropertyForm({
             </Field>
           </div>
 
-          <div className="rounded-xl border border-border bg-surface-sunken/40 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-subtle">
-              Dirección
-            </p>
-
-            <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field
-                  label="Calle principal"
-                  required={isAddressFieldRequired(
-                    'street_address',
-                  )}
-                >
-                  <Input
-                    required={isAddressFieldRequired(
-                      'street_address',
-                    )}
-                    value={addressForm.streetLine1}
-                    onChange={(event) =>
-                      updateAddress(
-                        'streetLine1',
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Av. Amazonas"
-                  />
-                </Field>
-
-                <Field label="Calle secundaria">
-                  <Input
-                    value={addressForm.streetLine2}
-                    onChange={(event) =>
-                      updateAddress(
-                        'streetLine2',
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Eloy Alfaro"
-                  />
-                </Field>
-              </div>
-
-              <Field
-                label="Edificio, casa, torre o departamento"
-                hint="Opcional."
-              >
-                <Input
-                  value={addressForm.unit}
-                  onChange={(event) =>
-                    updateAddress(
-                      'unit',
-                      event.target.value,
-                    )
-                  }
-                  placeholder="Torre B, Dpto 402"
-                />
-              </Field>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field
-                  label={addressLabel(
-                    'dependent_locality',
-                  )}
-                >
-                  <Input
-                    value={addressForm.neighborhood}
-                    onChange={(event) =>
-                      updateAddress(
-                        'neighborhood',
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Barrio / Sector"
-                  />
-                </Field>
-
-                <Field
-                  label={addressLabel('locality')}
-                  required={isAddressFieldRequired(
-                    'locality',
-                  )}
-                >
-                  <Input
-                    required={isAddressFieldRequired(
-                      'locality',
-                    )}
-                    value={addressForm.city}
-                    onChange={(event) =>
-                      updateAddress(
-                        'city',
-                        event.target.value,
-                      )
-                    }
-                  />
-                </Field>
-
-                <Field
-                  label={addressLabel(
-                    'administrative_area',
-                  )}
-                  required={isAddressFieldRequired(
-                    'administrative_area',
-                  )}
-                >
-                  <Input
-                    required={isAddressFieldRequired(
-                      'administrative_area',
-                    )}
-                    value={
-                      addressForm.administrativeArea
-                    }
-                    onChange={(event) =>
-                      updateAddress(
-                        'administrativeArea',
-                        event.target.value,
-                      )
-                    }
-                  />
-                </Field>
-
-                {showPostalCode && (
-                  <Field
-                    label="Código postal"
-                    required={isAddressFieldRequired(
-                      'postal_code',
-                    )}
-                  >
-                    <Input
-                      required={isAddressFieldRequired(
-                        'postal_code',
-                      )}
-                      value={addressForm.postalCode}
-                      onChange={(event) =>
-                        updateAddress(
-                          'postalCode',
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </Field>
-                )}
-              </div>
-
-              <Field
-                label="Referencia"
-                hint="Opcional. Ayuda a encontrar el lugar."
-              >
-                <Input
-                  value={addressForm.reference}
-                  onChange={(event) =>
-                    updateAddress(
-                      'reference',
-                      event.target.value,
-                    )
-                  }
-                  placeholder="Portón negro junto a la farmacia"
-                />
-              </Field>
-            </div>
-          </div>
+          <AddressPicker
+            addresses={available}
+            selectedId={addressId}
+            onSelect={setAddressId}
+            onCreate={onCreateAddress ? () => setCreatingAddress(true) : null}
+          />
         </div>
       </section>
 
@@ -687,6 +667,7 @@ export default function PropertyForm({
           type="submit"
           variant="accent"
           loading={submitting}
+          disabled={!addressId}
         >
           {property
             ? 'Guardar cambios'

@@ -1,10 +1,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { DoorOpen, MapPin, Plus, Trash2, Star, Pencil } from 'lucide-react';
+import { DoorOpen, MapPin, Plus, Trash2, Pencil } from 'lucide-react';
 import { api } from '@/shared/api/client';
 import { useApiQuery, useApiAction } from '@/shared/api/useApiQuery';
 import { useConfig } from '@/shared/config/ConfigContext';
-import { Alert, Button, Card, EmptyState, PageHeader, Spinner } from '@/shared/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  DefaultStar,
+  EmptyState,
+  PageHeader,
+  Spinner,
+} from '@/shared/ui';
 import AddressForm from './AddressForm';
 
 /**
@@ -183,17 +191,11 @@ export default function AddressesPage() {
                   >
                     <Pencil className="size-4" aria-hidden="true" />
                   </button>
-                  {!address.is_default && (
-                    <button
-                      type="button"
-                      onClick={() => handleSetDefault(address.id)}
-                      className="rounded-full p-2 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-forest-600"
-                      aria-label="Marcar como predeterminada"
-                      title="Marcar como predeterminada"
-                    >
-                      <Star className="size-4" aria-hidden="true" />
-                    </button>
-                  )}
+                  <DefaultStar
+                    isDefault={address.is_default}
+                    onSelect={() => handleSetDefault(address.id)}
+                    label={address.label}
+                  />
                   <button
                     type="button"
                     onClick={() => handleDelete(address.id)}

@@ -158,12 +158,16 @@ function CleaningStep({ booking, update, updateDetail, service, money }) {
             title="Ninguno"
             description="No requiero servicio adicional de ropa."
           />
+          {/*
+            Sin descripción: el nombre del catálogo ya es la lista completa de
+            lo que incluye ("Lavado + secado + doblado (ropa in situ)"), y
+            repetirla debajo en prosa no añadía ni un dato.
+          */}
           {insituWDF && (
             <OptionCard
               selected={selectedInSitu === insituWDF.code}
               onSelect={() => handleSelectInSitu(insituWDF.code)}
               title={insituWDF.name}
-              description="Lavado, secado y doblado de ropa en tu hogar."
               meta={`+${money(insituWDF.amount)}`}
             />
           )}
@@ -172,7 +176,6 @@ function CleaningStep({ booking, update, updateDetail, service, money }) {
               selected={selectedInSitu === insituWDFI.code}
               onSelect={() => handleSelectInSitu(insituWDFI.code)}
               title={insituWDFI.name}
-              description="Lavado, secado, doblado y planchado completo en tu hogar."
               meta={`+${money(insituWDFI.amount)}`}
             />
           )}
@@ -181,7 +184,6 @@ function CleaningStep({ booking, update, updateDetail, service, money }) {
               selected={selectedInSitu === insituIron.code}
               onSelect={() => handleSelectInSitu(insituIron.code)}
               title={insituIron.name}
-              description="Servicio exclusivo de planchado en tu hogar."
               meta={`+${money(insituIron.amount)}`}
             />
           )}
