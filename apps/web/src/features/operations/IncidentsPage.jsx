@@ -106,7 +106,10 @@ export default function IncidentsPage() {
           description="Cuando un trabajador o un cliente reporte algo, aparecerá aquí."
         />
       ) : (
-        <div className="space-y-3">
+        /* Las incidencias entran escalonadas: son pocas, se abren de una en
+           una y cada una es una cosa que alguien tiene que resolver. Verlas
+           llegar en fila hace que se lean como una cola de trabajo. */
+        <div className="stagger space-y-3">
           {incidents.map((incident) => {
             const severity = SEVERITIES.find((entry) => entry.value === incident.severity);
 

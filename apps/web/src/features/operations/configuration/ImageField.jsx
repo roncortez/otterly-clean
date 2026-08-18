@@ -99,7 +99,10 @@ export default function ImageField({
           )}
         >
           {value ? (
-            <img src={value} alt="" className="size-full object-contain" />
+            /* Igual que en la foto de perfil: la `key` hace que la imagen entre al
+               cambiar, para que subir una nueva termine con una señal y no con
+               un cambio silencioso en la miniatura. */
+            <img key={value} src={value} alt="" className="anim-pop size-full object-contain" />
           ) : (
             <ImageOff className="size-5 text-text-subtle" aria-hidden="true" />
           )}

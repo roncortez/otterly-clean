@@ -24,7 +24,10 @@ export default function StepService({ booking, update, service, money }) {
       </div>
 
       {service && (
-        <div className="space-y-3">
+        /* Los planes entran en cascada: son la primera decisión de la reserva y
+           llegan de uno en uno para que se lean como opciones, no como un
+           bloque de texto. */
+        <div className="stagger space-y-3">
           {service.plans.map((plan) => (
             <OptionCard
               key={plan.id}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { Home, CalendarCheck, LogOut, Sparkles, UserRound, Package } from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
 import BrandMark from '@/shared/ui/BrandMark';
@@ -35,6 +35,7 @@ const NAV = [
 export default function CustomerLayout() {
   const { user, isAuthenticated, logout } = useAuth();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <div className="min-h-dvh bg-surface">
@@ -93,7 +94,7 @@ export default function CustomerLayout() {
                 <button
                   type="button"
                   onClick={logout}
-                  className="cursor-pointer rounded-full p-2 text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
+                  className="press cursor-pointer rounded-full p-2 text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
                   aria-label="Cerrar sesión"
                 >
                   <LogOut className="size-4.5" aria-hidden="true" />
@@ -108,13 +109,33 @@ export default function CustomerLayout() {
         </div>
       </header>
 
+      {/*
+        La `key` es lo que hace que la entrada se repita al cambiar de pantalla.
+        Sin ella el `<main>` se monta una sola vez y la animación se ve solo la
+        primera; con ella, cada navegación vuelve a montarlo y el contenido nuevo
+        entra. La cabecera y la barra inferior quedan fuera a propósito: son el
+        marco fijo, y si parpadearan en cada salto la aplicación entera parecería
+        recargarse.
+      */}
       <main
-        className={cx('mx-auto max-w-6xl px-5 py-8', isAuthenticated ? 'pb-28 sm:pb-8' : 'pb-8')}
+        key={location.pathname}
+        className={cx(
+          'anim-page mx-auto max-w-6xl px-5 py-8',
+          isAuthenticated ? 'pb-28 sm:pb-8' : 'pb-8',
+        )}
       >
         <Outlet />
       </main>
 
-      {/* Navegación móvil. Sin sesión no hay adónde ir todavía. */}
+      {/*
+        Navegación móvil. Sin sesión no hay adónde ir todavía.
+
+        Aquí solo se hunde al tocar, nada más. Es lo que más veces al día se
+        pulsa en toda la aplicación, y una animación de entrada o de cambio de
+        pestaña —por bonita que sea la primera vez— se convierte en una espera
+        repetida cientos de veces. El hundimiento dura 140 ms y solo confirma que
+        el dedo entró; el resto lo cuenta el color.
+      */}
       {isAuthenticated && (
         <nav className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface-raised/95 backdrop-blur sm:hidden">
           <div className="grid grid-cols-4">
@@ -124,7 +145,7 @@ export default function CustomerLayout() {
                 to={to}
                 className={({ isActive }) =>
                   cx(
-                    'flex flex-col items-center gap-1 py-2.5 text-xs font-medium transition-colors',
+                    'press flex flex-col items-center gap-1 py-2.5 text-xs font-medium transition-colors',
                     isActive ? 'text-forest-700' : 'text-text-subtle',
                   )
                 }
@@ -136,7 +157,7 @@ export default function CustomerLayout() {
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              className="flex cursor-pointer flex-col items-center gap-1 py-2.5 text-xs font-medium text-accent-600"
+              className="press flex cursor-pointer flex-col items-center gap-1 py-2.5 text-xs font-medium text-accent-600"
             >
               <Sparkles className="size-5" aria-hidden="true" />
               Reservar

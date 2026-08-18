@@ -1,4 +1,4 @@
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, UserRound, MapPin, DoorOpen } from 'lucide-react';
 import { useAuth, homePathForRoles } from '@/shared/auth/AuthContext';
 import { cx } from '@/shared/ui';
@@ -29,16 +29,19 @@ const TABS = [
 
 export default function ProfileLayout() {
   const { user } = useAuth();
+  const location = useLocation();
   const tabs = TABS.filter((tab) => !tab.role || user?.roles?.includes(tab.role));
 
   return (
     <div className="min-h-dvh bg-surface">
       <div className="mx-auto max-w-3xl px-5 py-8">
+        {/* La flecha se retira un par de píxeles hacia la izquierda al pasar por
+            encima: hacia donde lleva el enlace. */}
         <Link
           to={homePathForRoles(user?.roles)}
-          className="mb-6 inline-flex items-center gap-1.5 text-sm text-text-muted transition-colors hover:text-text"
+          className="group mb-6 inline-flex items-center gap-1.5 text-sm text-text-muted transition-colors hover:text-text"
         >
-          <ArrowLeft className="size-4" aria-hidden="true" />
+          <ArrowLeft className="nudge-back size-4" aria-hidden="true" />
           Volver
         </Link>
 
@@ -68,7 +71,9 @@ export default function ProfileLayout() {
           </nav>
         )}
 
-        <Outlet />
+        <div key={location.pathname} className="anim-page">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

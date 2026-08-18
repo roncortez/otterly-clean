@@ -55,18 +55,28 @@ export default function AuthDialog({ title, description, aside, children, footer
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-forest-950/70 p-4 backdrop-blur-md"
+      className="anim-fade fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-forest-950/70 p-4 backdrop-blur-md"
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) close();
       }}
     >
+      {/*
+        Entra igual que cualquier otro diálogo del producto, y eso es justamente
+        lo que se busca: entrar no debe sentirse como salir de la aplicación.
+        El panel crece sobre la página que se queda detrás en lugar de sustituir
+        la pantalla, y el velo se funde con él.
+
+        No lleva animación de salida: cerrar aquí es navegar hacia atrás, y el
+        panel se va con la ruta. Ponerla obligaría a retrasar la navegación, que
+        es peor negocio que un cierre instantáneo.
+      */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : 'Acceso'}
         className={cx(
-          'relative my-auto grid w-full max-w-3xl overflow-hidden rounded-2xl',
+          'anim-pop relative my-auto grid w-full max-w-3xl overflow-hidden rounded-2xl',
           'border border-border bg-surface-raised shadow-[var(--shadow-raised)]',
           'sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]',
         )}
@@ -106,7 +116,7 @@ export default function AuthDialog({ title, description, aside, children, footer
           type="button"
           onClick={close}
           aria-label="Cerrar"
-          className="absolute top-3 right-3 rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
+          className="press absolute top-3 right-3 rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
         >
           <X className="size-4" aria-hidden="true" />
         </button>

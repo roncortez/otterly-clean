@@ -226,27 +226,42 @@ export default function OnboardingPage() {
         </div>
       </div>
 
-      <h1 className="text-xl font-extrabold tracking-tight text-text">{step.title}</h1>
-      {step.description ? <p className="mt-1 text-sm text-text-muted">{step.description}</p> : null}
+      {/*
+        Cada paso entra por la derecha. El onboarding se rellena una sola vez en
+        la vida de una cuenta, y sus pasos se parecen mucho entre sí —un título y
+        dos o tres campos—, así que sin movimiento avanzar deja la duda de si
+        pasó algo o si el formulario se quedó igual. La `key` reproduce la
+        entrada en cada paso.
 
-      {error ? (
-        <div className="mt-4">
-          <Alert tone="danger">{error}</Alert>
+        Los botones de Atrás y Continuar quedan fuera: son el marco del
+        asistente, no su contenido, y si se desplazaran con cada paso el pie de
+        la pantalla parecería moverse solo.
+      */}
+      <div key={step.code} className="anim-step-forward">
+        <h1 className="text-xl font-extrabold tracking-tight text-text">{step.title}</h1>
+        {step.description ? (
+          <p className="mt-1 text-sm text-text-muted">{step.description}</p>
+        ) : null}
+
+        {error ? (
+          <div className="mt-4">
+            <Alert tone="danger">{error}</Alert>
+          </div>
+        ) : null}
+
+        <div className="mt-6 space-y-5">
+          {step.fields.map((field) => (
+            <OnboardingField
+              key={field.key}
+              field={field}
+              value={values[field.key]}
+              phonePlaceholder={phonePlaceholder}
+              onChange={(value) => setValue(field.key, value)}
+              onSaveAddress={saveAddress}
+              saving={saving}
+            />
+          ))}
         </div>
-      ) : null}
-
-      <div className="mt-6 space-y-5">
-        {step.fields.map((field) => (
-          <OnboardingField
-            key={field.key}
-            field={field}
-            value={values[field.key]}
-            phonePlaceholder={phonePlaceholder}
-            onChange={(value) => setValue(field.key, value)}
-            onSaveAddress={saveAddress}
-            saving={saving}
-          />
-        ))}
       </div>
 
       <div className="mt-8 flex items-center justify-between gap-3">

@@ -26,13 +26,18 @@ export default function ServicesSettingsPage() {
         viviendo en el código.
       </Alert>
 
-      {services.map((service) => (
-        <ServiceSettingsCard
-          key={service.code}
-          service={service}
-          onSaved={servicesQuery.reload}
-        />
-      ))}
+      {/* Son tres tarjetas grandes, una por servicio, y se abren para
+          configurar una cosa concreta. La cascada las presenta como tres
+          bloques separados en lugar de una pared. */}
+      <div className="stagger space-y-5">
+        {services.map((service) => (
+          <ServiceSettingsCard
+            key={service.code}
+            service={service}
+            onSaved={servicesQuery.reload}
+          />
+        ))}
+      </div>
     </div>
   );
 }

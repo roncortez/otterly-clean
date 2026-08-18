@@ -123,7 +123,7 @@ export default function DashboardPage() {
       {active.length > (liveDetail ? 1 : 0) && (
         <section>
           <Eyebrow className="mb-3 block">Próximas reservas</Eyebrow>
-          <div className="space-y-3">
+          <div className="stagger space-y-3">
             {active
               .filter((order) => order.id !== liveDetail?.order.id)
               .map((order) => (
@@ -139,10 +139,10 @@ export default function DashboardPage() {
           <Eyebrow>Historial</Eyebrow>
           <Link
             to="/servicios"
-            className="flex items-center gap-1 text-sm font-medium text-forest-600 hover:text-forest-700"
+            className="group flex items-center gap-1 text-sm font-medium text-forest-600 transition-colors hover:text-forest-700"
           >
             Ver todo
-            <ArrowRight className="size-3.5" aria-hidden="true" />
+            <ArrowRight className="nudge size-3.5" aria-hidden="true" />
           </Link>
         </div>
 
@@ -153,7 +153,7 @@ export default function DashboardPage() {
             description="Cuando termines un servicio aparecerá aquí, con su historial completo."
           />
         ) : (
-          <div className="space-y-3">
+          <div className="stagger space-y-3">
             {past.map((order) => (
               <ServiceCard key={order.id} order={order} to={`/servicios/${order.id}`} money={money} />
             ))}
@@ -191,7 +191,10 @@ function SummaryMetrics({ summary, money }) {
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+    /* Las cifras entran en cascada. Son tres o cuatro y se leen de un vistazo,
+       así que verlas llegar una detrás de otra invita a leerlas todas en vez de
+       quedarse en la primera. */
+    <div className="stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
       {metrics.map(({ label, value, icon: Icon }) => (
         <Card key={label} className="flex items-center gap-3.5 p-4">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
@@ -207,10 +210,17 @@ function SummaryMetrics({ summary, money }) {
   );
 }
 
-/** El servicio que está en marcha, con su progreso. Es la pieza principal. */
+/**
+ * El servicio que está en marcha, con su progreso. Es la pieza principal.
+ *
+ * Entra con la animación larga y no con la corta de las listas: es lo que la
+ * persona ha venido a mirar, y llega sola en su hueco. Dentro, el timeline hace
+ * su propia cascada (ver `StatusTimeline`), así que la tarjeta se abre y los
+ * hitos se van escribiendo dentro.
+ */
 function LiveServiceCard({ detail }) {
   return (
-    <Card className="overflow-hidden" data-service={detail.order.serviceType}>
+    <Card className="anim-rise overflow-hidden" data-service={detail.order.serviceType}>
       <div className="border-b border-border bg-forest-800 px-5 py-4 text-text-inverse sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

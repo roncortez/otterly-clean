@@ -32,9 +32,15 @@ export default function ServicePicker({ open, onClose }) {
       description="Elige por dónde quieres empezar."
       size="lg"
     >
+      {/*
+        Las opciones entran en cascada dentro del diálogo, no a la vez que él.
+        Abrir y encontrarse tres bloques ya puestos hace que el diálogo parezca
+        una imagen; viéndolos llegar uno detrás de otro se leen como tres cosas
+        entre las que hay que elegir, que es exactamente la pregunta.
+      */}
       <div
         className={cx(
-          'grid gap-4 py-2',
+          'stagger grid gap-4 py-2',
           choices.length > 2 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
         )}
       >
@@ -49,7 +55,7 @@ export default function ServicePicker({ open, onClose }) {
                 onClose?.();
                 navigate(choice.path);
               }}
-              className="flex cursor-pointer flex-col items-center gap-3 rounded-xl border border-border bg-surface p-6 text-center transition-all hover:border-forest-400 hover:bg-surface-sunken"
+              className="press lift group flex cursor-pointer flex-col items-center gap-3 rounded-xl border border-border bg-surface p-6 text-center transition-[background-color,border-color] hover:border-forest-400 hover:bg-surface-sunken"
             >
               <span className="flex size-12 items-center justify-center rounded-xl bg-forest-50 text-forest-700">
                 <Icon className="size-6" aria-hidden="true" />

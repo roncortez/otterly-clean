@@ -172,8 +172,14 @@ export default function AddressForm({
         />
       </div>
 
+      {/*
+        La confirmación de la ubicación aparece al elegir un punto en el mapa, y
+        empuja el formulario hacia abajo. Entrando se entiende que llegó algo
+        nuevo; sin movimiento, los campos de abajo dan un salto y parece que se
+        movió el formulario, no que se confirmó la dirección.
+      */}
       {hasPoint ? (
-        <Card className="flex flex-wrap items-center justify-between gap-3 border-forest-100 bg-forest-50/60 p-3.5">
+        <Card className="anim-rise flex flex-wrap items-center justify-between gap-3 border-forest-100 bg-forest-50/60 p-3.5">
           <p className="flex items-start gap-2 text-sm text-forest-700">
             <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>
@@ -215,7 +221,7 @@ export default function AddressForm({
                 key={suggestion}
                 type="button"
                 onClick={() => setForm((current) => ({ ...current, label: suggestion }))}
-                className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-muted transition-colors hover:border-border-strong hover:text-text"
+                className="press rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-muted transition-colors hover:border-border-strong hover:text-text"
               >
                 {suggestion}
               </button>

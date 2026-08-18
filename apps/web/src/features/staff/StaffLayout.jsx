@@ -1,4 +1,4 @@
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { LogOut, Droplets, Sliders, UserRound } from 'lucide-react';
 import { useAuth } from '@/shared/auth/AuthContext';
 
@@ -10,6 +10,7 @@ import { useAuth } from '@/shared/auth/AuthContext';
  */
 export default function StaffLayout() {
   const { user, logout, hasRole } = useAuth();
+  const location = useLocation();
 
   return (
     <div className="min-h-dvh bg-surface">
@@ -25,7 +26,7 @@ export default function StaffLayout() {
           <div className="flex items-center gap-1">
             <Link
               to="/mi-perfil"
-              className="rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
+              className="press rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Mi perfil"
               title="Mi perfil"
             >
@@ -35,7 +36,7 @@ export default function StaffLayout() {
             {hasRole('ADMIN') ? (
               <Link
                 to="/operaciones"
-                className="rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
+                className="press rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
                 aria-label="Ir a Operaciones"
                 title="Ir a Operaciones"
               >
@@ -45,7 +46,7 @@ export default function StaffLayout() {
             <button
               type="button"
               onClick={logout}
-              className="rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
+              className="press rounded-full p-2 text-forest-200 transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Cerrar sesión"
             >
               <LogOut className="size-4.5" aria-hidden="true" />
@@ -54,7 +55,7 @@ export default function StaffLayout() {
         </div>
       </header>
 
-      <main className="safe-bottom mx-auto max-w-2xl px-4 py-5">
+      <main key={location.pathname} className="anim-page safe-bottom mx-auto max-w-2xl px-4 py-5">
         <Outlet />
       </main>
     </div>

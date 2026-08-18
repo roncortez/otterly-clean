@@ -88,7 +88,15 @@ export default function PhotoField({ value, onChange }) {
         )}
       >
         {shown ? (
-          <img src={shown} alt="Tu foto de perfil" className="size-full object-cover" />
+          /* La `key` hace que la foto entre al cambiar. Subir una imagen tarda
+             lo suyo y termina sin aviso: sin esto, la única señal de que acabó
+             es que el círculo cambia de contenido mientras miras el botón. */
+          <img
+            key={shown}
+            src={shown}
+            alt="Tu foto de perfil"
+            className="anim-pop size-full object-cover"
+          />
         ) : (
           <User className="size-8 text-text-subtle" aria-hidden="true" />
         )}

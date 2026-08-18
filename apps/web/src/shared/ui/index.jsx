@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Loader2, Star, X } from 'lucide-react';
+import { useExitAnimation } from '@/shared/hooks/useExitAnimation';
 
 /**
  * Componentes base.
@@ -18,7 +19,9 @@ import { Loader2, Star, X } from 'lucide-react';
  *   · Tarjetas rounded-2xl sobre superficie elevada, sin bordes duros.
  *
  * Ningún componente usa la paleta por defecto de Tailwind (slate, emerald,
- * rose…): todo pasa por los tokens de index.css.
+ * rose…): todo pasa por los tokens de index.css. Lo mismo con el movimiento:
+ * las clases `press`, `lift`, `anim-*` y `stagger` salen de ahí, y ningún
+ * componente escribe una curva ni una duración a mano.
  */
 
 export function cx(...classes) {
@@ -45,6 +48,24 @@ const BUTTON_SIZES = {
   lg: 'h-13 px-7 text-base gap-2',
 };
 
+/*
+   El botón se hunde al pulsarlo, y ese hundimiento es toda la animación que
+   necesita: se pulsa cientos de veces al día, así que cuanto más se ve algo,
+   más corto y más discreto tiene que ser.
+
+   Dos detalles que antes estaban mal y ahora no:
+
+     · `transition-all` transicionaba también el ancho, la altura y la posición.
+       Cada una de esas obliga al navegador a recalcular el diseño en cada
+       fotograma, y en las listas largas eso es exactamente el tirón que se
+       veía. Ahora se nombran las cuatro propiedades que sí cambian.
+     · `active:scale-95` encogía un 5%, suficiente para que el texto de dentro
+       se viera saltar. `press` usa 0.97: se siente, no se mira.
+*/
+const BUTTON_MOTION =
+  'press transition-[background-color,border-color,color,box-shadow] ' +
+  'disabled:cursor-not-allowed disabled:opacity-50';
+
 export function Button({
   variant = 'primary',
   size = 'md',
@@ -57,8 +78,8 @@ export function Button({
   return (
     <button
       className={cx(
-        'inline-flex cursor-pointer items-center justify-center rounded-full font-semibold transition-all',
-        'active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
+        'inline-flex cursor-pointer items-center justify-center rounded-full font-semibold',
+        BUTTON_MOTION,
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
         className,
@@ -80,7 +101,8 @@ export function ButtonLink({ as: Tag = 'a', variant = 'primary', size = 'md', cl
   return (
     <Tag
       className={cx(
-        'inline-flex cursor-pointer items-center justify-center rounded-full font-semibold transition-all active:scale-95',
+        'inline-flex cursor-pointer items-center justify-center rounded-full font-semibold',
+        BUTTON_MOTION,
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
         className,
@@ -94,11 +116,21 @@ export function ButtonLink({ as: Tag = 'a', variant = 'primary', size = 'md', cl
 
 // --- Contenedores ----------------------------------------------------------
 
-export function Card({ as: Tag = 'div', className, children, ...props }) {
+/**
+ * `interactive` es para las tarjetas que llevan a algún sitio: se despegan un
+ * par de píxeles al pasar por encima. No se pone por defecto porque la mayoría
+ * de las tarjetas de la aplicación son contenedores de lectura, y una superficie
+ * que reacciona al ratón sin ser pulsable promete algo que no cumple.
+ *
+ * La elevación va tras `hover: hover` en el CSS: en móvil `:hover` se queda
+ * pegado tras tocar, y la tarjeta se quedaría levantada sola.
+ */
+export function Card({ as: Tag = 'div', interactive = false, className, children, ...props }) {
   return (
     <Tag
       className={cx(
         'rounded-2xl border border-border bg-surface-raised shadow-[var(--shadow-card)]',
+        interactive && 'lift',
         className,
       )}
       {...props}
@@ -153,12 +185,21 @@ export function PageHeader({ title, description, action, eyebrow }) {
 /**
  * Encabezado centrado de las secciones largas de la portada. Mismo ritmo que
  * PageHeader (antetítulo → titular → apoyo), solo cambia el eje.
+ *
+ * Y, a diferencia de PageHeader, este entra animado: el antetítulo se abre
+ * separando las letras (`track-in`) y la regla se dibuja sola de izquierda a
+ * derecha al final (`wipe`). Los dos gestos son de portada y solo de portada —
+ * PageHeader, que es el que se ve cada día en las consolas, no lleva ninguno.
+ *
+ * El movimiento no se dispara al montar sino al llegar a la sección
+ * desplazándose: quien lo decide es el `.reveal` del contenedor (ver
+ * `useRevealOnScroll`), y las clases de dentro están escritas para esperarlo.
  */
 export function SectionHeading({ eyebrow, title, description, inverse = false, className }) {
   return (
     <div className={cx('text-center', className)}>
       {eyebrow && (
-        <Eyebrow className={inverse ? 'text-forest-200' : undefined}>{eyebrow}</Eyebrow>
+        <Eyebrow className={cx('track-in', inverse && 'text-forest-200')}>{eyebrow}</Eyebrow>
       )}
       <h2
         className={cx(
@@ -178,6 +219,21 @@ export function SectionHeading({ eyebrow, title, description, inverse = false, c
           {description}
         </p>
       )}
+      {/*
+        La regla va al final y no bajo el titular: se descubre de izquierda a
+        derecha cuando ya se ha leído todo el bloque, y lo cierra. Puesta entre
+        el titular y el apoyo separaría dos cosas que se leen seguidas.
+
+        Es corta y centrada a propósito. A todo el ancho dejaría de cerrar el
+        encabezado y pasaría a parecer el separador de la sección siguiente.
+      */}
+      <span
+        aria-hidden="true"
+        className={cx(
+          'wipe mx-auto mt-6 block h-px w-16 rounded-full',
+          inverse ? 'bg-white/35' : 'bg-service/45',
+        )}
+      />
     </div>
   );
 }
@@ -238,9 +294,16 @@ export function StatusBadge({ status, label }) {
   );
 }
 
+/**
+ * El indicador de espera entra con retraso deliberado.
+ *
+ * Si la respuesta llega en 120 ms, mostrarlo y quitarlo produce un parpadeo que
+ * se lee como un error, no como una carga. Apareciendo con una entrada suave,
+ * las esperas cortas pasan casi desapercibidas y las largas se anuncian.
+ */
 export function Spinner({ label = 'Cargando' }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-12 text-text-muted">
+    <div className="anim-fade flex items-center justify-center gap-2 py-12 text-text-muted">
       <Loader2 className="size-5 animate-spin" aria-hidden="true" />
       <span className="text-sm">{label}</span>
     </div>
@@ -249,7 +312,7 @@ export function Spinner({ label = 'Cargando' }) {
 
 export function EmptyState({ icon: Icon, title, description, action }) {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-dashed border-border-strong px-6 py-12 text-center">
+    <div className="anim-rise flex flex-col items-center rounded-2xl border border-dashed border-border-strong px-6 py-12 text-center">
       {Icon && (
         <span className="mb-3 flex size-11 items-center justify-center rounded-full bg-surface-sunken text-text-subtle">
           <Icon className="size-5" aria-hidden="true" />
@@ -262,6 +325,14 @@ export function EmptyState({ icon: Icon, title, description, action }) {
   );
 }
 
+/**
+ * El aviso entra en movimiento a propósito.
+ *
+ * Casi siempre aparece después de pulsar algo —un formulario que no valida, una
+ * acción que falló—, y en una pantalla larga un bloque de color que se
+ * materializa sin más pasa desapercibido justo cuando más falta hace leerlo.
+ * Llegando desde abajo, el ojo lo sigue hasta su sitio.
+ */
 export function Alert({ tone = 'danger', title, children }) {
   const tones = {
     danger: 'border-danger/20 bg-danger-soft text-danger',
@@ -271,7 +342,7 @@ export function Alert({ tone = 'danger', title, children }) {
   };
 
   return (
-    <div className={cx('rounded-xl border px-4 py-3 text-sm', tones[tone])} role="alert">
+    <div className={cx('anim-rise rounded-xl border px-4 py-3 text-sm', tones[tone])} role="alert">
       {title && <p className="font-medium">{title}</p>}
       {children && <div className={cx(title && 'mt-0.5', 'opacity-90')}>{children}</div>}
     </div>
@@ -293,8 +364,20 @@ const MODAL_SIZES = {
  * Existe porque cada pantalla que necesitaba uno se lo pintaba a mano, y cada
  * copia se desviaba un poco: otro velo, otro radio, y ninguna cerraba con Esc.
  * El velo es verde profundo, no negro: sigue siendo la misma marca detrás.
+ *
+ * Se abre creciendo desde el centro —desde 0.96, no desde cero: algo que
+ * aparece de la nada se lee como un fallo de dibujado— y se cierra por el mismo
+ * camino, encogiendo. El velo se funde a la vez que el panel para que se lean
+ * como una sola superficie que llega, y no como dos cosas que se han puesto de
+ * acuerdo a medias.
+ *
+ * El desmontaje lo retiene `useExitAnimation`: sin él React quitaría el diálogo
+ * del DOM en el mismo fotograma del cierre y la animación de salida no llegaría
+ * a verse nunca.
  */
 export function Modal({ open, onClose, title, description, size = 'md', children, footer }) {
+  const { visible, leaving } = useExitAnimation(open);
+
   useEffect(() => {
     if (!open) return undefined;
 
@@ -306,11 +389,14 @@ export function Modal({ open, onClose, title, description, size = 'md', children
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!visible) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-forest-950/60 p-4 backdrop-blur-sm"
+      className={cx(
+        'fixed inset-0 z-50 flex items-center justify-center bg-forest-950/60 p-4 backdrop-blur-sm',
+        leaving ? 'anim-fade-out' : 'anim-fade',
+      )}
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose?.();
@@ -322,6 +408,7 @@ export function Modal({ open, onClose, title, description, size = 'md', children
         aria-label={typeof title === 'string' ? title : undefined}
         className={cx(
           'relative flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-[var(--shadow-raised)]',
+          leaving ? 'anim-pop-out' : 'anim-pop',
           MODAL_SIZES[size] ?? MODAL_SIZES.md,
         )}
       >
@@ -330,7 +417,7 @@ export function Modal({ open, onClose, title, description, size = 'md', children
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="absolute top-4 right-4 cursor-pointer rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
+            className="press absolute top-4 right-4 cursor-pointer rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -385,7 +472,10 @@ export function Field({ label, hint, error, required, children, className }) {
  */
 export const CONTROL_CLASS =
   'w-full rounded-xl border border-border bg-surface-raised px-3.5 text-sm text-text ' +
-  'transition-colors placeholder:text-text-subtle ' +
+  /* El anillo de foco es una sombra, no un color, así que `transition-colors` lo
+     dejaba fuera: el borde se teñía suave y el anillo daba un salto seco encima.
+     Nombrando las cuatro propiedades, entrar en un campo es un solo gesto. */
+  'transition-[color,background-color,border-color,box-shadow] placeholder:text-text-subtle ' +
   'focus:border-forest-500 focus:outline-none focus:ring-2 focus:ring-forest-500/15 ' +
   'disabled:bg-surface-sunken disabled:text-text-subtle disabled:cursor-not-allowed';
 
@@ -412,7 +502,7 @@ export function Checkbox({ label, description, className, ...props }) {
     <label className={cx('flex cursor-pointer items-start gap-3', className)}>
       <input
         type="checkbox"
-        className="mt-0.5 size-4.5 shrink-0 rounded border-border-strong text-forest-600 focus:ring-forest-500/25"
+        className="press mt-0.5 size-4.5 shrink-0 rounded border-border-strong text-forest-600 transition-[background-color,border-color,box-shadow] focus:ring-forest-500/25"
         {...props}
       />
       <span className="min-w-0">
@@ -445,7 +535,7 @@ export function DefaultStar({ isDefault, onSelect, label }) {
       disabled={isDefault}
       aria-pressed={isDefault}
       className={cx(
-        'rounded-full p-2 transition-colors',
+        'press rounded-full p-2 transition-colors',
         isDefault
           ? 'cursor-default text-accent-500'
           : 'cursor-pointer text-text-subtle hover:bg-surface-sunken hover:text-accent-500',
@@ -457,7 +547,19 @@ export function DefaultStar({ isDefault, onSelect, label }) {
       }
       title={isDefault ? 'Predeterminada' : 'Marcar como predeterminada'}
     >
-      <Star className={cx('size-4', isDefault && 'fill-current')} aria-hidden="true" />
+      {/*
+        La estrella se rellena de golpe al marcarla y no se veía que hubiera
+        pasado nada: el cambio ocurre en un icono de 16 px, en una fila entre
+        otras iguales. La `key` la vuelve a montar cuando cambia de estado, así
+        que la entrada se reproduce y el ojo va donde tiene que ir. Marcar una
+        predeterminada se hace una vez cada muchos meses: es de los pocos sitios
+        donde cabe algo más que un cambio de color.
+      */}
+      <Star
+        key={isDefault ? 'marcada' : 'sin-marcar'}
+        className={cx('size-4', isDefault && 'anim-pop fill-current')}
+        aria-hidden="true"
+      />
     </button>
   );
 }
@@ -478,7 +580,10 @@ export function OptionCard({ selected, title, description, meta, disabled, onSel
       disabled={disabled}
       aria-pressed={selected}
       className={cx(
-        'w-full cursor-pointer rounded-xl border p-4 text-left transition-all',
+        'press w-full cursor-pointer rounded-xl border p-4 text-left',
+        /* El anillo de la selección es una sombra: si no se nombra aquí,
+           aparece de golpe mientras el fondo y el borde sí se funden. */
+        'transition-[background-color,border-color,box-shadow]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         selected
           ? 'border-service bg-service-soft ring-2 ring-service/20'

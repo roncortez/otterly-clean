@@ -86,6 +86,37 @@
   --shadow-raised: 0 2px 4px hsl(174 30% 12% / 0.06), 0 12px 32px hsl(174 30% 12% / 0.09);
   /* Las llamadas a la acción flotan sobre la página: la sombra las despega. */
   --shadow-cta: 0 4px 12px hsl(15 63% 54% / 0.22), 0 12px 32px hsl(174 30% 12% / 0.14);
+
+  /* --- Movimiento ---------------------------------------------------------
+     Las curvas nativas de CSS son demasiado débiles: `ease-out` a 200 ms se lee
+     como un cambio brusco con un borde suave, no como algo que se mueve. Estas
+     tres salen del mismo sitio que el resto del sistema —se eligen una vez y se
+     usan en todas partes— y más abajo se declaran además como la curva por
+     defecto de Tailwind, así que cada `transition-*` que ya existía en la
+     aplicación pasa a usarlas sin tocar un solo componente.
+
+     `ease-in` no aparece a propósito: empieza lento justo en el instante en que
+     la persona está mirando, y hace que todo parezca perezoso. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* entra o sale */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* ya está en pantalla y se mueve */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* hojas que suben desde abajo */
+  /* Se pasa de largo y vuelve. Es la traducción a CSS del muelle que usaba la
+     otra aplicación para sus avisos (`spring`, rigidez 400, amortiguación 30):
+     una curva que rebasa el destino un 5 % y se asienta. Se reserva para lo que
+     irrumpe sin que nadie lo haya pedido —el anuncio de la portada—, porque el
+     rebase es lo que hace que se lea como algo que *llega* y no como algo que
+     ya estaba. En un control que se pulsa sería ruido. */
+  --ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
+
+  /* Duraciones por frecuencia de uso: cuanto más se ve algo, más corto dura.
+     Nada de interfaz pasa de 300 ms; por encima se siente lento aunque sea
+     bonito la primera vez. */
+  --dur-press: 140ms; /* hundir un botón */
+  --dur-hover: 180ms; /* color y elevación al pasar por encima */
+  --dur-pop: 200ms; /* paneles anclados a su disparador */
+  --dur-modal: 250ms; /* diálogos y velos */
+  --dur-enter: 280ms; /* entrada de una pantalla o una tarjeta */
+  --stagger-step: 45ms; /* retraso entre hermanos de una cascada */
 }
 
 /* ==========================================================================
@@ -186,6 +217,24 @@
   --shadow-raised: var(--shadow-raised);
   --shadow-cta: var(--shadow-cta);
 
+  /*
+     Aquí es donde el movimiento deja de ser opcional.
+
+     Al sobrescribir la curva y la duración por defecto de Tailwind, las decenas
+     de `transition-colors` y `transition-transform` que ya estaban escritas por
+     toda la aplicación empiezan a usar la curva de la marca. Es un cambio en un
+     archivo que se nota en todas las pantallas, y evita el otro camino: repetir
+     `ease-[cubic-bezier(...)]` en sesenta componentes y que se desvíen.
+
+     Solo se tocan los dos valores por defecto. Los tres tokens de curva no se
+     redeclaran aquí: `--ease-out` es también el nombre del espacio de nombres de
+     Tailwind, y mapearlo contra sí mismo (`--ease-out: var(--ease-out)`) crea
+     una referencia circular que deja la variable sin valor. Los componentes usan
+     `var(--ease-out)` directamente, que es lo que ya declara `:root`.
+  */
+  --default-transition-timing-function: var(--ease-out);
+  --default-transition-duration: var(--dur-hover);
+
   --font-sans:
     'Inter var', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui,
     sans-serif;
@@ -197,6 +246,14 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+
+    /* Los enlaces del menú de la portada (#servicios, #faqs) saltaban en seco:
+       la página aparecía ya abajo y había que releer para saber dónde estabas.
+       Desplazarse mantiene la continuidad. El `scroll-padding` compensa la
+       cabecera flotante, que si no tapa el título de la sección a la que acabas
+       de llegar. */
+    scroll-behavior: smooth;
+    scroll-padding-top: 6rem;
   }
 
   body {
@@ -275,8 +332,16 @@
 }
 
 @layer utilities {
-  /* El punto que late marca el estado ACTUAL del servicio. Es el único
-     elemento animado de la interfaz: si todo se moviera, nada destacaría. */
+  /* El punto que late marca el estado ACTUAL del servicio. Sigue siendo el
+     único elemento del *producto* que se mueve solo, sin que nadie lo haya
+     provocado: todo lo demás de este archivo responde a algo —abrir, entrar,
+     pulsar, desplazarse— y se detiene. Esa es la diferencia que hace que el
+     punto siga destacando aunque ahora la interfaz tenga movimiento.
+
+     La única otra animación perpetua del archivo es `.scroll-cue`, y vive fuera
+     del producto: está en la primera pantalla de la portada, donde no hay
+     ningún servicio en curso que pudiera competir con ella, y se retira al
+     primer desplazamiento. Las dos nunca coinciden en pantalla. */
   .pulse-dot {
     animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
@@ -308,13 +373,905 @@
     display: none;
   }
 
+  /* ========================================================================
+     Vocabulario de movimiento
+
+     Seis gestos y nada más. La tentación con las animaciones es que cada
+     pantalla invente el suyo; entonces la aplicación se mueve de seis maneras
+     distintas y ninguna significa nada. Aquí cada clase dice qué le pasó al
+     elemento, no cómo se ve:
+
+       .anim-rise   algo llegó y ocupó su sitio (pantalla, tarjeta, sección)
+       .anim-fade   algo cubrió lo de detrás (velos)
+       .anim-pop    un diálogo se abrió en el centro
+       .anim-panel  un panel salió de aquello que lo abrió
+       .anim-sheet  una hoja subió desde el borde inferior
+       .stagger     un grupo entró en cascada, no todo de golpe
+
+     Todo se hace con `transform` y `opacity`, que la GPU compone sin recalcular
+     el diseño. Animar `height`, `top` o `margin` obliga al navegador a rehacer
+     la página en cada fotograma, y ahí es donde aparece el tirón.
+     ======================================================================== */
+
+  @keyframes motion-rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+
+  @keyframes motion-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* Cambiar de pantalla es lo que más veces al día se hace en una consola de
+     operaciones, así que es donde el movimiento tiene que ser más corto: 6 px y
+     220 ms, casi todo opacidad. Lo justo para que el contenido nuevo se lea como
+     contenido nuevo y no como la misma página con otras palabras encima. Con la
+     entrada larga de `.anim-rise`, revisar veinte solicitudes seguidas sería
+     esperar veinte veces. */
+  @keyframes motion-page {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes motion-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+
+  /* Lo que vive pegado al borde de arriba entra desde arriba. Es lo mismo que
+     `.anim-rise` con el signo cambiado, y el signo es justamente lo que hace que
+     la cabecera parezca bajar a su sitio en vez de subir desde debajo de la
+     página. */
+  @keyframes motion-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+  }
+
+  /* Nunca desde `scale(0)`: nada en el mundo real aparece de la nada, y el ojo
+     lo lee como un error antes que como una animación. */
+  @keyframes motion-panel {
+    from {
+      opacity: 0;
+      transform: scale(0.95) translateY(-4px);
+    }
+  }
+
+  @keyframes motion-sheet {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes motion-step-forward {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+  }
+
+  @keyframes motion-step-back {
+    from {
+      opacity: 0;
+      transform: translateX(-16px);
+    }
+  }
+
+  @keyframes motion-shimmer {
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  /*
+     La foto del hero se asienta al cargar.
+
+     Es el único movimiento de la aplicación que dura más de 300 ms, y se lo
+     permite porque no es interfaz: es la primera impresión de una portada que
+     se ve una vez. La imagen ya estaba dibujada a `scale-105` con una
+     `transition-transform duration-1000` que no llegaba a dispararse nunca
+     —nada cambiaba su transformación—, así que la intención estaba escrita y
+     sin efecto. Ahora entra desde 1.12 y se posa en 1.05, muy despacio: se lee
+     como una cámara que se detiene, no como algo que se mueve.
+  */
+  @keyframes motion-hero {
+    from {
+      transform: scale(1.12);
+    }
+    to {
+      transform: scale(1.05);
+    }
+  }
+
+  .anim-hero-image {
+    animation: motion-hero 1400ms var(--ease-out) both;
+  }
+
+  /*
+     Salidas.
+
+     Se va por donde vino: el diálogo que creció en el centro se encoge en el
+     centro, la hoja que subió del borde baja al borde. Cuando el camino de
+     vuelta no es el de ida, la persona no llega a aprender de dónde salen las
+     cosas, y cerrar se siente como si el elemento desapareciera en otro sitio.
+
+     Y se va más rápido de lo que vino (180 ms contra 250 ms): al abrir hay algo
+     nuevo que mirar, al cerrar ya has decidido y lo único que quieres es que se
+     quite de en medio.
+  */
+  @keyframes motion-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes motion-pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+
+  @keyframes motion-panel-out {
+    to {
+      opacity: 0;
+      transform: scale(0.95) translateY(-4px);
+    }
+  }
+
+  @keyframes motion-sheet-out {
+    to {
+      transform: translateY(100%);
+    }
+  }
+
+  .anim-rise {
+    animation: motion-rise var(--dur-enter) var(--ease-out) both;
+  }
+
+  .anim-fade {
+    animation: motion-fade var(--dur-modal) var(--ease-out) both;
+  }
+
+  .anim-page {
+    animation: motion-page 220ms var(--ease-out) both;
+  }
+
+  .anim-drop {
+    animation: motion-drop var(--dur-enter) var(--ease-out) both;
+  }
+
+  .anim-pop {
+    /* El diálogo es la única superficie exenta de salir de su disparador: no
+       está anclado a ningún botón, vive en el centro de la pantalla. */
+    transform-origin: center;
+    animation: motion-pop var(--dur-modal) var(--ease-out) both;
+  }
+
+  .anim-panel {
+    /* Un desplegable que crece desde su propio centro parece caído del cielo.
+       Creciendo desde el borde por el que apareció, parece que lo abriste tú. */
+    transform-origin: var(--panel-origin, top center);
+    animation: motion-panel var(--dur-pop) var(--ease-out) both;
+  }
+
+  .anim-sheet {
+    animation: motion-sheet 420ms var(--ease-drawer) both;
+  }
+
+  .anim-fade-out {
+    animation: motion-fade-out 180ms var(--ease-out) both;
+  }
+
+  .anim-pop-out {
+    transform-origin: center;
+    animation: motion-pop-out 180ms var(--ease-out) both;
+  }
+
+  .anim-panel-out {
+    transform-origin: var(--panel-origin, top center);
+    animation: motion-panel-out 150ms var(--ease-out) both;
+  }
+
+  .anim-sheet-out {
+    animation: motion-sheet-out 260ms var(--ease-drawer) both;
+  }
+
+  /* Avanzar y retroceder en el asistente de reserva no son lo mismo, y el
+     contenido lo dice entrando por el lado que corresponde. Sin esto, volver al
+     paso anterior se siente igual que avanzar y se pierde el hilo.
+
+     El recorrido es de 16 px y no más: el asistente vive dentro de un contenedor
+     con 20 px de margen lateral, así que el paso entrante se desplaza sin
+     asomar por el borde de la ventana. Con un recorrido mayor aparecería una
+     barra de desplazamiento horizontal durante la animación en pantallas
+     estrechas, que es de los defectos que peor se ven y más tarde se
+     encuentran. */
+  .anim-step-forward {
+    animation: motion-step-forward var(--dur-enter) var(--ease-out) both;
+  }
+
+  .anim-step-back {
+    animation: motion-step-back var(--dur-enter) var(--ease-out) both;
+  }
+
+  /*
+     Cascada.
+
+     El retraso se corta en el octavo hermano a propósito. Con paso libre, una
+     lista de treinta pedidos tardaría más de un segundo en terminar de
+     aparecer, y para entonces la persona ya está intentando pulsar el primero.
+     La cascada es decorativa: nunca puede retrasar lo que se puede tocar.
+  */
+  .stagger > * {
+    animation: motion-rise var(--dur-enter) var(--ease-out) both;
+  }
+
+  .stagger > *:nth-child(2) {
+    animation-delay: calc(var(--stagger-step) * 1);
+  }
+  .stagger > *:nth-child(3) {
+    animation-delay: calc(var(--stagger-step) * 2);
+  }
+  .stagger > *:nth-child(4) {
+    animation-delay: calc(var(--stagger-step) * 3);
+  }
+  .stagger > *:nth-child(5) {
+    animation-delay: calc(var(--stagger-step) * 4);
+  }
+  .stagger > *:nth-child(6) {
+    animation-delay: calc(var(--stagger-step) * 5);
+  }
+  .stagger > *:nth-child(7) {
+    animation-delay: calc(var(--stagger-step) * 6);
+  }
+  .stagger > *:nth-child(n + 8) {
+    animation-delay: calc(var(--stagger-step) * 7);
+  }
+
+  /*
+     Pulsar.
+
+     `scale` arrastra también el texto y los iconos de dentro, y eso es
+     justamente lo que hace que se lea como un objeto que se hunde en lugar de
+     un rectángulo que encoge. No lleva reja de `hover`: `:active` en una
+     pantalla táctil es un dedo de verdad.
+  */
+  .press {
+    transition: transform var(--dur-press) var(--ease-out);
+  }
+
+  .press:disabled,
+  .press[aria-disabled='true'] {
+    transform: none;
+  }
+
+  /*
+     Levantar al pasar por encima.
+
+     Va tras `hover: hover` y `pointer: fine` porque un móvil dispara `:hover`
+     al tocar y lo deja pegado: la tarjeta se queda levantada después de que el
+     dedo se haya ido, y parece rota.
+  */
+  @media (hover: hover) and (pointer: fine) {
+    .lift {
+      transition:
+        transform var(--dur-hover) var(--ease-out),
+        box-shadow var(--dur-hover) var(--ease-out);
+    }
+
+    .lift:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-raised);
+    }
+
+    /* La flecha que se adelanta un par de píxeles cuando el puntero está sobre
+       su tarjeta. Dice "esto lleva a algún sitio" sin escribirlo. Va dentro de
+       la misma reja que `lift`: en una pantalla táctil el `:hover` se queda
+       pegado tras el toque y la flecha se quedaría desplazada para siempre. */
+    .group:hover .nudge {
+      transform: translateX(2px);
+    }
+
+    /* La misma idea al revés, para «Volver»: la flecha se retira hacia donde
+       lleva el enlace. */
+    .group:hover .nudge-back {
+      transform: translateX(-2px);
+    }
+
+    /* Crecer un poco. Para el logotipo de la cabecera, que no es una tarjeta y
+       no debería levantarse ni proyectar sombra.
+
+       Se llamaba `.grow`, que es una utilidad de Tailwind (`flex-grow: 1`), y
+       arrastraba el mismo problema que el acordeón de más arriba: las dos reglas
+       se aplicaban a la vez y el logotipo se llevaba un `flex-grow` que nadie
+       había pedido. Ahí no se veía —el contenedor no tiene espacio libre que
+       repartir— pero es exactamente el tipo de bomba que estalla el día que
+       alguien le cambia el ancho a la cabecera y no entiende por qué el
+       logotipo se estira. */
+    .swell:hover {
+      transform: scale(1.04);
+    }
+  }
+
+  .swell {
+    transition: transform var(--dur-hover) var(--ease-out);
+  }
+
+  .nudge,
+  .nudge-back {
+    transition: transform var(--dur-hover) var(--ease-out);
+  }
+
+  /*
+     El hundimiento va después de la elevación a propósito, y no es un detalle
+     de estilo: es una regla de la cascada.
+
+     `.press:active` y `.lift:hover` tienen la misma especificidad, así que
+     decide quién se escribe último. En una tarjeta que lleva las dos —el
+     selector de servicio, por ejemplo— el puntero está encima *y* se está
+     pulsando al mismo tiempo. Si ganara la elevación, el clic no devolvería
+     ninguna respuesta justo en el momento en que se pide una. Manda lo que está
+     pasando ahora.
+  */
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  /*
+     Aparecer al desplazarse. Solo para la portada.
+
+     En una consola que se abre cada día esto sería una tortura: el contenido
+     que ya conoces te hace esperar. En la portada, que se ve una vez, marca el
+     ritmo de lectura. Se dispara una sola vez por elemento (ver
+     `useRevealOnScroll`), nunca al volver a subir.
+  */
+  @keyframes motion-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+  }
+
+  .reveal {
+    opacity: 0;
+  }
+
+  /*
+     Aparecer es una animación y no una transición, y la diferencia importa.
+
+     Con una transición, el `transform: none` del estado final se queda escrito
+     en el elemento para siempre, y a partir de ahí gana a cualquier otro
+     `transform` de la misma especificidad: una tarjeta que además lleva `lift`
+     nunca volvería a levantarse al pasar por encima. La animación, sin
+     `fill-mode`, se reproduce y se va: al terminar el elemento vuelve a sus
+     estilos normales y el `hover` funciona como en el resto de la aplicación.
+  */
+  .reveal[data-visible='true'] {
+    opacity: 1;
+    animation: motion-reveal 620ms var(--ease-out);
+  }
+
+  /*
+     Esqueleto con brillo, para las esperas.
+
+     Un bloque gris quieto no distingue "cargando" de "roto". El brillo que
+     recorre la superficie dice que algo sigue pasando.
+  */
+  /*
+     Acordeón.
+
+     Es la única pieza de la aplicación que anima el tamaño, y no por descuido:
+     no existe una versión con `transform` de "esto ocupa más sitio ahora". Lo
+     que sí se puede elegir es *qué* propiedad de tamaño se anima, y `grid-template-rows`
+     de `0fr` a `1fr` es la que permite llegar al alto real del contenido sin
+     medirlo en JavaScript ni congelarlo en un número que se rompe al cambiar el
+     texto o al girar el teléfono.
+
+     Se queda corto a propósito (200 ms): abrir y cerrar cuesta diseño en cada
+     fotograma, así que aquí lo lento no solo se siente lento, además es caro.
+
+     El hijo necesita `overflow: hidden` propio; sin él el texto se desborda de
+     la fila mientras esta todavía tiene alto cero, y se ve asomar debajo del
+     titular durante toda la apertura.
+
+     ---------------------------------------------------------------------------
+     Se llama `disclosure` y no `collapse`, que es como se llamaba y como pide el
+     castellano, porque `collapse` ya es una utilidad de Tailwind:
+     `visibility: collapse`.
+
+     El choque no se ve al leer el CSS y no se arregla con el orden del archivo,
+     que es lo que lo hace difícil de encontrar. Las dos reglas se llaman igual
+     pero escriben propiedades distintas —una el `display` y las filas, otra la
+     visibilidad—, así que no compiten: se aplican las dos. Y como `visibility`
+     se hereda, el resultado era una respuesta de las preguntas frecuentes que
+     abría con su altura correcta, con su animación correcta, y en blanco.
+
+     La regla general, para lo que venga: antes de bautizar una clase propia hay
+     que comprobar que Tailwind no tenga ya una utilidad con ese nombre. En este
+     archivo pasaba dos veces; la otra era `.grow` (ver `.swell` más abajo).
+     ---------------------------------------------------------------------------
+  */
+  .disclosure {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 200ms var(--ease-out);
+  }
+
+  .disclosure[data-open='true'] {
+    grid-template-rows: 1fr;
+  }
+
+  .disclosure > * {
+    overflow: hidden;
+  }
+
+  /* La flecha gira en lugar de cambiar de icono. Cambiarlo es un corte seco que
+     no dice si se abrió o se cerró; girarlo enseña el propio movimiento. */
+  .chevron {
+    transition: transform var(--dur-pop) var(--ease-out);
+  }
+
+  [aria-expanded='true'] > .chevron,
+  [data-open='true'] .chevron {
+    transform: rotate(180deg);
+  }
+
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, hsl(0 0% 100% / 0.6), transparent);
+    animation: motion-shimmer 1.4s var(--ease-in-out) infinite;
+  }
+
+  /* ========================================================================
+     Gestos de portada
+
+     Todo lo de aquí arriba es vocabulario de producto: se usa en las consolas,
+     en el asistente y en la portada por igual, y por eso es corto y se repite.
+     Lo que sigue no. Son cinco gestos que solo existen en la primera pantalla
+     pública —la que se ve una vez, sin sesión, decidiendo si contratar— y que
+     vienen de la otra aplicación de la casa, donde ordenaban una portada del
+     mismo tipo.
+
+     Se mantienen en un bloque aparte y con nombres propios justamente para que
+     no se filtren al producto. Una consola que se abre cada mañana no puede
+     tener halos que respiran ni antetítulos que se despliegan: ahí lo que se ve
+     mil veces tiene que estar quieto.
+     ======================================================================== */
+
+  /*
+     El antetítulo se abre.
+
+     Es el gesto más reconocible del sitio del que viene: un texto corto en
+     versalitas que empieza apretado y se separa hasta su posición de reposo, y
+     que hace que una etiqueta de tres palabras se lea como el telón que sube
+     antes del titular.
+
+     Anima `letter-spacing`, que sí obliga a rehacer el diseño en cada fotograma
+     —justo lo que el vocabulario de arriba evita a propósito—. Se acepta aquí y
+     solo aquí porque el elemento es una línea de texto de tres palabras sin nada
+     debajo que dependa de su ancho: el trabajo que el navegador rehace es medir
+     una caja, no recolocar la sección. Aplicada a un párrafo o dentro de una
+     tabla, la misma clase costaría fotogramas de verdad.
+
+     Termina en 0.14em, que es el `tracking` que el diseño ya tenía: el gesto
+     *llega* al valor de reposo en lugar de pasarse de él. Si acabara más
+     separado, cada antetítulo de la portada quedaría distinto de los mismos
+     antetítulos del resto de la aplicación.
+  */
+  @keyframes motion-track {
+    from {
+      opacity: 0;
+      letter-spacing: 0.01em;
+    }
+    to {
+      opacity: 1;
+      letter-spacing: 0.14em;
+    }
+  }
+
+  .track-in {
+    animation: motion-track 900ms var(--ease-out) both;
+  }
+
+  /*
+     Dentro de un `.reveal` el gesto espera al desplazamiento.
+
+     Sin esto, el antetítulo de una sección que está a dos pantallas de distancia
+     se abre al cargar la página, dentro de un contenedor con `opacity: 0`: para
+     cuando se llega a él, la animación terminó hace medio minuto y lo que se
+     encuentra es texto quieto. Se anula y se vuelve a declarar cuando el
+     observador marca la sección como visible.
+  */
+  .reveal .track-in {
+    animation: none;
+  }
+
+  .reveal[data-visible='true'] .track-in {
+    animation: motion-track 900ms var(--ease-out) both;
+  }
+
+  /*
+     La regla que se dibuja sola bajo el titular de sección.
+
+     `clip-path` en lugar de `width`: la línea tiene su ancho final desde el
+     primer fotograma y lo que se mueve es la ventana por la que se ve, así que
+     el navegador no recalcula el diseño mientras se dibuja. Se descubre de
+     izquierda a derecha, en el sentido en que se lee el titular que hay encima,
+     y entra 160 ms tarde para que se lea como consecuencia del titular y no como
+     otra cosa que pasa a la vez.
+  */
+  @keyframes motion-wipe {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+  }
+
+  .wipe {
+    animation: motion-wipe 620ms var(--ease-out) both;
+  }
+
+  .reveal .wipe {
+    animation: none;
+  }
+
+  .reveal[data-visible='true'] .wipe {
+    animation: motion-wipe 620ms 160ms var(--ease-out) both;
+  }
+
+  /*
+     El anuncio irrumpe.
+
+     Es `.anim-pop` con dos añadidos: entra desenfocado y se enfoca, y usa la
+     curva de muelle. El desenfoque es lo que separa "esto acaba de llegar" de
+     "esto ya estaba y no lo habías mirado" — es el mismo efecto que hace una
+     cámara al fijar el foco sobre algo que entra en cuadro.
+
+     `filter` se repinta en cada fotograma y es de lo más caro que se puede
+     animar. Aquí sale a cuenta porque es una superficie, una vez, al abrir; la
+     misma clase repartida por una lista sería un problema de rendimiento serio.
+  */
+  @keyframes motion-pop-blur {
+    from {
+      opacity: 0;
+      transform: scale(0.94);
+      filter: blur(10px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+      filter: blur(0);
+    }
+  }
+
+  .anim-pop-blur {
+    transform-origin: center;
+    animation: motion-pop-blur 420ms var(--ease-spring) both;
+  }
+
+  /*
+     La invitación a seguir bajando.
+
+     La primera pantalla ocupa el alto de la ventana entera y termina en un borde
+     limpio, que es exactamente la forma que tiene una página de parecer que se
+     acaba ahí. La flecha dice que no.
+
+     Sube y baja sola, y esa es la parte que hay que justificar: hasta ahora el
+     punto de "está pasando ahora" era el único elemento de toda la aplicación
+     que se movía sin que nadie lo hubiera provocado (ver `.pulse-dot`). Sigue
+     siendo el único *del producto*. Esta flecha vive en la portada, sobre la
+     foto, y se retira en cuanto cumple su función: `HomePage` la marca al primer
+     desplazamiento y no vuelve. Un indicador de "sigue bajando" que sigue ahí
+     cuando ya has bajado deja de ser una ayuda.
+
+     El recorrido es de 6 px y la curva es suave por los dos lados: es una boya,
+     no un rebote. `animate-bounce` de Tailwind —que es lo que usaba la otra
+     aplicación— cae con aceleración de gravedad y llama demasiado la atención
+     para algo que compite con la llamada a la acción principal.
+  */
+  @keyframes motion-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(6px);
+    }
+  }
+
+  /*
+     El color entra en la misma declaración que la opacidad y no en una clase
+     `transition-colors` sobre el elemento: las dos escriben `transition-property`
+     con la misma especificidad y dentro de la misma capa, así que ganaría la que
+     Tailwind coloque más abajo y se perdería una de las dos. Aquí se declaran
+     juntas y no hay nada que perder.
+
+     `visibility` se anima con la opacidad para que, al terminar de irse, la
+     flecha deje de existir para el puntero. Solo con `opacity: 0` seguiría
+     capturando el clic de quien pase por encima de un enlace invisible.
+  */
+  .scroll-cue {
+    animation: motion-float 2.2s var(--ease-in-out) infinite;
+    transition:
+      opacity 400ms var(--ease-out),
+      visibility 400ms var(--ease-out),
+      color var(--dur-hover) var(--ease-out);
+  }
+
+  .scroll-cue[data-done='true'] {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  /* ------------------------------------------------------------------------
+     Lo que pasa al poner el puntero sobre una tarjeta de servicio.
+
+     Son tres cosas a la vez —halo, icono y filo— y funcionan como una: la
+     tarjeta se enciende con el color de su propio servicio. Van dentro de la
+     misma reja de `hover: hover` que `.lift`, por el mismo motivo: en una
+     pantalla táctil el `:hover` se queda pegado después del toque y la tarjeta
+     se quedaría encendida para siempre.
+     ------------------------------------------------------------------------ */
+
+  @media (hover: hover) and (pointer: fine) {
+    /*
+       El halo.
+
+       El original era un rectángulo con degradado y `blur` detrás de la tarjeta.
+       Aquí es una sombra de color, que da la misma lectura —la tarjeta flota
+       sobre un resplandor de su servicio— sin necesidad de un elemento extra en
+       el HTML: el truco del degradado exige que el resplandor esté *detrás* del
+       fondo de la tarjeta, y cualquier `transform` sobre la tarjeta (el de
+       `.lift`, sin ir más lejos) crea un contexto de apilamiento que lo trae
+       delante y lo estropea. La sombra no tiene ese problema.
+
+       Lo importante no es la técnica sino el reparto de tiempos, que es lo que
+       de verdad se copia: entra en 200 ms y tarda 900 en irse. Encenderse tiene
+       que ser inmediato, porque es la respuesta a que has señalado algo;
+       apagarse no responde a nada, y hacerlo despacio deja un rastro que
+       convierte pasar el ratón por encima de tres tarjetas en un recorrido en
+       lugar de en tres parpadeos.
+
+       Se escribe como `.lift.halo` y no como `.halo` a secas para no depender del
+       orden del archivo: las dos reglas tocan `box-shadow` en `:hover` con la
+       misma especificidad, y ganaría la última escrita. Con las dos clases en el
+       selector esta gana siempre, y por eso incluye también la sombra de
+       elevación — es la suma de las dos, no su sustituta.
+    */
+    .halo {
+      transition: box-shadow 900ms var(--ease-out);
+    }
+
+    .lift.halo:hover {
+      box-shadow:
+        var(--shadow-raised),
+        0 6px 28px -6px color-mix(in oklab, var(--service) 55%, transparent);
+      transition-duration: 200ms;
+    }
+
+    /* El icono crece un punto cuando se señala la tarjeta entera, no solo el
+       icono. Es la misma idea que `.nudge`: la pieza pequeña reacciona a que has
+       señalado la grande. 1.08 y no 1.1 porque el icono vive dentro de una caja
+       de 48 px con esquinas redondeadas, y a 1.1 el trazo empieza a rozar el
+       borde. */
+    .group:hover .pop-icon {
+      transform: scale(1.08);
+    }
+
+    .edge-glow:hover::after {
+      opacity: 1;
+    }
+  }
+
+  /*
+     El filo inferior.
+
+     Una línea del color del servicio que se enciende de lado a lado, con los
+     extremos difuminados para que no parezca un borde mal puesto. Es lo único
+     que sobrevive de la tarjeta-cartelera del original, que además hacía zoom
+     sobre su propia fotografía; aquí las tarjetas no llevan imagen, así que ese
+     trozo se quedó fuera en lugar de inventarle una foto que la portada no
+     tiene.
+
+     Se declara fuera de la reja de `hover` porque `content` y la posición no son
+     movimiento: sin esto, en una pantalla táctil el pseudo-elemento no existiría
+     y la regla de dentro no tendría a qué aplicarse. Nace apagado en todas
+     partes y solo hay un sitio que lo encienda.
+  */
+  .edge-glow {
+    position: relative;
+  }
+
+  .edge-glow::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    opacity: 0;
+    background: linear-gradient(90deg, transparent, var(--service), transparent);
+    transition: opacity var(--dur-hover) var(--ease-out);
+    pointer-events: none;
+  }
+
+  .pop-icon {
+    transition: transform var(--dur-hover) var(--ease-out);
+  }
+
+  /*
+     Elevación larga, solo para la portada.
+
+     `.lift` sube 2 px, y esa medida está pensada para una consola: se usa sobre
+     listas de veinte filas, donde un salto mayor convierte recorrer la lista en
+     un oleaje. La portada tiene tres tarjetas separadas por 32 px de aire y se
+     mira, no se recorre; ahí 2 px casi no se ven.
+
+     6 px es la mitad de camino hacia los 10 px del original. Los 10 completos no
+     fallan por tamaño sino por el hueco que dejan: la tarjeta se despega tanto
+     del sitio que ocupa que se ve moverse el borde de la de al lado por debajo.
+     A 6 px se levanta claramente y sigue pareciendo que sigue ahí.
+
+     Va después de `.lift` a propósito: misma especificidad, así que decide el
+     orden, y en las tarjetas que llevan las dos tiene que ganar esta.
+  */
+  @media (hover: hover) and (pointer: fine) {
+    .lift-lg:hover {
+      transform: translateY(-6px);
+    }
+  }
+
+  /* ========================================================================
+     Movimiento reducido
+
+     No es un interruptor de apagado. Quien activa esta preferencia suele
+     hacerlo porque el desplazamiento le marea, no porque le moleste que algo
+     cambie de color: quitar los fundidos también le quita las pistas de qué
+     acaba de cambiar en la pantalla.
+
+     Así que se conserva la opacidad y desaparece todo lo que se desplaza,
+     escala o rebota. La regla anterior era un `*` que ponía todas las
+     duraciones a 0.01 ms; eso dejaba además el indicador de carga congelado en
+     un fotograma, pareciendo colgado.
+     ======================================================================== */
+
   @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
+    html {
+      scroll-behavior: auto;
+    }
+
+    .anim-rise,
+    .anim-page,
+    .anim-drop,
+    .anim-pop,
+    .anim-panel,
+    .anim-sheet,
+    .anim-step-forward,
+    .anim-step-back,
+    .stagger > * {
+      animation: motion-fade var(--dur-pop) var(--ease-out) both;
+    }
+
+    /*
+       Los gestos de portada caen al mismo fundido que todo lo demás.
+
+       Los tres tienen recorrido: el antetítulo se separa, la regla se descubre
+       de lado a lado y el anuncio se enfoca mientras crece. De los tres se
+       conserva lo único que no se mueve —que aparezcan— y se tira el resto.
+
+       `.anim-pop-blur` además pierde el desenfoque, que no es desplazamiento
+       pero sigue siendo la imagen cambiando bajo la vista de quien pidió que
+       dejara de cambiar.
+    */
+    .track-in,
+    .reveal[data-visible='true'] .track-in,
+    .wipe,
+    .reveal[data-visible='true'] .wipe,
+    .anim-pop-blur {
+      animation: motion-fade var(--dur-pop) var(--ease-out) both;
+    }
+
+    .anim-fade-out,
+    .anim-pop-out,
+    .anim-panel-out,
+    .anim-sheet-out {
+      animation: motion-fade-out 150ms var(--ease-out) both;
+    }
+
+    .stagger > * {
+      animation-delay: 0ms;
+    }
+
+    /* Todo lo que se desplaza al pasar por encima o al pulsar deja de hacerlo.
+       El color y la sombra del `hover` se quedan: siguen diciendo qué está
+       señalado, y no son movimiento. */
+    .press:active,
+    .lift:hover,
+    .lift-lg:hover,
+    .swell:hover,
+    .group:hover .nudge,
+    .group:hover .nudge-back,
+    .group:hover .pop-icon {
+      transform: none;
+    }
+
+    /*
+       El halo y el filo se quedan.
+
+       Son color, no movimiento, y son justo el tipo de pista que esta
+       preferencia no debería costar: sin ellos, sobre una tarjeta que ya no se
+       levanta, no quedaría ninguna señal de cuál está señalada. Lo que sí se va
+       es el retardo largo de apagado — con 900 ms de rastro y sin el
+       desplazamiento que lo acompañaba, el color se queda encendido detrás del
+       puntero y parece que la tarjeta sigue seleccionada.
+    */
+    .halo,
+    .lift.halo:hover {
+      transition-duration: var(--dur-hover);
+    }
+
+    .reveal[data-visible='true'] {
+      animation: motion-fade var(--dur-modal) var(--ease-out);
+    }
+
+    .shimmer::after {
+      animation: none;
+    }
+
+    /* La foto se queda donde estaba: sin recorrido, no hay nada que asentar. */
+    .anim-hero-image {
+      animation: none;
+    }
+
+    /* El acordeón abre y cierra de golpe. Es lo único que aquí pierde su
+       animación entera en lugar de suavizarse: el movimiento *era* el
+       despliegue, y un despliegue lento sin desplazamiento no existe. Lo que
+       importa —que el texto esté o no esté— se sigue viendo igual. */
+    .disclosure {
+      transition: none;
+    }
+
+    .chevron {
+      transition: none;
+    }
+
+    /*
+       La flecha de la portada deja de flotar y se queda donde estaba. Es la
+       única animación perpetua del sitio público, y era además de las que peor
+       sientan a quien marea el movimiento: sube y baja sin parar sobre una
+       fotografía. Sigue estando, sigue apuntando hacia abajo y sigue
+       retirándose al primer desplazamiento; simplemente no se mueve.
+    */
+    .scroll-cue {
+      animation: none;
+    }
+
+    /* El punto de "está pasando ahora" sigue latiendo, pero solo en opacidad:
+       el anillo que se expandía era movimiento. Apagarlo del todo costaría la
+       única señal de que el servicio está en curso. */
+    .pulse-dot {
+      animation: motion-dim 2s ease-in-out infinite;
+    }
+  }
+
+  @keyframes motion-dim {
+    50% {
+      opacity: 0.55;
     }
   }
 }

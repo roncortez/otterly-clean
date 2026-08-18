@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Building2, CalendarOff, Megaphone, Sparkles } from 'lucide-react';
 import { PageHeader, cx } from '@/shared/ui';
 import { UploadConfigProvider } from './UploadConfigContext';
@@ -18,6 +18,8 @@ const TABS = [
 ];
 
 export default function ConfigurationLayout() {
+  const location = useLocation();
+
   return (
     // Las capacidades de subida se consultan una vez para toda la sección.
     <UploadConfigProvider>
@@ -47,7 +49,12 @@ export default function ConfigurationLayout() {
         ))}
       </nav>
 
-      <Outlet />
+      {/* La pestaña activa ya se marca con el borde inferior; el contenido entra
+          además desde abajo para que se vea que cambió lo de dentro y no solo
+          la pestaña. */}
+      <div key={location.pathname} className="anim-page">
+        <Outlet />
+      </div>
     </UploadConfigProvider>
   );
 }

@@ -5,7 +5,6 @@ import {
   ShieldCheck,
   Clock,
   ChevronDown,
-  ChevronUp,
   Key,
   Award,
   ArrowRight,
@@ -23,6 +22,7 @@ import { useTranslation } from '@/shared/i18n/I18nContext';
 import { useConfig } from '@/shared/config/ConfigContext';
 import { useServiceExperiences } from '@/shared/services';
 import ServicePicker from '@/shared/services/ServicePicker';
+import { useRevealOnScroll } from '@/shared/hooks/useRevealOnScroll';
 import { Button, ButtonLink, Card, SectionHeading, cx } from '@/shared/ui';
 
 /** Etiqueta corta de cada servicio en la portada; el resto viene del backend. */
@@ -40,6 +40,49 @@ export default function HomePage() {
   const [showOverlay, setShowOverlay] = useState(true);
   const [openFaq, setOpenFaq] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  /*
+    La portada es la única pantalla del producto que se lee de arriba abajo una
+    vez, en lugar de consultarse a diario. Es el sitio —el único— donde hacer
+    que el contenido aparezca al llegar a él marca el ritmo de lectura en vez de
+    estorbar. En las consolas internas esto mismo sería una tortura diaria.
+  */
+  const revealRef = useRevealOnScroll();
+
+  /*
+    La flecha de "sigue bajando" del hero, y el momento en que sobra.
+
+    Es la única cosa de la portada que se mueve sola, así que tiene que ganarse
+    el sitio: sirve mientras la primera pantalla ocupa el alto entero y parece
+    que la página se acaba ahí. En cuanto se baja, ya no dice nada que no sepas,
+    y una animación en bucle que no dice nada es ruido sobre la fotografía.
+
+    Se apaga al primer desplazamiento y no vuelve. Cuando eso pasa, el efecto se
+    vuelve a ejecutar y ya no se suscribe: el listener se retira solo en cuanto
+    deja de tener nada que decidir, en vez de seguir corriendo en cada fotograma
+    de desplazamiento durante el resto de la visita.
+
+    `passive` porque no se cancela el evento: sin la marca, el navegador tiene
+    que esperar a ver si este listener llama a `preventDefault` antes de mover la
+    página, y eso es exactamente el tirón que se nota al empezar a bajar.
+
+    El valor inicial se lee en el primer render y no dentro del efecto. Se llega
+    aquí con la página ya desplazada más veces de las que parece —volviendo
+    atrás desde una reserva, o con `#faqs` en la dirección—, y comprobarlo dentro
+    del efecto significaría pintar la flecha un fotograma antes de quitarla.
+  */
+  const [scrolled, setScrolled] = useState(() => window.scrollY > 24);
+
+  useEffect(() => {
+    if (scrolled) return undefined;
+
+    const onScroll = () => {
+      if (window.scrollY > 24) setScrolled(true);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [scrolled]);
 
   useEffect(() => {
     async function fetchBanner() {
@@ -102,7 +145,7 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-surface font-sans text-text antialiased">
+    <div ref={revealRef} className="min-h-screen bg-surface font-sans text-text antialiased">
       {/* Banner promocional emergente */}
       <Overlay
         isOpen={showOverlay && banner?.enabled !== false}
@@ -127,14 +170,48 @@ export default function HomePage() {
           <img
             src="/hero_background.png"
             alt="Otterly Clean Interior"
-            className="h-full w-full scale-105 object-cover object-center transition-transform duration-1000"
+            className="anim-hero-image h-full w-full scale-105 object-cover object-center"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-forest-950/95 via-forest-950/65 to-forest-950/40" />
         </div>
 
         <div className="relative z-10 mx-auto my-auto flex w-full max-w-6xl flex-col gap-10 pt-4 text-left lg:flex-row lg:items-end lg:justify-between">
-          {/* Titular, apoyo y llamadas a la acción */}
-          <div className="max-w-3xl space-y-5 sm:space-y-6">
+          {/*
+            Titular, apoyo y llamadas a la acción.
+
+            Entran en cascada, en el orden en que se leen: primero qué es esto,
+            después por qué, y al final qué puedes hacer. Todo a la vez sería la
+            misma información, pero obligaría a decidir por dónde empezar a
+            mirar; escalonado, la página lo decide por ti y no cuesta nada.
+          */}
+          <div className="stagger max-w-3xl space-y-5 sm:space-y-6">
+            {/*
+              El antetítulo se abre separando las letras antes de que llegue el
+              titular. Es el gesto de portada de la otra aplicación de la casa,
+              y aquí hace lo mismo que allí: convierte una línea de texto suelta
+              en el telón que sube.
+
+              Va oculto en móvil y no por falta de sitio en vertical, sino
+              porque la frase entera no cabe en una línea a esa anchura, y
+              `track-in` la reparte a lo ancho mientras se anima: en dos líneas
+              el salto de palabra cambiaría a mitad del gesto y se vería el texto
+              recolocarse. `whitespace-nowrap` deja escrito que esto cuenta con
+              una sola línea, para que no se rompa si mañana alguien lo enseña
+              antes de `sm`.
+
+              El texto ya existía en los dos idiomas (`hero.verifiedBadge`) y no
+              lo usaba nadie: es exactamente lo que decía la portada antes de
+              tener dónde ponerlo.
+            */}
+            {/* `forest-100` y no `forest-200`, que es el verde con el que se
+                escriben los antetítulos sobre fondo oscuro en el resto del
+                sitio: aquí el fondo no es un color plano sino una fotografía, y
+                justo detrás de esta línea cae la zona más clara de la imagen —
+                el ventanal—. A 11 px en versalitas, ese contraste no daba. */}
+            <span className="track-in hidden text-[11px] font-semibold text-forest-100 uppercase drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)] sm:inline-block sm:whitespace-nowrap">
+              {t('hero.verifiedBadge')}
+            </span>
+
             <h1 className="text-3xl leading-tight font-extrabold tracking-tight text-white sm:text-5xl sm:leading-[1.08] lg:text-6xl xl:text-7xl">
               {t('hero.titlePart1')}
               <span className="font-serif font-normal text-forest-100 italic">
@@ -172,8 +249,12 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Garantías en una línea por ítem */}
-          <div className="flex shrink-0 flex-wrap items-center gap-4 border-t border-white/15 pt-6 sm:gap-8 lg:gap-10 lg:border-t-0 lg:pt-0">
+          {/* Garantías en una línea por ítem. Llegan detrás del titular: son el
+              respaldo de lo que se acaba de prometer, no la promesa. */}
+          <div
+            className="anim-rise flex shrink-0 flex-wrap items-center gap-4 border-t border-white/15 pt-6 sm:gap-8 lg:gap-10 lg:border-t-0 lg:pt-0"
+            style={{ animationDelay: '180ms' }}
+          >
             {HERO_METRICS.map((metric, index) => (
               <React.Fragment key={metric.title}>
                 {index > 0 && (
@@ -189,6 +270,35 @@ export default function HomePage() {
             ))}
           </div>
         </div>
+
+        {/*
+          «Hay más abajo».
+
+          El hero ocupa el alto entero de la ventana y termina en un borde
+          limpio, así que sin esto la portada parece que se acaba en la primera
+          pantalla. Es un enlace de verdad y no un adorno: se puede pulsar, y
+          lleva a la sección siguiente con el desplazamiento suave que ya usa el
+          menú de la cabecera.
+
+          Se retira al primer desplazamiento (`data-done`) — ver el efecto de
+          arriba. Va oculta en móvil: en un teléfono nadie duda de que se
+          desplaza, y ahí compite por el poco sitio que queda bajo el botón
+          principal.
+
+          `aria-hidden` sin quitarlo del tabulador sería una trampa; se hace al
+          revés — se esconde entero de la accesibilidad con `tabIndex={-1}`,
+          porque lo que ofrece (bajar a «Cómo funciona») ya está en el menú de la
+          cabecera y en el pie, escrito con palabras.
+        */}
+        <a
+          href="#how-it-works"
+          aria-hidden="true"
+          tabIndex={-1}
+          data-done={scrolled}
+          className="scroll-cue absolute inset-x-0 bottom-6 z-10 mx-auto hidden w-fit rounded-full p-2 text-white/45 hover:text-white sm:block"
+        >
+          <ChevronDown className="size-7" />
+        </a>
       </section>
 
       {/* =========================================================================
@@ -196,18 +306,28 @@ export default function HomePage() {
          ========================================================================= */}
       <section id="how-it-works" className="mx-auto max-w-6xl px-6 py-20">
         <SectionHeading
+          className="reveal"
           eyebrow={t('howItWorks.step')}
           title={t('howItWorks.title')}
           description={t('howItWorks.subtitle')}
         />
 
         <div className="mt-14 grid gap-8 md:grid-cols-3">
-          {STEPS.map((step) => (
+          {STEPS.map((step, index) => (
             <Card
               key={step.n}
-              className="flex flex-col items-center p-8 text-center transition-shadow hover:shadow-[var(--shadow-raised)]"
+              interactive
+              className="reveal lift-lg group flex flex-col items-center p-8 text-center"
+              /* Los tres pasos aparecen en orden 01 → 02 → 03. El retraso va
+                 aquí y no en `.stagger` porque estas tarjetas no entran al
+                 montarse sino al llegar a ellas desplazándose. */
+              style={{ animationDelay: `${index * 90}ms` }}
             >
-              <div className="flex size-12 items-center justify-center rounded-full bg-forest-50 text-sm font-bold text-forest-700 tnum">
+              {/* El número crece un punto al señalar la tarjeta. Aquí no hay
+                  halo: estas tres no llevan color de servicio —son un proceso,
+                  no tres servicios— y encenderlas todas del mismo verde las
+                  convertiría en tres botones. */}
+              <div className="pop-icon flex size-12 items-center justify-center rounded-full bg-forest-50 text-sm font-bold text-forest-700 tnum">
                 {step.n}
               </div>
               <h3 className="mt-6 text-lg font-bold tracking-tight text-text">{step.title}</h3>
@@ -223,23 +343,41 @@ export default function HomePage() {
       <section id="services" className="border-y border-border bg-surface-raised px-6 py-20">
         <div className="mx-auto max-w-6xl">
           <SectionHeading
+            className="reveal"
             eyebrow={t('services.tag')}
             title={t('services.title')}
             description={t('services.subtitle')}
           />
 
           <div className="mt-14 grid gap-8 md:grid-cols-3">
-            {CATEGORIES.map((cat) => {
+            {CATEGORIES.map((cat, index) => {
               const Icon = cat.icon;
               return (
                 <div
                   key={cat.key}
                   data-service={cat.key}
-                  className="flex flex-col justify-between rounded-2xl border border-border bg-surface p-8 transition-all hover:border-service/40 hover:bg-surface-raised hover:shadow-[var(--shadow-raised)]"
+                  style={{ animationDelay: `${index * 90}ms` }}
+                  /* `transition-all` incluía el ancho, la altura y la posición:
+                     tres propiedades que obligan a rehacer el diseño en cada
+                     fotograma para animar un borde y un fondo. Se nombran las
+                     dos que de verdad cambian; la elevación la pone `lift`, que
+                     además la esconde en pantallas táctiles, donde el `:hover`
+                     se queda pegado después de tocar.
+
+                     `lift-lg`, `halo` y `edge-glow` son las tres piezas del
+                     gesto de portada: la tarjeta sube más que en una consola (6
+                     px en vez de 2, hay sitio de sobra), se enciende con un
+                     resplandor de su propio color y se remata con un filo
+                     abajo. Son tres clases y no una porque cada una responde a
+                     una pregunta distinta —cuánto sube, de qué color se
+                     enciende, qué la cierra— y así se pueden usar por separado
+                     donde haga falta. `overflow-hidden` es para el filo: sin él
+                     asoma por las esquinas redondeadas. */
+                  className="reveal lift lift-lg halo edge-glow group flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-surface p-8 transition-[background-color,border-color] hover:border-service/40 hover:bg-surface-raised"
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <div className="flex size-12 items-center justify-center rounded-xl bg-service-soft text-service-strong">
+                      <div className="pop-icon flex size-12 items-center justify-center rounded-xl bg-service-soft text-service-strong">
                         <Icon className="size-6" aria-hidden="true" />
                       </div>
                       {cat.badge && (
@@ -260,12 +398,15 @@ export default function HomePage() {
                     {cat.link ? (
                       <Link
                         to={cat.link}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-service-strong transition-colors hover:opacity-80"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-service-strong transition-[color,opacity] hover:opacity-80"
                       >
                         <span>
                           {t('services.bookAction')} {cat.label.toLowerCase()}
                         </span>
-                        <ArrowRight className="size-3.5" aria-hidden="true" />
+                        {/* La flecha se adelanta cuando el puntero está sobre la
+                            tarjeta entera, no solo sobre el enlace: la tarjeta
+                            es lo que se señala. */}
+                        <ArrowRight className="nudge size-3.5" aria-hidden="true" />
                       </Link>
                     ) : (
                       <span className="text-xs font-medium text-text-subtle">Próximamente</span>
@@ -284,7 +425,7 @@ export default function HomePage() {
       <section id="about" className="bg-forest-900 px-6 py-24 text-white">
         <div className="mx-auto max-w-6xl">
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-            <div>
+            <div className="reveal">
               <span className="text-xs font-semibold tracking-[0.14em] text-forest-200 uppercase">
                 {t('about.tag')}
               </span>
@@ -301,14 +442,16 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Tarjetas de garantía */}
+            {/* Tarjetas de garantía. Entran después del texto que las anuncia y
+                escalonadas entre sí: son cuatro promesas, no un bloque. */}
             <div className="grid gap-4 sm:grid-cols-2">
-              {GUARANTEES.map(({ icon: Icon, title, desc }) => (
+              {GUARANTEES.map(({ icon: Icon, title, desc }, index) => (
                 <div
                   key={title}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
+                  style={{ animationDelay: `${140 + index * 80}ms` }}
+                  className="reveal lift lift-lg group rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
                 >
-                  <Icon className="size-8 text-sage-300" aria-hidden="true" />
+                  <Icon className="pop-icon size-8 text-sage-300" aria-hidden="true" />
                   <h3 className="mt-4 text-base font-bold tracking-tight text-white">{title}</h3>
                   <p className="mt-2 text-xs leading-relaxed text-forest-100">{desc}</p>
                 </div>
@@ -324,6 +467,7 @@ export default function HomePage() {
       <section id="faqs" className="border-t border-border bg-surface px-6 py-20">
         <div className="mx-auto max-w-4xl">
           <SectionHeading
+            className="reveal"
             eyebrow={t('faqs.tag')}
             title={t('faqs.title')}
             description={t('faqs.subtitle')}
@@ -333,7 +477,7 @@ export default function HomePage() {
             {FAQS.map((faq, idx) => {
               const isOpen = openFaq === idx;
               return (
-                <Card key={idx} className="overflow-hidden">
+                <Card key={idx} className="reveal overflow-hidden">
                   <button
                     type="button"
                     onClick={() => toggleFaq(idx)}
@@ -344,18 +488,41 @@ export default function HomePage() {
                     )}
                   >
                     <span>{faq.question}</span>
-                    {isOpen ? (
-                      <ChevronUp className="size-4 shrink-0 text-forest-700" aria-hidden="true" />
-                    ) : (
-                      <ChevronDown className="size-4 shrink-0 text-text-subtle" aria-hidden="true" />
-                    )}
+                    {/*
+                      Antes se intercambiaban dos iconos distintos. El cambio era
+                      instantáneo y no contaba nada: veías una flecha hacia
+                      abajo y de pronto una hacia arriba, sin saber si acababas
+                      de abrir o de cerrar. Girando la misma flecha, el gesto es
+                      el que se ve.
+                    */}
+                    <ChevronDown
+                      className={cx(
+                        'chevron size-4 shrink-0',
+                        isOpen ? 'text-forest-700' : 'text-text-subtle',
+                      )}
+                      aria-hidden="true"
+                    />
                   </button>
 
-                  {isOpen && (
-                    <div className="border-t border-border px-6 pt-4 pb-6 text-xs leading-relaxed text-text-muted">
-                      {faq.answer}
+                  {/*
+                    La respuesta se despliega en lugar de aparecer de golpe. El
+                    contenido sigue en el DOM cuando está cerrado —lo esconde el
+                    `overflow` de la fila de altura cero—, que es lo que permite
+                    animar hasta su alto real sin medirlo a mano. Ver `.disclosure`.
+                  */}
+                  {/*
+                    `inert` cuando está cerrada. El texto sigue en el DOM para
+                    poder animarlo, y sin esto un lector de pantalla leería las
+                    cuatro respuestas seguidas como si estuvieran todas abiertas,
+                    y el tabulador se pararía en enlaces que nadie ve.
+                  */}
+                  <div className="disclosure" data-open={isOpen} inert={!isOpen}>
+                    <div>
+                      <div className="border-t border-border px-6 pt-4 pb-6 text-xs leading-relaxed text-text-muted">
+                        {faq.answer}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </Card>
               );
             })}
@@ -392,7 +559,7 @@ function CompanyFooter({ company, t }) {
   return (
     <footer className="border-t border-border bg-surface-raised">
       <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="flex flex-wrap items-start justify-between gap-8">
+        <div className="reveal flex flex-wrap items-start justify-between gap-8">
           <div>
             <BrandMark size="lg" />
             {company.supportHours ? (

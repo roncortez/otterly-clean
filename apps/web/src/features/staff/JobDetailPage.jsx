@@ -156,9 +156,9 @@ export default function JobDetailPage() {
       <button
         type="button"
         onClick={() => navigate('/trabajo')}
-        className="flex items-center gap-1.5 text-sm font-medium text-text-muted"
+        className="group flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text"
       >
-        <ArrowLeft className="size-4" aria-hidden="true" />
+        <ArrowLeft className="nudge-back size-4" aria-hidden="true" />
         Mis trabajos
       </button>
 
@@ -185,7 +185,9 @@ export default function JobDetailPage() {
           el que está en la puerta.
         */}
         {point && !mapFailed && (
-          <Suspense fallback={<div className="h-44 w-full animate-pulse bg-surface-sunken" />}>
+          /* Mismo esqueleto con brillo que el resto de los mapas: el trabajador
+             lo ve con el teléfono en la calle, donde la carga tarda más. */
+          <Suspense fallback={<div className="shimmer h-44 w-full bg-surface-sunken" />}>
             <MapCanvas
               point={point}
               center={point}
@@ -512,9 +514,22 @@ export default function JobDetailPage() {
           </button>
         ))}
 
-      {/* Acción principal fija: siempre a mano */}
+      {/*
+        Acción principal fija: siempre a mano.
+
+        La barra sube desde el borde inferior, que es de donde viene. Aparece y
+        desaparece según el estado del trabajo —al confirmar, al terminar—, y
+        materializándose sobre el contenido cuesta un segundo entender si es
+        parte de la página o algo que acaba de llegar. La `key` con el estado la
+        vuelve a montar en cada cambio, así que el botón nuevo entra en lugar de
+        cambiar de texto en el sitio: lo que hay que pulsar ahora no es lo mismo
+        que había que pulsar hace un momento.
+      */}
       {(needsAccept || primaryAction) && (
-        <div className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface-raised/95 px-4 pt-3 backdrop-blur">
+        <div
+          key={needsAccept ? 'aceptar' : primaryAction.to}
+          className="anim-sheet safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface-raised/95 px-4 pt-3 backdrop-blur"
+        >
           <div className="mx-auto max-w-2xl">
             {needsAccept ? (
               <Button

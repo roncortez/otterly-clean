@@ -28,7 +28,8 @@ export function ServiceCard({ order, to, showPrice = true, money }) {
     <Card
       as={Link}
       to={to}
-      className="group block transition-shadow hover:shadow-[var(--shadow-raised)]"
+      interactive
+      className="group block"
     >
       <div className="flex items-start gap-4 p-4 sm:p-5">
         {/*
@@ -73,10 +74,7 @@ export function ServiceCard({ order, to, showPrice = true, money }) {
           {showPrice && order.totalAmount !== undefined && money && (
             <span className="font-semibold text-text tnum">{money(order.totalAmount)}</span>
           )}
-          <ChevronRight
-            className="size-5 text-text-subtle transition-transform group-hover:translate-x-0.5"
-            aria-hidden="true"
-          />
+          <ChevronRight className="nudge size-5 text-text-subtle" aria-hidden="true" />
         </div>
       </div>
     </Card>

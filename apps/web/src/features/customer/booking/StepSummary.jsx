@@ -97,7 +97,13 @@ export default function StepSummary({
       {!pricing ? (
         <Spinner label="Calculando el total" />
       ) : (
-        <div className="rounded-xl bg-surface-sunken p-5">
+        /*
+          El total sustituye al indicador de carga, y es la cifra por la que se
+          entró en esta pantalla. Entrando en lugar de aparecer en el hueco que
+          deja el indicador, el cambio se lee como «ya está calculado» y no como
+          un salto del diseño.
+        */
+        <div className="anim-rise rounded-xl bg-surface-sunken p-5">
           <dl className="space-y-2">
             {extraLines.map((line, index) => (
               <div key={`${line.code}-${index}`} className="flex justify-between gap-4 text-sm">

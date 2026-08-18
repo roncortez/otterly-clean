@@ -102,7 +102,10 @@ function ReplacePropertyModal({
               type="button"
               onClick={() => onSelect(prop)}
               className={cx(
-                'w-full rounded-xl border p-4 text-left transition-all',
+                'press w-full rounded-xl border p-4 text-left',
+                // El anillo de la selección es una sombra: si no se nombra, el
+                // fondo se funde y el anillo salta.
+                'transition-[background-color,border-color,box-shadow]',
                 selected
                   ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
                   : 'border-border hover:border-border-strong hover:bg-surface-sunken',
@@ -1088,7 +1091,8 @@ function AddressCard({ address, selected, onSelect }) {
       onClick={onSelect}
       aria-pressed={selected}
       className={cx(
-        'flex w-full cursor-pointer items-start gap-3.5 rounded-xl border p-4 text-left transition-all',
+        'press flex w-full cursor-pointer items-start gap-3.5 rounded-xl border p-4 text-left',
+        'transition-[background-color,border-color,box-shadow]',
         selected
           ? 'border-forest-500 bg-forest-50 ring-2 ring-forest-500/20'
           : 'border-border hover:border-border-strong hover:bg-surface-sunken',

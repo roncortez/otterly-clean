@@ -1,4 +1,4 @@
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -29,6 +29,7 @@ const NAV = [
 /** Consola de operaciones: barra lateral fija, densidad alta. */
 export default function OperationsLayout() {
   const { user, logout, hasRole } = useAuth();
+  const location = useLocation();
 
   return (
     <div className="min-h-dvh bg-surface lg:flex">
@@ -79,7 +80,7 @@ export default function OperationsLayout() {
             <button
               type="button"
               onClick={logout}
-              className="rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
+              className="press rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
               aria-label="Cerrar sesión"
             >
               <LogOut className="size-4" aria-hidden="true" />
@@ -95,7 +96,7 @@ export default function OperationsLayout() {
           <button
             type="button"
             onClick={logout}
-            className="rounded-full p-2 text-text-muted"
+            className="press rounded-full p-2 text-text-muted transition-colors hover:bg-surface-sunken hover:text-text"
             aria-label="Cerrar sesión"
           >
             <LogOut className="size-4.5" aria-hidden="true" />
@@ -120,7 +121,9 @@ export default function OperationsLayout() {
         </nav>
       </header>
 
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      {/* Aquí es donde más se nota que la entrada sea corta: Operaciones salta
+          entre solicitudes decenas de veces al día. Ver `.anim-page`. */}
+      <main key={location.pathname} className="anim-page min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <Outlet />
       </main>
     </div>

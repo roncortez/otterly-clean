@@ -180,14 +180,14 @@ export default function PropertyManager() {
           }
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="stagger grid gap-4 md:grid-cols-2">
           {properties.map((prop) => (
-            <Card key={prop.id} className="relative p-5 transition-shadow hover:shadow-[var(--shadow-raised)]">
+            <Card key={prop.id} interactive className="relative p-5">
               <div className="absolute top-3 right-3 flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => openEditModal(prop)}
-                  className="cursor-pointer rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
+                  className="press cursor-pointer rounded-full p-1.5 text-text-subtle transition-colors hover:bg-surface-sunken hover:text-text"
                   aria-label={`Editar ${prop.name}`}
                   title="Editar"
                 >
@@ -201,7 +201,7 @@ export default function PropertyManager() {
                 <button
                   type="button"
                   onClick={() => handleDelete(prop.id)}
-                  className="cursor-pointer rounded-full p-1.5 text-text-subtle transition-colors hover:bg-danger-soft hover:text-danger"
+                  className="press cursor-pointer rounded-full p-1.5 text-text-subtle transition-colors hover:bg-danger-soft hover:text-danger"
                   aria-label={`Eliminar ${prop.name}`}
                   title="Eliminar"
                 >

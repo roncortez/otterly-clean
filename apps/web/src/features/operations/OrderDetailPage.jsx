@@ -98,9 +98,9 @@ export default function OrderDetailPage() {
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="flex items-center gap-1.5 text-sm font-medium text-text-muted hover:text-text"
+        className="group flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text"
       >
-        <ArrowLeft className="size-4" aria-hidden="true" />
+        <ArrowLeft className="nudge-back size-4" aria-hidden="true" />
         Volver
       </button>
 

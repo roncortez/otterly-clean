@@ -55,8 +55,9 @@ export default function DashboardPage() {
         }
       />
 
-      {/* Métricas: lo urgente destaca en color, el resto es neutro */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Métricas: lo urgente destaca en color, el resto es neutro. Entran en
+          cascada de izquierda a derecha, en el orden en que se leen. */}
+      <div className="stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Servicios del día" value={totalToday} icon={CheckCircle2} />
         <Metric
           label="Sin asignar"
@@ -93,12 +94,15 @@ export default function DashboardPage() {
               description="Cuando entre una solicitud nueva aparecerá aquí."
             />
           ) : (
-            <ul className="space-y-2">
+            /* La cola real del operador. La cascada la hace contable de un
+               vistazo —se ve cuántas son mientras entran— sin obligar a leer el
+               número de la cabecera. */
+            <ul className="stagger space-y-2">
               {unassigned.map((order) => (
                 <li key={order.id}>
                   <Link
                     to={`/operaciones/solicitudes/${order.id}`}
-                    className="flex items-center justify-between gap-4 rounded-xl border border-accent-200 bg-accent-50/60 px-4 py-3 transition-colors hover:bg-accent-50"
+                    className="press group flex items-center justify-between gap-4 rounded-xl border border-accent-200 bg-accent-50/60 px-4 py-3 transition-colors hover:bg-accent-50"
                   >
                     <div className="min-w-0">
                       <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-text">
@@ -115,7 +119,7 @@ export default function DashboardPage() {
                     </div>
                     <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent-600 px-3.5 py-1.5 text-xs font-semibold text-white">
                       Asignar
-                      <ArrowRight className="size-3.5" aria-hidden="true" />
+                      <ArrowRight className="nudge size-3.5" aria-hidden="true" />
                     </span>
                   </Link>
                 </li>
@@ -156,7 +160,15 @@ export default function DashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {todayOrders.map((order) => (
-                    <tr key={order.id} className="group">
+                    /* Las filas NO entran escalonadas. Esta tabla se relee
+                       decenas de veces al día y con cada cambio de fecha; una
+                       cascada aquí sería una espera diaria. Lo único que se
+                       añade es el fondo al pasar por encima, que ayuda a no
+                       perder la fila en una tabla de cinco columnas. */
+                    <tr
+                      key={order.id}
+                      className="group transition-colors hover:bg-surface-sunken/60"
+                    >
                       <td className="py-3 whitespace-nowrap text-text-muted tnum">
                         {formatTimeWindow(order.scheduledWindowStart, order.scheduledWindowEnd)}
                       </td>
@@ -244,7 +256,7 @@ function Metric({ label, value, icon: Icon, tone = 'neutral', to }) {
   };
 
   const content = (
-    <div className={cx('rounded-2xl border p-4 transition-shadow', tones[tone], to && 'hover:shadow-[var(--shadow-card)]')}>
+    <div className={cx('rounded-2xl border p-4', tones[tone], to && 'lift')}>
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium opacity-80">{label}</p>
         <Icon className="size-4 opacity-60" aria-hidden="true" />

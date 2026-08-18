@@ -170,8 +170,19 @@ export default function AddressAutocomplete({ bias, countryCode, onSelect, class
         )}
       </div>
 
+      {/*
+        El panel crece desde el borde superior, que es donde está el campo del
+        que sale. Es la diferencia entre un panel que parece desplegarse del
+        buscador y uno que parece caído encima de la página: el `transform-origin`
+        por defecto en CSS es el centro, y desde el centro un desplegable se abre
+        también hacia arriba, hacia el campo, que es justo lo contrario de lo que
+        acaba de pasar.
+
+        Es corto (200 ms) porque se abre mientras se escribe: se ve muchas veces
+        seguidas en la misma búsqueda.
+      */}
       {showPanel && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+        <div className="anim-panel absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
           <ul id={listId} role="listbox" aria-label="Resultados de la búsqueda">
             {results.map((suggestion, index) => (
               <li key={suggestion.id} role="option" aria-selected={index === highlighted}>

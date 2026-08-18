@@ -179,9 +179,16 @@ export default function LocationPicker({
       ) : (
         <Suspense
           fallback={
+            /*
+              El mapa se carga aparte (es el trozo más pesado de la aplicación),
+              así que este hueco se ve de verdad y durante un rato. `animate-pulse`
+              lo hacía latir entero, que es el gesto que la interfaz reserva para
+              «esto está pasando ahora»; un brillo que recorre la superficie dice
+              «esto está llegando» sin robarle el significado al otro.
+            */
             <div
               className={cx(
-                'w-full animate-pulse rounded-xl border border-border bg-surface-sunken',
+                'shimmer w-full rounded-xl border border-border bg-surface-sunken',
                 height,
               )}
             />

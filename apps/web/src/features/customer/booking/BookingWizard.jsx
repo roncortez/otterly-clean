@@ -196,6 +196,25 @@ export default function BookingWizard() {
   // Retomar de verdad es volver al paso en que se quedó, no al primero.
   const [stepIndex, setStepIndex] = useState(() => savedDraft?.stepIndex ?? 0);
 
+  /*
+    Hacia dónde se está yendo.
+
+    Avanzar y retroceder en un asistente son cosas distintas, y si el contenido
+    entra igual en los dos casos hay un instante en que no se sabe cuál de las
+    dos acaba de ocurrir —los pasos se parecen entre sí, todos son un título y
+    un formulario dentro de la misma tarjeta—. Entrando por la derecha al
+    avanzar y por la izquierda al volver, la dirección se ve antes de leer.
+
+    Se guarda aparte del índice porque el índice solo dice dónde estás, no de
+    dónde vienes.
+  */
+  const [direction, setDirection] = useState('forward');
+
+  function goToStep(next) {
+    setDirection(next < stepIndex ? 'back' : 'forward');
+    setStepIndex(next);
+  }
+
   // Abierto de entrada: llegar a /reservar sin servicio es justamente venir a
   // elegirlo.
   const [showServiceModal, setShowServiceModal] = useState(true);
@@ -346,7 +365,9 @@ export default function BookingWizard() {
   function discardDraft() {
     clearDraft();
     setBooking(emptyBooking(requestedService ?? booking.serviceType));
-    setStepIndex(0);
+    // Volver al principio es retroceder, y el primer paso entra por la
+    // izquierda como cualquier otro paso al que se vuelve.
+    goToStep(0);
     setDraftNotice(false);
     setPricing(null);
   }
@@ -460,7 +481,7 @@ export default function BookingWizard() {
       const ok = await onNextHandlerRef.current();
       if (!ok) return;
     }
-    setStepIndex(stepIndex + 1);
+    goToStep(stepIndex + 1);
   }
 
   return (
@@ -535,26 +556,38 @@ export default function BookingWizard() {
               update({ serviceType: null });
               setShowServiceModal(true);
             } else {
-              setStepIndex(stepIndex - 1);
+              goToStep(stepIndex - 1);
             }
           }}
+          className="group"
         >
-          <ArrowLeft className="size-4" aria-hidden="true" />
+          <ArrowLeft className="nudge-back size-4" aria-hidden="true" />
           Atrás
         </Button>
       </div>
       <Card className="p-5 sm:p-7">
-        {currentStep.id === 'service'   && <StepService   {...stepProps} />}
-        {currentStep.id === 'configure' && <StepConfigure {...stepProps} />}
-        {currentStep.id === 'place'     && <StepPlace     {...stepProps} />}
-        {currentStep.id === 'schedule'  && <StepSchedule  {...stepProps} />}
+        {/*
+          La `key` es lo que hace que la animación se reproduzca en cada paso:
+          al cambiar, React monta un contenedor nuevo y la entrada arranca. Sin
+          ella el div sobreviviría a los cuatro pasos y solo se vería la primera
+          vez, que es como si no estuviera.
+        */}
+        <div
+          key={currentStep.id}
+          className={direction === 'back' ? 'anim-step-back' : 'anim-step-forward'}
+        >
+          {currentStep.id === 'service'   && <StepService   {...stepProps} />}
+          {currentStep.id === 'configure' && <StepConfigure {...stepProps} />}
+          {currentStep.id === 'place'     && <StepPlace     {...stepProps} />}
+          {currentStep.id === 'schedule'  && <StepSchedule  {...stepProps} />}
+        </div>
       </Card>
 
       <div className="mt-6 flex justify-end">
         {stepIndex < STEPS.length - 1 ? (
-          <Button size="lg" disabled={!canContinue} onClick={handleNext}>
+          <Button size="lg" disabled={!canContinue} onClick={handleNext} className="group">
             Continuar
-            <ArrowRight className="size-4" aria-hidden="true" />
+            <ArrowRight className="nudge size-4" aria-hidden="true" />
           </Button>
         ) : (
           <Button size="lg" variant="accent" disabled={!canContinue} onClick={() => setConfirmOpen(true)}>

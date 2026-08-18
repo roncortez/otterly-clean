@@ -89,8 +89,13 @@ export function LanguageSelector({ className = '', tone = 'default' }) {
   const { lang, setLanguage } = useTranslation();
   const styles = SELECTOR_TONES[tone] ?? SELECTOR_TONES.default;
 
+  /* `transition-all` incluía la fuente en negrita del estado activo, y animar el
+     grosor de la letra es lo que hacía que ES/EN temblaran al cambiar de idioma.
+     Se nombran el fondo, el color y la sombra, que es lo que de verdad cambia. */
   const optionClass = (code) =>
-    `rounded-full px-2.5 py-1 transition-all ${lang === code ? `font-bold ${styles.active}` : styles.idle}`;
+    `press rounded-full px-2.5 py-1 transition-[background-color,color,box-shadow] ${
+      lang === code ? `font-bold ${styles.active}` : styles.idle
+    }`;
 
   return (
     <div

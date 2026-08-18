@@ -113,7 +113,7 @@ export default function BlackoutsPage() {
       </div>
 
       {showForm ? (
-        <Card>
+        <Card className="anim-rise">
           <CardHeader
             title="Nuevo bloqueo"
             description="Deja el servicio sin elegir para cerrar la agenda de todos."

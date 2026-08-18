@@ -39,7 +39,7 @@ export default function JobsPage() {
           description="Cuando la empresa te asigne uno, aparecerá aquí."
         />
       ) : (
-        <div className="space-y-3">
+        <div className="stagger space-y-3">
           {today.map((job) => (
             <JobCard key={job.id} job={job} />
           ))}
@@ -51,7 +51,7 @@ export default function JobsPage() {
           <h2 className="mb-3 text-xs font-semibold tracking-[0.14em] text-forest-700 uppercase">
             Próximos
           </h2>
-          <div className="space-y-3">
+          <div className="stagger space-y-3">
             {upcoming.map((job) => (
               <JobCard key={job.id} job={job} showDate />
             ))}
@@ -70,8 +70,12 @@ function JobCard({ job, showDate = false }) {
     <Card
       as={Link}
       to={`/trabajo/${job.id}`}
+      interactive
       className={cx(
-        'block transition-shadow active:scale-[0.995]',
+        // El trabajador usa esto con el teléfono en la mano y a veces con prisa:
+        // el hundimiento al tocar es la confirmación de que la pulsación entró,
+        // antes de que la pantalla siguiente termine de cargar.
+        'press group block',
         needsAction && 'border-accent-300 ring-2 ring-accent-500/15',
       )}
     >
@@ -109,7 +113,10 @@ function JobCard({ job, showDate = false }) {
           )}
         </div>
 
-        <ChevronRight className="size-5 shrink-0 self-center text-text-subtle" aria-hidden="true" />
+        <ChevronRight
+          className="nudge size-5 shrink-0 self-center text-text-subtle"
+          aria-hidden="true"
+        />
       </div>
     </Card>
   );

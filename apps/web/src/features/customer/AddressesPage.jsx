@@ -100,8 +100,11 @@ export default function AddressesPage() {
         </div>
       )}
 
+      {/* Al abrir «editar», el formulario se despliega encima de la lista. La
+          entrada dice de dónde salió; sin ella la pantalla entera cambia de
+          largo sin avisar. */}
       {editing && (
-        <Card className="mb-6 p-5 sm:p-6">
+        <Card key={editing === 'new' ? 'nueva' : editing.id} className="anim-rise mb-6 p-5 sm:p-6">
           <h2 className="mb-5 text-lg font-bold tracking-tight text-text">
             {editing === 'new' ? 'Nueva dirección' : 'Editar dirección'}
           </h2>
@@ -124,7 +127,7 @@ export default function AddressesPage() {
           action={<Button onClick={() => setEditing('new')}>Agregar dirección</Button>}
         />
       ) : (
-        <div className="space-y-3">
+        <div className="stagger space-y-3">
           {addresses.map((address) => (
             <Card key={address.id} className="p-4 sm:p-5">
               <div className="flex items-start justify-between gap-4">

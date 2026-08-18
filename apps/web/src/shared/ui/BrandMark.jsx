@@ -37,10 +37,17 @@ export default function BrandMark({
   return (
     <span className={cx('flex items-center gap-2.5', className)}>
       {company.logoUrl ? (
+        /*
+           El logotipo lo administra Operaciones y llega con la configuración,
+           un instante después que el resto de la cabecera. La `key` reproduce
+           la entrada cuando cambia la URL, así que aparece en lugar de
+           sustituir de golpe al icono por defecto.
+        */
         <img
+          key={company.logoUrl}
           src={company.logoUrl}
           alt={name}
-          className={cx(scale.box, 'shrink-0 rounded-lg object-cover')}
+          className={cx(scale.box, 'anim-fade shrink-0 rounded-lg object-cover')}
         />
       ) : (
         <span

@@ -83,7 +83,11 @@ export default function StepSchedule({ booking, update, timeWindows }) {
         {availabilityQuery.loading ? (
           <Spinner label="Comprobando disponibilidad" />
         ) : (
-          <div className="grid gap-2.5 sm:grid-cols-3">
+          /* La `key` con la fecha vuelve a lanzar la cascada al cambiar de
+             día. Sin ella las franjas se quedan quietas mientras cambia lo que
+             hay dentro —cuál está libre y cuál no—, y el cambio de fecha parece
+             no haber hecho nada. */
+          <div key={booking.scheduledDate} className="stagger grid gap-2.5 sm:grid-cols-3">
             {timeWindows.map((window) => {
               const blocked = isBlocked(window.code);
               const reason = blockedReason(window.code);

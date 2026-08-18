@@ -87,13 +87,25 @@ export default function OrderDetailPage() {
   const staff = assignedStaff?.[0];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6" data-service={order.serviceType}>
+    /*
+      Las secciones entran en cascada. Esta pantalla se abre a propósito, para
+      mirar cómo va un servicio concreto, y el orden en que se leen es el orden
+      en que están: qué pediste, cómo va, quién lo atiende. La cascada acompaña
+      esa lectura.
+
+      La consola de Operaciones tiene una pantalla equivalente y ahí NO se hace:
+      un operador abre veinte al día y la cascada sería veinte esperas.
+    */
+    <div
+      className="stagger mx-auto max-w-3xl space-y-6"
+      data-service={order.serviceType}
+    >
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="flex items-center gap-1.5 text-sm font-medium text-text-muted hover:text-text"
+        className="group flex items-center gap-1.5 text-sm font-medium text-text-muted transition-colors hover:text-text"
       >
-        <ArrowLeft className="size-4" aria-hidden="true" />
+        <ArrowLeft className="nudge-back size-4" aria-hidden="true" />
         Volver
       </button>
 

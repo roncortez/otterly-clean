@@ -224,8 +224,11 @@ export default function StaffPage() {
         </Card>
       )}
 
+      {/* El formulario aparece donde no había nada y empuja la lista hacia
+          abajo. Entrando desde arriba se lee como un panel que se abre; sin
+          movimiento, la lista parece haber dado un salto sola. */}
       {showForm && (
-        <Card className="mb-6">
+        <Card className="anim-rise mb-6">
           <CardHeader
             title="Nuevo trabajador"
             description="Solo los datos que decide la empresa. Su perfil lo completa él al aceptar la invitación."
@@ -364,7 +367,7 @@ export default function StaffPage() {
         </Card>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="stagger grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {staff.map((member) => (
           <Card key={member.id} className={cx('p-5', !member.active && 'opacity-60')}>
             <div className="flex items-start justify-between gap-3">
@@ -392,7 +395,7 @@ export default function StaffPage() {
                 type="button"
                 onClick={() => toggleActive(member)}
                 className={cx(
-                  'shrink-0 rounded-lg p-2 transition-colors',
+                  'press shrink-0 rounded-lg p-2 transition-colors',
                   member.active
                     ? 'text-text-subtle hover:bg-danger-soft hover:text-danger'
                     : 'text-success hover:bg-success-soft',

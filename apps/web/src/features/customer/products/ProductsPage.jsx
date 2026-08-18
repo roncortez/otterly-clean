@@ -49,9 +49,9 @@ export default function ProductsPage() {
                 </h2>
               )}
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {category.items.map((product) => (
-                  <Card key={product.id} className="flex flex-col overflow-hidden">
+                  <Card key={product.id} interactive className="flex flex-col overflow-hidden">
                     {/*
                       La imagen es opcional: el catálogo arranca sin fotos y una
                       tarjeta rota por un `src` vacío se vería peor que un icono.

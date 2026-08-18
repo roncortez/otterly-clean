@@ -13,9 +13,16 @@ import { MAX_VISIBLE_STEPS, timelineWindow } from './timelineWindow';
  *
  *   ✓ Servicio solicitado          10:04
  *   ✓ Profesional asignado         11:00
- *   ● Limpieza en progreso         08:35   <- único elemento animado
+ *   ● Limpieza en progreso         08:35   <- late: está pasando ahora
  *   ○ Limpieza finalizada
  *   ╵ (se difumina)                        <- hay más, no caben
+ *
+ * Los hitos entran en cascada, de arriba abajo, en el mismo orden en que
+ * ocurrieron. Es la única lista de la aplicación donde el orden es literalmente
+ * el tiempo, así que verla montarse en ese sentido cuenta algo en lugar de
+ * decorar. Y cuando llega un estado nuevo mientras la pantalla está abierta, ese
+ * hito entra solo —React monta la fila y la animación se dispara con ella—: la
+ * persona ve aparecer lo que acaba de pasar en su casa.
  */
 
 export function StatusTimeline({ steps, locale = 'es-EC', maxVisible = MAX_VISIBLE_STEPS }) {
@@ -27,7 +34,7 @@ export function StatusTimeline({ steps, locale = 'es-EC', maxVisible = MAX_VISIB
     <div>
       {before > 0 && <Continuation count={before} direction="up" />}
 
-      <ol className="relative">
+      <ol className="stagger relative">
         {visible.map((step, index) => {
           const isLast = index === visible.length - 1;
           const isDone = step.state === 'DONE';

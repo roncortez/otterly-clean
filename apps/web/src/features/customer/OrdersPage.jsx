@@ -73,7 +73,7 @@ export default function OrdersPage({ serviceType = null }) {
             onClick={() => setFilter(entry.id)}
             aria-pressed={filter === entry.id}
             className={cx(
-              'rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
+              'press rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
               filter === entry.id
                 ? 'border-service bg-service text-white'
                 : 'border-border bg-surface-raised text-text-muted hover:border-border-strong',
@@ -102,7 +102,14 @@ export default function OrdersPage({ serviceType = null }) {
           }
         />
       ) : (
-        <div className="space-y-3">
+        /*
+          La `key` en el contenedor hace que la cascada se repita al cambiar de
+          filtro, y aquí eso no es adorno: al pulsar «En curso» la lista se
+          sustituye por otra distinta con el mismo aspecto, y sin movimiento no
+          hay forma de saber si el filtro hizo algo o no había nada que filtrar.
+          Volver a entrar responde a la pregunta antes de leer nada.
+        */
+        <div key={filter} className="stagger space-y-3">
           {orders.map((order) => (
             <ServiceCard key={order.id} order={order} to={`/servicios/${order.id}`} money={money} />
           ))}

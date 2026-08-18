@@ -177,16 +177,40 @@ export default function MapCanvas({
     }
   }, [ready, latitude, longitude, draggable]);
 
+  /*
+    Dos elementos y no uno, y la razón es importante.
+
+    El fundido de entrada tiene que ir en el envoltorio, NUNCA en el nodo que se
+    le entrega a MapLibre. MapLibre le añade a su contenedor la clase
+    `maplibregl-map` por su cuenta (`classList.add`, después del montaje), y de
+    esa clase cuelga el `position: relative` que ancla el lienzo, los controles
+    de zoom y la atribución. React no sabe nada de esa clase: en cuanto una clase
+    del contenedor depende del estado —aquí `opacity-0` → `opacity-100` al
+    cargar—, React reescribe el atributo entero en el siguiente render y se lleva
+    por delante lo que había añadido MapLibre. Sin `position: relative`, todo lo
+    que MapLibre coloca en absoluto se ancla al viewport: el mapa aparece en la
+    esquina superior izquierda de la página, la atribución en la inferior
+    derecha, y el hueco donde debería estar el mapa se queda gris y vacío.
+
+    Por eso el div de dentro lleva una `className` constante y no lleva ninguna
+    otra propiedad que pueda cambiar. Si algún día hay que añadirle algo que
+    dependa del estado, va en el envoltorio.
+
+    El fundido en sí es solo opacidad: las teselas llegan por red y entran de
+    golpe, y un mapa que además se desplazara al aparecer se confundiría con el
+    gesto de arrastrarlo.
+  */
   return (
     <div
-      ref={nodeRef}
       className={cx(
         'w-full overflow-hidden rounded-xl border border-border bg-surface-sunken',
+        'transition-opacity duration-500',
+        ready ? 'opacity-100' : 'opacity-0',
         height,
         className,
       )}
-      role="application"
-      aria-label={label}
-    />
+    >
+      <div ref={nodeRef} className="size-full" role="application" aria-label={label} />
+    </div>
   );
 }
